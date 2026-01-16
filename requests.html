@@ -2016,7 +2016,7 @@ button.badge{
   <div class="wrap">
     <!-- Page Navigation -->
     <div id="pageNav" style="padding: 8px 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; gap: 12px; font-size: 14px;">
-      <a href="index.html" style="color: #4F8DF7; text-decoration: none; font-weight: 600;">📋 Requests</a>
+      <a href="requests.html" style="color: #4F8DF7; text-decoration: none; font-weight: 600;">📋 Requests</a>
       <a href="#" onclick="navigateToRota(); return false;" style="color: #4F8DF7; text-decoration: none;">📅 View Rota</a>
       <a href="#" id="navAdminLink" onclick="goToFullAdmin(); return false;" style="color: #4F8DF7; text-decoration: none; display: none;">⚙️ Admin</a>
     </div>
@@ -6612,22 +6612,15 @@ async function loadRota() {
   allUsers = users || [];
   usersById = new Map((users || []).map(u => [u.id, u.name]));
 
-  // 🔐 Session validation: check if token is valid and find current user
-  const token = sessionStorage.getItem('calpe_ward_token');
-  const savedId = localStorage.getItem(STORAGE_KEY);
-  
-  if (token && savedId && !currentUser) {
-    const restored = (users || []).find(u => String(u.id) === String(savedId));
-    if (restored) {
-      currentUser = restored;
-      await loadUserPermissions();
+  // Update currentUser with full user data if already set from session validation
+  if (currentUser && currentUser.id) {
+    const fullUser = (users || []).find(u => String(u.id) === String(currentUser.id));
+    if (fullUser) {
+      // Merge with existing data to get roles and other details
+      currentUser = { ...fullUser };
       updateBadges();
       applyUnlockState();
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
     }
-  } else if (!token) {
-    localStorage.removeItem(STORAGE_KEY);
   }
 
 refreshNoticesAndMaybeBlock();
@@ -8145,9 +8138,43 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         return;
       }
 
-      // Token exists - proceed with page load
-      loadRota();
-      populateShiftGrid();
+      // Validate token and fetch current user from server
+      try {
+        const { data, error } = await supabaseClient.rpc('validate_session', {
+          p_token: token
+        });
+        
+        if (error || !data) {
+          console.error('Session validation failed:', error);
+          sessionStorage.removeItem('calpe_ward_token');
+          localStorage.removeItem(STORAGE_KEY);
+          window.location.href = '/login.html';
+          return;
+        }
+        
+        // Set currentUser directly from validated session data
+        currentUser = {
+          id: data.id,
+          name: data.name,
+          role_id: data.role_id,
+          is_admin: data.is_admin,
+          is_active: data.is_active,
+          preferred_lang: data.preferred_lang
+        };
+        
+        // Store user ID in localStorage for consistency
+        localStorage.setItem(STORAGE_KEY, data.id);
+        
+        console.log('Session validated. Logged in as:', currentUser.name);
+        
+        // Token is valid - proceed with page load
+        await loadUserPermissions();
+        loadRota();
+        populateShiftGrid();
+      } catch (err) {
+        console.error('Init error:', err);
+        window.location.href = '/login.html';
+      }
     })();
     
 
