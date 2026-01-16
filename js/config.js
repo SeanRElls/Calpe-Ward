@@ -34,11 +34,25 @@ const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
  */
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
 
+// Expose to window so non-module scripts (e.g., login.html) can initialize Supabase
+window.SUPABASE_URL = SUPABASE_URL;
+window.SUPABASE_ANON = SUPABASE_ANON;
+
 /**
  * Initialize Supabase client
  * This object is used throughout the app for all database operations
  */
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// Avoid redeclaring if config.js is included multiple times
+if (!window.supabaseClient) {
+   window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+}
+
+// Provide a global alias if not already defined
+if (typeof supabaseClient === 'undefined') {
+   var supabaseClient = window.supabaseClient; // eslint-disable-line no-var
+} else {
+   supabaseClient = window.supabaseClient;
+}
 
 
 /* =========================================================================
@@ -82,5 +96,6 @@ const WINDOW_WEEKS = 5;
  */
 
 // Expose to window for cross-file access
-window.supabaseClient = supabaseClient;
+window.SUPABASE_URL = SUPABASE_URL;
+window.SUPABASE_ANON = SUPABASE_ANON;
 window.STORAGE_KEY = STORAGE_KEY;
