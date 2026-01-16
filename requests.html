@@ -8137,32 +8137,41 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         return;
       }
 
-      // Validate token and fetch current user from server
+      // Validate token with server
       try {
         const { data, error } = await supabaseClient.rpc('validate_session', {
           p_token: token
         });
         
-        if (error || !data) {
-          console.error('Session validation failed:', error);
+        if (error || !data || !data.valid) {
+          console.error('Session validation failed:', error || 'Invalid session');
           sessionStorage.removeItem('calpe_ward_token');
           localStorage.removeItem(STORAGE_KEY);
           window.location.href = '/login.html';
           return;
         }
         
-        // Set currentUser directly from validated session data
-        currentUser = {
-          id: data.id,
-          name: data.name,
-          role_id: data.role_id,
-          is_admin: data.is_admin,
-          is_active: data.is_active,
-          preferred_lang: data.preferred_lang
-        };
+        // Get user_id from validation
+        const userId = data.user_id;
+        
+        // Fetch full user details from database
+        const { data: userData, error: userError } = await supabaseClient
+          .from('users')
+          .select('id, name, role_id, is_admin, is_active, preferred_lang')
+          .eq('id', userId)
+          .single();
+          
+        if (userError || !userData) {
+          console.error('Failed to fetch user data:', userError);
+          window.location.href = '/login.html';
+          return;
+        }
+        
+        // Set currentUser with full user data
+        currentUser = userData;
         
         // Store user ID in localStorage for consistency
-        localStorage.setItem(STORAGE_KEY, data.id);
+        localStorage.setItem(STORAGE_KEY, userId);
         
         console.log('Session validated. Logged in as:', currentUser.name);
         
