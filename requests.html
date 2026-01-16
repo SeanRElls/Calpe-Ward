@@ -2644,9 +2644,8 @@ button.badge{
     /* =========================================================
        1) CONFIG
        ========================================================= */
-    const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
-    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
-    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    // Config loaded from config.js - use window.supabaseClient
+    const supabaseClient = window.supabaseClient;
     const STORAGE_KEY = "calpeward.loggedInUserId";
     const MAX_REQUESTS_PER_WEEK = 5;
 
