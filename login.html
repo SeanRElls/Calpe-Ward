@@ -455,6 +455,9 @@
           username: row.username || username,
           logged_in_at: new Date().toISOString()
         }));
+        
+        // Store user ID in localStorage for PermissionsModule
+        localStorage.setItem("calpeward.loggedInUserId", row.user_id);
 
         showSuccess('Login successful! Redirecting...');
 
