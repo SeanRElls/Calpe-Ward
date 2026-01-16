@@ -6,13 +6,13 @@
   <title>Calpe Ward Off Duty Requests</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Calpe Ward Requests">
-  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="manifest" href="manifest.webmanifest">
 
   <!-- Supabase JS (v2) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -3701,7 +3701,7 @@ function logout(){
   applyUnlockState();
 
   // redirect to login
-  window.location.href = '/login.html';
+  window.location.href = 'login.html';
 }
 
 // Wire badge click
@@ -8133,7 +8133,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
       
       if (!token) {
         // No token - redirect to login
-        window.location.href = '/login.html';
+        window.location.href = 'login.html';
         return;
       }
 
@@ -8152,7 +8152,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
           console.error('Session validation failed:', error || result);
           sessionStorage.removeItem('calpe_ward_token');
           localStorage.removeItem(STORAGE_KEY);
-          window.location.href = '/login.html';
+          window.location.href = 'login.html';
           return;
         }
         
@@ -8168,7 +8168,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
           
         if (userError || !userData) {
           console.error('Failed to fetch user data:', userError);
-          window.location.href = '/login.html';
+          window.location.href = 'login.html';
           return;
         }
         
@@ -8186,7 +8186,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         populateShiftGrid();
       } catch (err) {
         console.error('Init error:', err);
-        window.location.href = '/login.html';
+        window.location.href = 'login.html';
       }
     })();
     
