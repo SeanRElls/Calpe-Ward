@@ -26,13 +26,13 @@
  * Supabase project URL
  * This is your unique Supabase project endpoint
  */
-const SUPABASE_URL = "https://tbclufdtyefexwwitfsz.supabase.co";
+const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
 
 /**
  * Supabase anonymous key (safe for client-side use)
  * This key is restricted by your database's Row Level Security policies
  */
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRiY2x1ZmR0eWVmZXh3d2l0ZnN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODA4ODksImV4cCI6MjA4MjY1Njg4OX0.OYnj44QQCTD-5tqR2XSVt4oQso9Ol8ZLH2tLsRGIreA";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
 
 /**
  * Initialize Supabase client

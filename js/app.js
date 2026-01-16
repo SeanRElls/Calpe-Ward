@@ -1,8 +1,8 @@
 ﻿/* =========================================================
        1) CONFIG
        ========================================================= */
-    const SUPABASE_URL = "https://tbclufdtyefexwwitfsz.supabase.co";
-    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRiY2x1ZmR0eWVmZXh3d2l0ZnN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODA4ODksImV4cCI6MjA4MjY1Njg4OX0.OYnj44QQCTD-5tqR2XSVt4oQso9Ol8ZLH2tLsRGIreA";
+    const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
+    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
     const STORAGE_KEY = "calpeward.loggedInUserId";
     const MAX_REQUESTS_PER_WEEK = 5;
@@ -896,8 +896,7 @@ shiftLockBtn?.addEventListener("click", async (e) => {
       const { error } = await supabaseClient.rpc(
         "admin_unlock_request_cell",
         {
-          p_admin_id: currentUser.id,
-          p_pin: pin,
+          p_token: currentToken,
           p_target_user_id: targetUserId,
           p_date: date
         }
@@ -920,8 +919,7 @@ shiftLockBtn?.addEventListener("click", async (e) => {
       const { data, error } = await supabaseClient.rpc(
         "admin_lock_request_cell",
         {
-          p_admin_id: currentUser.id,
-          p_pin: pin,
+          p_token: currentToken,
           p_target_user_id: targetUserId,
           p_date: date,
           p_reason_en: currentLang === "es" ? null : reason,
@@ -1979,8 +1977,8 @@ async function ackOneNotice(noticeId, noticeVersion){
   if (!currentUser) return;
 
   const { error } = await supabaseClient.rpc("ack_notice", {
+    p_token: currentToken,
     p_notice_id: noticeId,
-    p_user_id: currentUser.id,
     p_version: noticeVersion
   });
 
@@ -2166,8 +2164,7 @@ noticeAllList?.addEventListener("click", async (e) => {
       
       // Call admin approval RPC
       const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: currentToken,
         p_swap_request_id: swapRequestId
       });
       
@@ -2206,8 +2203,7 @@ noticeAllList?.addEventListener("click", async (e) => {
       
       // Call admin decline RPC
       const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: currentToken,
         p_swap_request_id: swapRequestId
       });
       
@@ -2257,7 +2253,7 @@ async function updateNotificationStatus(notifId, status){
     
     // Call the RPC to record the response
     const { error: rpcError } = await supabaseClient.rpc("staff_respond_to_swap_request", {
-      p_user_id: currentUser.id,
+      p_token: currentToken,
       p_swap_request_id: swapRequestId,
       p_response: swapResponse
     });
@@ -2598,8 +2594,7 @@ async function adminUpsertNotice(payload){
   const targetAll = !!payload.target_all && targetRoles.length === 0;
 
   const { data, error } = await supabaseClient.rpc("admin_upsert_notice", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_notice_id: payload.id || null,
     p_title: payload.title,
     p_body_en: payload.body_en,
@@ -2620,8 +2615,7 @@ async function toggleAdminNoticeActive(notice){
   if (!ok) return;
 
   const { error } = await supabaseClient.rpc("admin_set_notice_active", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_notice_id: notice.id,
     p_active: next
   });
@@ -2638,8 +2632,7 @@ async function deleteAdminNotice(notice){
   if (!ok) return;
 
   const { error } = await supabaseClient.rpc("admin_delete_notice", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_notice_id: notice.id
   });
 
@@ -3334,8 +3327,7 @@ if (periodClosed) {
 }
     try {
       const { error } = await supabaseClient.rpc("admin_set_week_open_flags", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: currentToken,
         p_week_id: weekId,
         p_open: nextOpen,
         p_open_after_close: nextOpenAfterClose
@@ -3359,8 +3351,7 @@ async function setActivePeriod(periodId){
   const pin = getSessionPinOrThrow();
 
   const { error } = await supabaseClient.rpc("admin_set_active_period", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_period_id: periodId
   });
 
@@ -3373,8 +3364,7 @@ async function toggleHiddenPeriod(periodId){
   const pin = getSessionPinOrThrow();
 
   const { error } = await supabaseClient.rpc("admin_toggle_hidden_period", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_period_id: periodId
   });
 
@@ -3504,8 +3494,7 @@ async function setPeriodCloseTime(periodId, closesAtIsoOrNull){
   const pin = getSessionPinOrThrow();
 
   const { error } = await supabaseClient.rpc("admin_set_period_closes_at", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_period_id: periodId,
     p_closes_at: closesAtIsoOrNull
   });
@@ -4136,8 +4125,7 @@ async function upsertRequestCell(userId, date, value, importantRank){
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { data, error } = await supabaseClient.rpc("admin_set_request_cell", {
-      p_admin_id: currentUser.id,
-      p_pin: pin,
+      p_token: currentToken,
       p_target_user_id: userId,
       p_date: date,
       p_value: value,
@@ -4149,8 +4137,7 @@ async function upsertRequestCell(userId, date, value, importantRank){
 
   // Normal -> user RPC
   const { data, error } = await supabaseClient.rpc("set_request_cell", {
-    p_user_id: userId,
-    p_pin: pin,
+    p_token: currentToken,
     p_date: date,
     p_value: value,
     p_important_rank: importantRank ?? null
@@ -4171,8 +4158,7 @@ async function deleteRequestCell(userId, date){
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { error } = await supabaseClient.rpc("admin_clear_request_cell", {
-      p_admin_id: currentUser.id,
-      p_pin: pin,
+      p_token: currentToken,
       p_target_user_id: userId,
       p_date: date
     });
@@ -4182,8 +4168,7 @@ async function deleteRequestCell(userId, date){
 
   // Normal -> user RPC
   const { error } = await supabaseClient.rpc("clear_request_cell", {
-    p_user_id: userId,
-    p_pin: pin,
+    p_token: currentToken,
     p_date: date
   });
   if (error) throw error;
@@ -5678,9 +5663,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
       if (!periodId) throw new Error("No active period");
 
       const { data, error } = await supabaseClient.rpc("admin_execute_shift_swap", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
-        p_period_id: periodId,
+        p_token: currentToken,
         p_initiator_user_id: activeCell.userId,
         p_initiator_shift_date: activeCell.date,
         p_counterparty_user_id: counterpartyUserId,
@@ -5702,8 +5685,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
       if (!periodId) throw new Error("No active period");
 
       const { data, error } = await supabaseClient.rpc("staff_request_shift_swap", {
-        p_user_id: currentUser.id,
-        p_period_id: periodId,
+        p_token: currentToken,
         p_initiator_shift_date: activeCell.date,
         p_counterparty_user_id: counterpartyUserId,
         p_counterparty_shift_date: counterpartyDate

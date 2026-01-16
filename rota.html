@@ -2449,7 +2449,7 @@
       const { data, error } = await supabaseClient.rpc(
         "get_notices_for_user",
         {
-          p_user_id: window.currentUser.id
+          p_token: window.currentToken
         }
       );
       if (error) throw error;
@@ -2646,8 +2646,8 @@
       if (!window.currentUser) return;
 
       const { error } = await supabaseClient.rpc("ack_notice", {
+        p_token: window.currentToken,
         p_notice_id: noticeId,
-        p_user_id: window.currentUser.id,
         p_version: noticeVersion
       });
 
@@ -2761,7 +2761,7 @@
             const { data, error } = await supabaseClient.rpc(
               "staff_respond_to_swap_request",
               {
-                p_user_id: window.currentUser.id,
+                p_token: window.currentToken,
                 p_swap_request_id: notification.payload?.swap_request_id,
                 p_response: "accepted"
               }
@@ -2813,7 +2813,7 @@
             const { data, error } = await supabaseClient.rpc(
               "staff_respond_to_swap_request",
               {
-                p_user_id: window.currentUser.id,
+                p_token: window.currentToken,
                 p_swap_request_id: notification.payload?.swap_request_id,
                 p_response: "declined"
               }
@@ -2902,8 +2902,7 @@
           
           // Call admin approval RPC
           const { data, error } = await window.supabaseClient.rpc("admin_approve_swap_request", {
-            p_admin_id: window.currentUser.id,
-            p_pin: pin,
+            p_token: window.currentToken,
             p_swap_request_id: swapRequestId
           });
           
@@ -2942,8 +2941,7 @@
           
           // Call admin decline RPC
           const { data, error } = await window.supabaseClient.rpc("admin_decline_swap_request", {
-            p_admin_id: window.currentUser.id,
-            p_pin: pin,
+            p_token: window.currentToken,
             p_swap_request_id: swapRequestId
           });
           

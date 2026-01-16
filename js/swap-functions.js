@@ -22,8 +22,7 @@ async function adminExecuteShiftSwap(counterpartyUserId, counterpartyDate){
   });
 
   const { data, error } = await window.supabaseClient.rpc("admin_execute_shift_swap", {
-    p_admin_id: window.currentUser.id,
-    p_pin: pin,
+    p_token: window.currentToken,
     p_initiator_user_id: window.activeCell.userId,
     p_initiator_shift_date: window.activeCell.date,
     p_counterparty_user_id: counterpartyUserId,
@@ -58,7 +57,7 @@ async function staffRequestShiftSwap(counterpartyUserId, counterpartyDate){
   console.log("[SWAP DEBUG] ================================================");
 
   const { data, error } = await window.supabaseClient.rpc("staff_request_shift_swap", {
-    p_user_id: window.currentUser.id,
+    p_token: window.currentToken,
     p_initiator_shift_date: window.activeCell.date,
     p_counterparty_user_id: counterpartyUserId,
     p_counterparty_shift_date: counterpartyDate
@@ -95,7 +94,7 @@ async function staffRespondToSwapRequest(swapRequestId, response){
   if (!['accepted', 'declined', 'ignored'].includes(response)) throw new Error("Invalid response");
 
   const { data, error } = await window.supabaseClient.rpc("staff_respond_to_swap_request", {
-    p_user_id: window.currentUser.id,
+    p_token: window.currentToken,
     p_swap_request_id: swapRequestId,
     p_response: response
   });

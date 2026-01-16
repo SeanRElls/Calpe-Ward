@@ -2677,8 +2677,8 @@ button.badge{
     /* =========================================================
        1) CONFIG
        ========================================================= */
-    const SUPABASE_URL = "https://tbclufdtyefexwwitfsz.supabase.co";
-    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRiY2x1ZmR0eWVmZXh3d2l0ZnN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODA4ODksImV4cCI6MjA4MjY1Njg4OX0.OYnj44QQCTD-5tqR2XSVt4oQso9Ol8ZLH2tLsRGIreA";
+    const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
+    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
     const STORAGE_KEY = "calpeward.loggedInUserId";
     const MAX_REQUESTS_PER_WEEK = 5;
@@ -4199,12 +4199,10 @@ async function fetchNoticeAcksForAdmin(noticeId){
 async function fetchNoticesForMe(){
   if (!currentUser) return [];
 
-  const pin = getSessionPinOrThrow();
-
 const { data, error } = await supabaseClient.rpc(
   "get_notices_for_user",
   {
-    p_user_id: currentUser.id
+    p_token: window.currentToken
   }
 );
   if (error) throw error;
@@ -4522,11 +4520,8 @@ function renderAllNoticesList(){
 
 
 async function adminFetchNoticeAcks(noticeId){
-  const pin = getSessionPinOrThrow();
-
   const { data, error } = await supabaseClient.rpc("admin_get_notice_acks", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: window.currentToken,
     p_notice_id: noticeId
   });
 
@@ -4625,8 +4620,8 @@ async function ackOneNotice(noticeId, noticeVersion){
   if (!currentUser) return;
 
   const { error } = await supabaseClient.rpc("ack_notice", {
+    p_token: window.currentToken,
     p_notice_id: noticeId,
-    p_user_id: currentUser.id,
     p_version: noticeVersion
   });
 
@@ -4905,8 +4900,7 @@ noticeAllList?.addEventListener("click", async (e) => {
       
       // Call admin approval RPC
       const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: window.currentToken,
         p_swap_request_id: swapRequestId
       });
       
@@ -4945,8 +4939,7 @@ noticeAllList?.addEventListener("click", async (e) => {
       
       // Call admin decline RPC
       const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: window.currentToken,
         p_swap_request_id: swapRequestId
       });
       
@@ -5249,15 +5242,12 @@ function renderAdminNotices(){
 
 
 async function adminUpsertNotice(payload){
-  const pin = getSessionPinOrThrow();
-
   // Enforce: if roles are supplied we treat this as targeted (target_all=false).
   const targetRoles = Array.isArray(payload.target_roles) ? payload.target_roles : [];
   const targetAll = !!payload.target_all && targetRoles.length === 0;
 
   const { data, error } = await supabaseClient.rpc("admin_upsert_notice", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: window.currentToken,
     p_notice_id: payload.id || null,
     p_title: payload.title,
     p_body_en: payload.body_en,
@@ -5271,15 +5261,12 @@ async function adminUpsertNotice(payload){
 }
 
 async function toggleAdminNoticeActive(notice){
-  const pin = getSessionPinOrThrow();
-
   const next = (notice.is_active === false) ? true : false;
   const ok = confirm(`${next ? "Unhide" : "Hide"} "${notice.title}"?`);
   if (!ok) return;
 
   const { error } = await supabaseClient.rpc("admin_set_notice_active", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: window.currentToken,
     p_notice_id: notice.id,
     p_active: next
   });
@@ -5290,14 +5277,11 @@ async function toggleAdminNoticeActive(notice){
 }
 
 async function deleteAdminNotice(notice){
-  const pin = getSessionPinOrThrow();
-
   const ok = confirm(`Delete "${notice.title}"?\n\nThis cannot be undone.`);
   if (!ok) return;
 
   const { error } = await supabaseClient.rpc("admin_delete_notice", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: window.currentToken,
     p_notice_id: notice.id
   });
 
@@ -5416,11 +5400,8 @@ async function toggleUserActive(userId){
   const ok = confirm(`${next ? "Reactivate" : "Deactivate"} ${u.name}?`);
   if (!ok) return;
 
-  const pin = getSessionPinOrThrow(); // 🔑 THIS WAS MISSING
-
   const { error } = await supabaseClient.rpc("set_user_active", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: window.currentToken,
     p_user_id: userId,
     p_active: next
   });
@@ -5742,6 +5723,7 @@ adminSaveUserBtn?.addEventListener("click", async () => {
 
   try {
     const { data: userId, error } = await supabaseClient.rpc("admin_upsert_user", {
+      p_token: window.currentToken,
       p_user_id: adminEditingUserId, // null = add
       p_name: name,
       p_role_id: role_id

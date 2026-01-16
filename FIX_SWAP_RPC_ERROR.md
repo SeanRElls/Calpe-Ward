@@ -22,7 +22,7 @@ Apply the updated SQL function from `sql/update_swap_functions.sql` to your Supa
 ### Option 2: Using PostgreSQL Client (if available)
 
 ```bash
-psql -h "tbclufdtyefexwwitfsz.supabase.co" -U "postgres" -d "postgres" -f "sql/update_swap_functions.sql"
+psql -h "pxpjxyfcydiasrycpbfp.supabase.co" -U "postgres" -d "postgres" -f "sql/update_swap_functions.sql"
 ```
 
 When prompted, enter your Supabase database password.

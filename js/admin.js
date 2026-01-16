@@ -2170,8 +2170,7 @@
       const targetAll = !!payload.target_all && targetRoles.length === 0;
 
       const { data, error } = await supabaseClient.rpc("admin_upsert_notice", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: currentToken,
         p_notice_id: payload.id || null,
         p_title: payload.title,
         p_body_en: payload.body_en,
@@ -2192,8 +2191,7 @@
       if (!ok) return;
 
       const { error } = await supabaseClient.rpc("admin_set_notice_active", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: currentToken,
         p_notice_id: notice.id,
         p_active: next
       });
@@ -2210,8 +2208,7 @@
       if (!ok) return;
 
       const { error } = await supabaseClient.rpc("admin_delete_notice", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: currentToken,
         p_notice_id: notice.id
       });
 
@@ -2298,8 +2295,7 @@
 
       try {
         const { data, error } = await supabaseClient.rpc("admin_get_swap_requests", {
-          p_admin_id: currentUser.id,
-          p_pin: pin
+          p_token: currentToken
         });
 
         if (error) throw error;
@@ -2318,8 +2314,7 @@
 
       try {
         const { data, error } = await supabaseClient.rpc("admin_get_swap_executions", {
-          p_admin_id: currentUser.id,
-          p_pin: pin,
+          p_token: currentToken,
           p_period_id: null
         });
 
@@ -2441,8 +2436,7 @@
           approveBtn.disabled = true;
           const pin = getSessionPinOrThrow();
           const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
-            p_admin_id: currentUser.id,
-            p_pin: pin,
+            p_token: currentToken,
             p_swap_request_id: swapId
           });
 
@@ -2470,8 +2464,7 @@
           declineBtn.disabled = true;
           const pin = getSessionPinOrThrow();
           const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
-            p_admin_id: currentUser.id,
-            p_pin: pin,
+            p_token: currentToken,
             p_swap_request_id: swapId
           });
 
