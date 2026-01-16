@@ -1,0 +1,188 @@
+Secure Login (Username + PIN) - Review and Plan
+==============================================
+
+Status: review + plan only (no code changes applied).
+
+Overview
+--------
+Current V3 uses a PIN-only modal inside the app, with a soft session
+in localStorage + sessionStorage. Admin login additionally writes the PIN
+to window.name for cross-page recovery. There is no dedicated login page,
+so protected UI and data can render before authentication completes.
+
+Key Findings (ordered by severity)
+----------------------------------
+1) window.name stores PIN for admin login recovery, which can persist across
+   navigations and be read in the same window context. This can leak PINs
+   outside the intended page.
+   - js/admin.js (setWindowSession, restoreSessionFromWindow)
+
+2) Auto-login trusts localStorage + sessionStorage without server-side
+   session validation, expiry, or device binding. If an attacker can set
+   those values (XSS or shared device), the UI treats them as logged in.
+   - js/app.js (STORAGE_KEY restore)
+   - js/admin.js (loadCurrentUser)
+
+3) SQL shows several SECURITY DEFINER swap/admin RPCs accept p_pin but do not
+   verify it. Some functions only check admin active or permission, not PIN.
+   This means a valid user id plus permission is enough if the caller can
+   invoke the RPC. The client-side "PIN verified earlier" is not enforced
+   server-side.
+   - sql/shift_swap_functions.sql (p_pin accepted but not used)
+   - sql/update_swap_functions.sql, sql/fix_swap_functions.sql
+   - sql/fix_admin_notifications_and_functions.sql
+
+4) Some SQL uses admin-only checks without permission groups, while others
+   check permissions but not PIN. There is no consistent session model
+   across RPCs.
+   - sql/shift_swap_functions.sql (mixed checks)
+
+5) PIN is stored in sessionStorage in plaintext. This is expected in a
+   browser app but still accessible to any injected script on the origin.
+   - js/app.js (setSessionPin)
+   - js/admin.js (sessionStorage pin write)
+
+5) DB dump confirms users.pin_hash and sessions table exist, but there is
+   no username column in users, so username+PIN login is not yet possible
+   in SQL. Session revocation fields are also missing.
+
+Constraints and Goals
+---------------------
+- Dedicated login page (username + PIN).
+- No email required; username can be "local" but can be displayed as
+  username@calpe.local on the UI if desired.
+- Ensure no protected data renders before auth completes.
+- Remove PIN storage in window.name.
+- Prefer server-verified session tokens instead of client-only flags.
+- Keep permission groups as the authority for admin features.
+
+Comprehensive Plan
+------------------
+Phase 0: Inventory and threat modeling
+- Inventory all RPCs and tables used for privileged actions.
+- Confirm which RPCs validate PIN server-side.
+- Identify all data paths that read from localStorage/sessionStorage.
+- Decide on security posture for shared devices (auto-login or not).
+
+Phase 1: Database and Auth primitives
+- Add "username" field to users (unique, lowercased).
+- Confirm users.pin_hash is used for all users and remove/replace any plaintext
+  PIN storage (notably admin_pins).
+- Create RPC verify_login(p_username, p_pin) returning success + user_id.
+- Add server-side rate limiting for login attempts (table + RPC or RLS guard).
+- Add login_audit table (user_id, username, ip_hash, user_agent_hash, ts, ok).
+- Replace any RPCs that accept p_pin but do not validate it. Either remove
+  p_pin and enforce session tokens, or validate PIN hashes server-side.
+
+Phase 2: Session model
+Option A (recommended): Server-issued session token
+- Extend/standardize sessions to include revocation (revoked_at) and enforce
+  expiry on every validation.
+- Create/standardize RPCs: validate_session(p_token) and revoke_session(p_token).
+- Store session token in sessionStorage (not localStorage).
+Pros: clean server boundary, expiry, revocation, audit.
+
+Option B (lighter): Signed session in sessionStorage
+- Use a signed token generated server-side (HMAC).
+- Validate token in RPCs before privileged actions.
+Pros: minimal DB.
+Cons: harder to revoke, still client-stored.
+
+Phase 3: Dedicated login page (confirmed page flow)
+- Make index.html the login page with username + PIN.
+- Move the current index.html requests UI to requests.html.
+- rota.html remains the main authenticated app (rota editing).
+- Admin users also land on rota.html after login.
+- Allow display-only suffix: show "@calpe.local" but do not require it.
+  Accept input as "username" and normalize lowercased internally.
+- On success, store session token, redirect to rota.html.
+
+Phase 4: App boot flow
+- rota.html, requests.html, and admin.html should check for valid session token before:
+  - Loading user list
+  - Fetching rota data
+  - Rendering sensitive UI
+- If session is invalid, redirect to index.html (login).
+- Remove PIN modal from the app pages or repurpose to "Unlock for edit" only
+  if a separate "edit lock" is still desired.
+
+Phase 5: Remove window.name PIN flow
+- Delete setWindowSession/restoreSessionFromWindow and any reliance on it.
+- Replace with server session token recovery.
+
+Phase 6: Permissions and admin access
+- Keep permission group checks (system.admin_panel, users.edit, etc).
+- Make admin-only RPCs verify both session token and permission.
+- Avoid any UI-based admin gating without server-side validation.
+- Standardize all swap/admin RPCs to a single auth pattern to avoid drift
+  between sql/shift_swap_functions.sql and sql/fix_* variants.
+- All admin/swap RPCs must enforce permission groups server-side. UI gating
+  is not security.
+
+Phase 7: Data and UX hardening
+- Add logout everywhere (index, rota, admin) that revokes session.
+- Add idle timeout (front-end + server expiry).
+- Mask PIN input, block paste if desired.
+- Add lockout after N failed attempts (per username + IP hash).
+- Add "last login" banner to user modal (from audit table).
+
+Phase 8: Migration and rollout
+- Backfill usernames (lowercase, dot-separated).
+- Migrate PINs: move to pin_hash (one-time).
+- Deploy login page + session RPCs.
+- Gate access to main pages on session validation.
+- Monitor audit logs and error rates.
+
+Phase 9: Clean-up and documentation
+- Update README security notes and setup instructions.
+- Document new page roles: index.html = login; rota.html = main; requests.html = requests.
+- Note that admin users land on rota.html after login.
+- admin.html should never be reachable without session validation; if a
+  logged-in user lacks permission, redirect to rota.html (not login).
+- Remove stale references to PIN-only modal in docs.
+
+Phase 2.5: Function canonicalization (critical)
+- Identify the canonical version of each RPC.
+- Drop/replace duplicates or deprecated variants.
+- Lock permissions to the canonical RPCs only.
+- Ensure every admin/swap RPC uses the same auth guard pattern (session token
+  + permission groups).
+
+Open Questions
+--------------
+- Do you want auto-login on the same device/browser? If yes, define a short
+  server-side session expiry (e.g., 8 hours) rather than localStorage.
+- Should the rota page be accessible read-only without login?
+- Do you want admin-only access to login audit logs in the UI?
+
+Implementation Notes
+--------------------
+- Username display: allow input "alice" and display as "alice@calpe.local"
+  without requiring the suffix. Normalize by stripping "@calpe.local" if
+  provided and lowercasing.
+- For RPC validation, prefer server-side checks, not UI flags.
+- If you keep "unlock for edit" separate from login, use a short-lived
+  unlock token, not the PIN directly.
+
+SQL Notes (from V3 scripts)
+---------------------------
+- sql/shift_swap_functions.sql: p_pin is accepted but explicitly "not used"
+  in admin_execute_shift_swap; other admin RPCs do not verify PIN.
+- sql/update_swap_functions.sql / sql/fix_swap_functions.sql: admin swap
+  listing RPCs only verify admin is active, not PIN.
+- sql/fix_admin_notifications_and_functions.sql: same pattern persists.
+- Recommendation: migrate all admin RPCs to session-token validation or
+  PIN hash verification to align with the dedicated login flow.
+
+SQL Notes (from full_dump)
+--------------------------
+- users.pin_hash exists; sessions table exists (token, user_id, expires_at, created_at).
+- No users.username column in dump.
+- admin_pins table stores plaintext pins (should be removed or hashed).
+- verify_pin_login(p_user_id, p_pin) creates a session token (8h) but does not
+  include revoke/refresh logic.
+- Multiple SECURITY DEFINER admin/swap RPCs do not verify PIN/session:
+  admin_get_swap_requests, admin_get_swap_executions, admin_approve_swap_request,
+  admin_decline_swap_request, admin_execute_shift_swap, admin_get_notice_acks.
+- Duplicate/conflicting functions exist (e.g., admin_set_active_period,
+  get_notices_for_user), which increases auth drift.
