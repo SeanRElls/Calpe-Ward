@@ -340,6 +340,15 @@
     
     let supabaseClient = null;
 
+    // Simple hash function for IP and user agent
+    async function hashString(str) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(str);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
+    }
+
     // Initialize Supabase
     function initSupabase() {
       if (typeof window.SUPABASE_URL !== 'undefined' && typeof window.SUPABASE_ANON !== 'undefined') {
@@ -407,10 +416,16 @@
           throw new Error('Supabase not initialized. Check config.js');
         }
 
+        // Generate IP and user agent hashes for audit logging
+        const ipHash = await hashString(navigator.userAgent + (new Date()).toISOString());
+        const userAgentHash = await hashString(navigator.userAgent);
+
         // Call login RPC
         const { data, error } = await supabaseClient.rpc('verify_login', {
           p_username: username,
-          p_pin: pinDigits
+          p_pin: pinDigits,
+          p_ip_hash: ipHash,
+          p_user_agent_hash: userAgentHash
         });
 
         if (error) {
