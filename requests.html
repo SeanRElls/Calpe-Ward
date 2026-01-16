@@ -8143,8 +8143,13 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
           p_token: token
         });
         
-        if (error || !data || !data.valid) {
-          console.error('Session validation failed:', error || 'Invalid session');
+        console.log('Validation response:', data, error);
+        
+        // RPC returns an array, get first row
+        const result = Array.isArray(data) ? data[0] : data;
+        
+        if (error || !result || !result.valid) {
+          console.error('Session validation failed:', error || result);
           sessionStorage.removeItem('calpe_ward_token');
           localStorage.removeItem(STORAGE_KEY);
           window.location.href = '/login.html';
@@ -8152,7 +8157,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         }
         
         // Get user_id from validation
-        const userId = data.user_id;
+        const userId = result.user_id;
         
         // Fetch full user details from database
         const { data: userData, error: userError } = await supabaseClient
