@@ -149,9 +149,9 @@ BEGIN
   v_username_lower := LOWER(TRIM(p_username));
 
   -- Check rate limiting FIRST
-  SELECT locked_until INTO v_locked_until
-  FROM public.login_rate_limiting
-  WHERE username = v_username_lower AND ip_hash = p_ip_hash;
+  SELECT lrl.locked_until INTO v_locked_until
+  FROM public.login_rate_limiting lrl
+  WHERE lrl.username = v_username_lower AND lrl.ip_hash = p_ip_hash;
 
   IF v_locked_until IS NOT NULL AND v_locked_until > NOW() THEN
     v_error_msg := 'Account temporarily locked. Try again after ' || TO_CHAR(v_locked_until, 'HH24:MI') || ' UTC';
@@ -188,9 +188,9 @@ BEGIN
     INSERT INTO public.login_rate_limiting (username, ip_hash, attempt_count)
     VALUES (v_username_lower, p_ip_hash, 1)
     ON CONFLICT(username, ip_hash) DO UPDATE
-    SET attempt_count = login_rate_limiting.attempt_count + 1,
-        last_attempt_at = NOW(),
-        updated_at = NOW();
+    SET attempt_count = public.login_rate_limiting.attempt_count + 1,
+      last_attempt_at = NOW(),
+      updated_at = NOW();
     INSERT INTO public.login_audit (user_id, username, ip_hash, user_agent_hash, success, failure_reason)
     VALUES (NULL, v_username_lower, p_ip_hash, p_user_agent_hash, false, 'User not found');
     RETURN QUERY SELECT NULL::uuid, NULL::uuid, NULL::text, v_error_msg::text;
@@ -203,13 +203,13 @@ BEGIN
     INSERT INTO public.login_rate_limiting (username, ip_hash, attempt_count)
     VALUES (v_username_lower, p_ip_hash, 1)
     ON CONFLICT(username, ip_hash) DO UPDATE
-    SET attempt_count = login_rate_limiting.attempt_count + 1,
-        last_attempt_at = NOW(),
-        updated_at = NOW();
+    SET attempt_count = public.login_rate_limiting.attempt_count + 1,
+      last_attempt_at = NOW(),
+      updated_at = NOW();
     
-    UPDATE public.login_rate_limiting
+    UPDATE public.login_rate_limiting lrl
     SET locked_until = NOW() + interval '15 minutes'
-    WHERE username = v_username_lower AND ip_hash = p_ip_hash AND attempt_count >= 5;
+    WHERE lrl.username = v_username_lower AND lrl.ip_hash = p_ip_hash AND lrl.attempt_count >= 5;
     
     INSERT INTO public.login_audit (user_id, username, ip_hash, user_agent_hash, success, failure_reason)
     VALUES (v_user_id, v_username_lower, p_ip_hash, p_user_agent_hash, false, 'Invalid PIN');
@@ -243,7 +243,8 @@ BEGIN
 
 EXCEPTION
   WHEN OTHERS THEN
-    RETURN QUERY SELECT NULL::uuid, NULL::uuid, NULL::text, 'Login failed. Please try again'::text;
+    -- Return the server-side error to aid diagnosis
+    RETURN QUERY SELECT NULL::uuid, NULL::uuid, NULL::text, ('Login failed: ' || SQLERRM)::text;
 END;
 $$;
 

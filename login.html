@@ -12,15 +12,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- PWA / iOS Home Screen -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Calpe Ward Requests">
-  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="manifest" href="manifest.webmanifest">
 
-  <!-- Config -->
-  <script src="js/config.js" defer></script>
+  <!-- Config (must load before inline script, so no defer) -->
+  <script src="js/config.js"></script>
 
   <style>
     :root {
@@ -434,17 +434,25 @@
           return;
         }
 
-        if (!data || !data.token) {
+        // Supabase RPC returns an array for table-returning functions
+        const row = Array.isArray(data) ? data[0] : data;
+
+        if (!row || (!row.token && !row.error_message)) {
           showError('Invalid response from server');
           return;
         }
 
+        if (row.error_message) {
+          showError(row.error_message);
+          return;
+        }
+
         // Store token and redirect
-        sessionStorage.setItem(TOKEN_KEY, data.token);
+        sessionStorage.setItem(TOKEN_KEY, row.token);
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-          token: data.token,
-          user_id: data.user_id,
-          username: username,
+          token: row.token,
+          user_id: row.user_id,
+          username: row.username || username,
           logged_in_at: new Date().toISOString()
         }));
 

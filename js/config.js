@@ -23,18 +23,12 @@
    ========================================================================= */
 
 /**
- * Supabase project URL
- * This is your unique Supabase project endpoint
+ * Supabase project URL and anon key
  */
 const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
-
-/**
- * Supabase anonymous key (safe for client-side use)
- * This key is restricted by your database's Row Level Security policies
- */
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
 
-// Expose to window so non-module scripts (e.g., login.html) can initialize Supabase
+// Always set globals so clients have key available
 window.SUPABASE_URL = SUPABASE_URL;
 window.SUPABASE_ANON = SUPABASE_ANON;
 
@@ -43,16 +37,16 @@ window.SUPABASE_ANON = SUPABASE_ANON;
  * This object is used throughout the app for all database operations
  */
 // Avoid redeclaring if config.js is included multiple times
-if (!window.supabaseClient) {
-   window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-}
+window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON, {
+   global: {
+      headers: {
+        apikey: window.SUPABASE_ANON,
+        Authorization: `Bearer ${window.SUPABASE_ANON}`
+      }
+   }
+});
 
-// Provide a global alias if not already defined
-if (typeof supabaseClient === 'undefined') {
-   var supabaseClient = window.supabaseClient; // eslint-disable-line no-var
-} else {
-   supabaseClient = window.supabaseClient;
-}
+// Do not create additional globals; use window.supabaseClient everywhere
 
 
 /* =========================================================================
@@ -63,19 +57,25 @@ if (typeof supabaseClient === 'undefined') {
  * Local storage key for persisting logged-in user ID
  * Allows auto-login on page reload
  */
-const STORAGE_KEY = "calpeward.loggedInUserId";
+if (typeof window.STORAGE_KEY === 'undefined') {
+   window.STORAGE_KEY = "calpeward.loggedInUserId";
+}
 
 /**
  * Maximum number of shift requests allowed per user per week
  * Users can enter up to 5 different requests across 7 days
  */
-const MAX_REQUESTS_PER_WEEK = 5;
+if (typeof window.MAX_REQUESTS_PER_WEEK === 'undefined') {
+   window.MAX_REQUESTS_PER_WEEK = 5;
+}
 
 /**
  * Number of weeks displayed in the rota window
  * Shows 5 weeks at a time (standard shift planning period)
  */
-const WINDOW_WEEKS = 5;
+if (typeof window.WINDOW_WEEKS === 'undefined') {
+   window.WINDOW_WEEKS = 5;
+}
 
 
 /* =========================================================================
@@ -96,6 +96,7 @@ const WINDOW_WEEKS = 5;
  */
 
 // Expose to window for cross-file access
-window.SUPABASE_URL = SUPABASE_URL;
-window.SUPABASE_ANON = SUPABASE_ANON;
-window.STORAGE_KEY = STORAGE_KEY;
+// Ensure globals remain set if this file is re-run
+window.SUPABASE_URL = window.SUPABASE_URL;
+window.SUPABASE_ANON = window.SUPABASE_ANON;
+window.STORAGE_KEY = window.STORAGE_KEY;
