@@ -419,12 +419,9 @@ function getTakenOffRanksThisWeek(userId, dateStr, excludeKey){
   return taken;
 }
 async function fetchWeekComments(weekId){
-  const pin = getSessionPinOrThrow();
-
   const { data, error } = await supabaseClient.rpc("get_week_comments", {
-    p_week_id: weekId,
-    p_user_id: currentUser.id,
-    p_pin: pin
+    p_token: currentToken,
+    p_week_id: weekId
   });
 
   if (error) throw error;
@@ -435,13 +432,10 @@ async function fetchWeekComments(weekId){
 async function upsertWeekComment(weekId, userId, comment){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
-
   const { data, error } = await supabaseClient.rpc("upsert_week_comment", {
+    p_token: currentToken,
     p_week_id: weekId,
     p_user_id: userId,
-    p_pin: pin,
     p_comment: comment ?? ""
   });
 
@@ -1101,11 +1095,8 @@ async function setMyLanguage(lang){
   if (!currentUser) return;
 
   try {
-    const pin = getSessionPinOrThrow();
-
     const { data, error } = await supabaseClient.rpc("set_user_language", {
-      p_user_id: currentUser.id,
-      p_pin: pin,
+      p_token: currentToken,
       p_lang: lang
     });
 
@@ -1151,9 +1142,9 @@ userSavePin?.addEventListener("click", async () => {
     if (vErr) throw vErr;
     if (ok !== true) return showUserPinErr("Current PIN is incorrect.");
 
-    // Change pin (YOU need this RPC - see SQL below)
+    // Change pin
     const { error: cErr } = await supabaseClient.rpc("change_user_pin", {
-      p_user_id: currentUser.id,
+      p_token: currentToken,
       p_old_pin: oldPin,
       p_new_pin: newPin
     });
