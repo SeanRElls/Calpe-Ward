@@ -2336,7 +2336,8 @@
     // Kick off boot when ready. If DOMContentLoaded already fired, start immediately.
     async function startBoot() {
       console.log("[ROTA BOOT] startBoot invoked");
-      restoreSessionFromWindow();
+      // Session is already validated by session-validator.js (runs before this)
+      // Token is stored in sessionStorage via login.html
       await bootRotaPage();
     }
 
