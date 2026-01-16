@@ -69,13 +69,12 @@ failedLoadWeekComments: "Failed to load week comments. Check console.",
 failedSaveWeekComment: "Failed to save comment. Check console.",
 
     
-  },
 
-  es: {
-    close: "Cerrar",
-    cancel: "Cancelar",
-    ok: "Vale",
-    save: "Guardar",
+    currentUser = selectedUser;
+    window.currentUser = currentUser; // Expose to window for other scripts
+    localStorage.setItem(STORAGE_KEY, currentUser.id);
+
+  closePinModal();
     loadingUsers: "Cargando usuariosâ€¦",
     failedLoadUsers: "No se pudieron cargar los usuarios.",
     notLoggedIn: "Sin sesiÃ³n",
@@ -366,13 +365,6 @@ function countUserRequestsThisWeek(userId, dateStr){
   return count;
 }
 
-function getSessionPinOrThrow(){
-  if (!currentUser) throw new Error("Not logged in.");
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
-  return pin;
-}
-    
 function nextOffPrioritySmart(currentRank, taken){
   // Cycle intent: null â†’ 1 â†’ 2 â†’ BLOCK
   let desired =
@@ -435,7 +427,6 @@ async function upsertWeekComment(weekId, userId, comment){
   const { data, error } = await supabaseClient.rpc("upsert_week_comment", {
     p_token: currentToken,
     p_week_id: weekId,
-    p_user_id: userId,
     p_comment: comment ?? ""
   });
 
@@ -554,24 +545,10 @@ function isPeriodClosed(period){
 /* =========================================================
    3) STATE (who is logged in / what is unlocked)
    ========================================================= */
-let currentUser = null;      // user object when logged in (by PIN)
+let currentUser = null;      // user object when logged in
 let selectedUser = null;     // user you clicked before PIN entry
     let usersById = new Map();
     let allUsers = [];           // all users array (for print/export features)
-let sessionPin = null; // store PIN in memory only (not localStorage)
-
-
-    function pinKey(userId){ return `calpeward.pin.${userId}`; }
-
-function setSessionPin(userId, pin){
-  sessionPin = pin;
-  sessionStorage.setItem(pinKey(userId), pin);
-}
-
-function clearSessionPin(userId){
-  sessionPin = null;
-  if (userId) sessionStorage.removeItem(pinKey(userId));
-}
 
 async function loadUserPermissions(){
   userPermissions = new Set();
@@ -876,8 +853,6 @@ shiftLockBtn?.addEventListener("click", async (e) => {
 
   if (!currentUser?.is_admin) return;
   if (!activeCell) return;
-
-  const pin = getSessionPinOrThrow();
   const targetUserId = activeCell.userId;
   const date = activeCell.date;
   const key = `${targetUserId}_${date}`;
@@ -1061,14 +1036,13 @@ function closeUserModal(){
 function logout(){
   if (!currentUser) return;
 
-  // clear stored login + pin
+  // clear stored login
   localStorage.removeItem(STORAGE_KEY);
-  clearSessionPin(currentUser.id);
+  sessionStorage.removeItem(STORAGE_KEY);
 
   // clear state
   currentUser = null;
   selectedUser = null;
-  sessionPin = null;
 
   closeUserModal();
   updateBadges();
@@ -1134,24 +1108,13 @@ userSavePin?.addEventListener("click", async () => {
   userSavePin.disabled = true;
 
   try {
-    // OPTIONAL: verify old pin first (you already have this RPC)
-    const { data: ok, error: vErr } = await supabaseClient.rpc("verify_user_pin", {
-      p_user_id: currentUser.id,
-      p_pin: oldPin
-    });
-    if (vErr) throw vErr;
-    if (ok !== true) return showUserPinErr("Current PIN is incorrect.");
-
-    // Change pin
+    // Change pin (server validates old pin)
     const { error: cErr } = await supabaseClient.rpc("change_user_pin", {
       p_token: currentToken,
       p_old_pin: oldPin,
       p_new_pin: newPin
     });
     if (cErr) throw cErr;
-
-    // Update session pin to the new one so their session keeps working
-    setSessionPin(currentUser.id, newPin);
 
     userPinOk.style.display = "block";
     userOldPin.value = "";
@@ -1474,12 +1437,10 @@ async function fetchNoticeAcksForAdmin(noticeId){
 async function fetchNoticesForMe(){
   if (!currentUser) return [];
 
-  const pin = getSessionPinOrThrow();
-
   const { data, error } = await supabaseClient.rpc(
     "get_notices_for_user",
     {
-      p_user_id: currentUser.id
+      p_token: currentToken
     }
   );
   if (error) throw error;
@@ -1865,11 +1826,8 @@ function renderAllNoticesList(){
 
 
 async function adminFetchNoticeAcks(noticeId){
-  const pin = getSessionPinOrThrow();
-
   const { data, error } = await supabaseClient.rpc("admin_get_notice_acks", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
+    p_token: currentToken,
     p_notice_id: noticeId
   });
 
@@ -2151,7 +2109,6 @@ noticeAllList?.addEventListener("click", async (e) => {
       }
       
       const swapRequestId = notification.payload.swap_request_id;
-      const pin = getSessionPinOrThrow();
       
       // Call admin approval RPC
       const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
@@ -2190,7 +2147,6 @@ noticeAllList?.addEventListener("click", async (e) => {
       }
       
       const swapRequestId = notification.payload.swap_request_id;
-      const pin = getSessionPinOrThrow();
       
       // Call admin decline RPC
       const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
@@ -2578,8 +2534,6 @@ function renderAdminNotices(){
 
 
 async function adminUpsertNotice(payload){
-  const pin = getSessionPinOrThrow();
-
   // Enforce: if roles are supplied we treat this as targeted (target_all=false).
   const targetRoles = Array.isArray(payload.target_roles) ? payload.target_roles : [];
   const targetAll = !!payload.target_all && targetRoles.length === 0;
@@ -2599,8 +2553,6 @@ async function adminUpsertNotice(payload){
 }
 
 async function toggleAdminNoticeActive(notice){
-  const pin = getSessionPinOrThrow();
-
   const next = (notice.is_active === false) ? true : false;
   const ok = confirm(`${next ? "Unhide" : "Hide"} "${notice.title}"?`);
   if (!ok) return;
@@ -2617,8 +2569,6 @@ async function toggleAdminNoticeActive(notice){
 }
 
 async function deleteAdminNotice(notice){
-  const pin = getSessionPinOrThrow();
-
   const ok = confirm(`Delete "${notice.title}"?\n\nThis cannot be undone.`);
   if (!ok) return;
 
@@ -2742,21 +2692,11 @@ async function toggleUserActive(userId){
   const ok = confirm(`${next ? "Reactivate" : "Deactivate"} ${u.name}?`);
   if (!ok) return;
 
-  const pin = getSessionPinOrThrow(); // ðŸ”‘ THIS WAS MISSING
-
-  const { error } = await supabaseClient.rpc("set_user_active", {
-    p_admin_id: currentUser.id,
-    p_pin: pin,
-    p_user_id: userId,
+  const { error } = await supabaseClient.rpc("admin_set_user_active", {
+    p_token: currentToken,
+    p_target_user_id: userId,
     p_active: next
   });
-
-  if (error){
-    console.error(error);
-    alert("Update failed.");
-    return;
-  }
-
   await loadRota();
   await loadAdminUsers();
 }
@@ -3068,6 +3008,7 @@ adminSaveUserBtn?.addEventListener("click", async () => {
 
   try {
     const { data: userId, error } = await supabaseClient.rpc("admin_upsert_user", {
+      p_token: currentToken,
       p_user_id: adminEditingUserId, // null = add
       p_name: name,
       p_role_id: role_id
@@ -3090,9 +3031,10 @@ adminSaveUserBtn?.addEventListener("click", async () => {
    [ADMIN-USERS-4] PIN setter via RPC (recommended)
    ========================================================= */
 async function adminSetUserPin(userId, pin){
-  const { error } = await supabaseClient.rpc("set_user_pin", {
-    p_user_id: userId,
-    p_pin: pin
+  const { error } = await supabaseClient.rpc("admin_set_user_pin", {
+    p_token: currentToken,
+    p_target_user_id: userId,
+    p_new_pin: pin
   });
   if (error) throw error;
 }
@@ -3299,8 +3241,6 @@ ${periodClosed ? "(after close time)" : "(before close time)"}
 adminWeeksList.querySelectorAll("button[data-week-id]").forEach(btn => {
   btn.addEventListener("click", async () => {
     if (!currentUser?.is_admin) return;
-
-    const pin = getSessionPinOrThrow();
     const weekId = btn.dataset.weekId;
 
     const open = btn.dataset.open === "1";
@@ -3339,8 +3279,6 @@ if (periodClosed) {
    ========================= */
   
 async function setActivePeriod(periodId){
-  const pin = getSessionPinOrThrow();
-
   const { error } = await supabaseClient.rpc("admin_set_active_period", {
     p_token: currentToken,
     p_period_id: periodId
@@ -3352,7 +3290,6 @@ async function setActivePeriod(periodId){
     
 async function toggleHiddenPeriod(periodId){
   if (!currentUser?.is_admin) throw new Error("Admin only.");
-  const pin = getSessionPinOrThrow();
 
   const { error } = await supabaseClient.rpc("admin_toggle_hidden_period", {
     p_token: currentToken,
@@ -3365,8 +3302,6 @@ async function toggleHiddenPeriod(periodId){
 
 async function generateNextFiveWeekPeriod(){
   if (!currentUser?.is_admin) throw new Error("Admin only.");
-
-  const pin = getSessionPinOrThrow();
   const r = computeNextPeriodRange();
   if (!r) throw new Error("No existing periods.");
 
@@ -3378,8 +3313,7 @@ async function generateNextFiveWeekPeriod(){
   const { data: periodId, error } = await supabaseClient.rpc(
     "admin_create_five_week_period",
     {
-      p_admin_id: currentUser.id,
-      p_pin: pin,
+      p_token: currentToken,
       p_name: periodName,
       p_start_date: startStr,
       p_end_date: endStr
@@ -3482,8 +3416,6 @@ if (adminGenerateBtn) {
 
 
 async function setPeriodCloseTime(periodId, closesAtIsoOrNull){
-  const pin = getSessionPinOrThrow();
-
   const { error } = await supabaseClient.rpc("admin_set_period_closes_at", {
     p_token: currentToken,
     p_period_id: periodId,
@@ -3658,30 +3590,11 @@ pinInput.addEventListener("keydown", (e) => {
       pinErr.style.display = "none";
 
       try{
-        const { data: ok, error } = await supabaseClient.rpc("verify_user_pin", {
-          p_user_id: selectedUser.id,
-          p_pin: pin
-        });
-
-        if(error){
-          console.error("RPC error:", error);
-          pinErr.textContent = "Server error (RPC).";
-          pinErr.style.display = "block";
-          pinConfirmBtn.disabled = false;
-          return;
+        if (!currentToken) {
+          throw new Error("Missing session token. Log in again.");
         }
 
-if(ok !== true){
-  pinErr.textContent = t("pinErrWrong");
-  pinErr.style.display = "block";
-  pinConfirmBtn.disabled = false;
-  return;
-}
-
-  currentUser = selectedUser;
-  window.currentUser = currentUser; // Expose to window for other scripts
-setSessionPin(selectedUser.id, pin); // âœ… critical (used for saving requests)
-localStorage.setItem(STORAGE_KEY, currentUser.id);
+        const ok = true; // token already proves session; no post-login PIN verification
 
 closePinModal();
 await loadUserPermissions();
@@ -4110,9 +4023,6 @@ function toast(msg){
 async function upsertRequestCell(userId, date, value, importantRank){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
-
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { data, error } = await supabaseClient.rpc("admin_set_request_cell", {
@@ -4143,9 +4053,6 @@ async function upsertRequestCell(userId, date, value, importantRank){
 async function deleteRequestCell(userId, date){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
-
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { error } = await supabaseClient.rpc("admin_clear_request_cell", {
@@ -4171,14 +4078,6 @@ function goToFullAdmin() {
     alert("Not logged in.");
     return;
   }
-  const pin = sessionStorage.getItem(`calpeward.pin.${currentUser.id}`);
-  if (!pin) {
-    alert("No session PIN. Log in again.");
-    return;
-  }
-  console.log("[DEBUG] Storing session and navigating to admin.html");
-  const sessionData = { userId: currentUser.id, pin: pin };
-  window.name = "calpeward:" + btoa(JSON.stringify(sessionData));
   window.location.href = "admin.html";
 }
     
@@ -4207,19 +4106,27 @@ async function loadRota() {
     populateViewAsSelector();
   }
 
-  // ðŸ” Restore logged-in user from localStorage (ONE TIME LOGIN)
-const savedId = localStorage.getItem(STORAGE_KEY);
+  // Restore logged-in user from sessionStorage/localStorage using token-backed session
+const savedSessionRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+let savedId = null;
+try {
+  const parsed = savedSessionRaw ? JSON.parse(savedSessionRaw) : null;
+  savedId = parsed?.user_id || parsed?.userId || savedSessionRaw;
+} catch (e) {
+  savedId = savedSessionRaw;
+}
+
 if (savedId && !currentUser) {
   const restored = (users || []).find(u => String(u.id) === String(savedId));
-  const restoredPin = restored ? sessionStorage.getItem(pinKey(restored.id)) : null;
 
-  if (restored && restoredPin) {
+  if (restored) {
     currentUser = restored;
     await loadUserPermissions();
     updateBadges();
     applyUnlockState();
   } else {
     localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
   }
 }
 
@@ -5648,8 +5555,6 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
     async function adminExecuteShiftSwap(counterpartyUserId, counterpartyDate){
       if (!currentUser?.is_admin) throw new Error("Admin only");
       if (!activeCell) throw new Error("No active cell");
-
-      const pin = getSessionPinOrThrow();
       const periodId = currentPeriod?.id;
       if (!periodId) throw new Error("No active period");
 
@@ -5693,7 +5598,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
       if (!['accepted', 'declined', 'ignored'].includes(response)) throw new Error("Invalid response");
 
       const { data, error } = await supabaseClient.rpc("staff_respond_to_swap_request", {
-        p_user_id: currentUser.id,
+        p_token: currentToken,
         p_swap_request_id: swapRequestId,
         p_response: response
       });

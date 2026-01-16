@@ -232,8 +232,9 @@
       }
       if (adminLoginMsg) adminLoginMsg.textContent = "Signing in...";
       try {
-        const { data: ok, error: vErr } = await supabaseClient.rpc("verify_user_pin", {
-          p_user_id: userId,
+        const { data: ok, error: vErr } = await supabaseClient.rpc("admin_verify_user_pin", {
+          p_token: currentToken,
+          p_target_user_id: userId,
           p_pin: pin
         });
         if (vErr) throw vErr;
@@ -569,11 +570,9 @@
       const ok = confirm(`${next ? "Reactivate" : "Deactivate"} ${u.name}?`);
       if (!ok) return;
 
-      const pin = getSessionPinOrThrow();
-      const { error } = await supabaseClient.rpc("set_user_active", {
-        p_admin_id: currentUser.id,
-        p_pin: pin,
-        p_user_id: userId,
+      const { error } = await supabaseClient.rpc("admin_set_user_active", {
+        p_token: currentToken,
+        p_target_user_id: userId,
         p_active: next
       });
       if (error){
@@ -585,9 +584,10 @@
     }
 
     async function adminSetUserPin(userId, pin){
-      const { error } = await supabaseClient.rpc("set_user_pin", {
-        p_user_id: userId,
-        p_pin: pin
+      const { error } = await supabaseClient.rpc("admin_set_user_pin", {
+        p_token: currentToken,
+        p_target_user_id: userId,
+        p_new_pin: pin
       });
       if (error) throw error;
     }
@@ -612,6 +612,7 @@
 
       try {
         const { data: userId, error } = await supabaseClient.rpc("admin_upsert_user", {
+          p_token: currentToken,
           p_user_id: adminEditingUserId,
           p_name: name,
           p_role_id: role_id
@@ -640,6 +641,7 @@
 
       try {
         const { data: userId, error } = await supabaseClient.rpc("admin_upsert_user", {
+          p_token: currentToken,
           p_user_id: null,
           p_name: name,
           p_role_id: role_id

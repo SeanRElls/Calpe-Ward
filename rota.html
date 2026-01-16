@@ -321,39 +321,7 @@
     const getSupabase = () => window.supabaseClient;
     const getStorageKey = () => window.STORAGE_KEY || "calpeward.loggedInUserId";
 
-    // ========== SESSION RESTORATION ==========
-    const WINDOW_SESSION_PREFIX = "calpeward:";
-    
-    function getWindowSession() {
-      if (!window.name || !window.name.startsWith(WINDOW_SESSION_PREFIX)) {
-        return null;
-      }
-      try {
-        const raw = window.name.slice(WINDOW_SESSION_PREFIX.length);
-        const session = JSON.parse(atob(raw));
-        return session;
-      } catch (e) {
-        console.warn("Failed to parse window session", e);
-        return null;
-      }
-    }
-
-    function restoreSessionFromWindow() {
-      const data = getWindowSession();
-      console.log("[ROTA DEBUG] restoreSessionFromWindow - data:", data);
-      if (!data || !data.userId) return null;
-      
-      // Store userId in localStorage and PIN in sessionStorage
-      console.log("[ROTA DEBUG] Storing userId in localStorage:", data.userId);
-      localStorage.setItem(getStorageKey(), data.userId);
-      if (data.pin) {
-        sessionStorage.setItem(`calpeward.pin.${data.userId}`, data.pin);
-        console.log("[ROTA DEBUG] Stored PIN for user:", data.userId);
-      }
-      return data;
-    }
-
-    // Restore session happens later, after DOMContentLoaded once config is ready
+    // Session is handled via token in sessionStorage; no PIN handoff or window.name needed
 
     let currentPeriod = null;
     let allUsers = [];
@@ -388,9 +356,6 @@
     // ========== AUTH ==========
     async function checkAuth() {
       console.log("[ROTA DEBUG] checkAuth starting...");
-
-      // Try to restore session from window.name first (writes localStorage + sessionStorage)
-      restoreSessionFromWindow();
 
       console.log("[ROTA DEBUG] STORAGE_KEY getter returns", getStorageKey());
       console.log("[ROTA DEBUG] localStorage userId", localStorage.getItem(getStorageKey()));
@@ -445,30 +410,10 @@
     }
 
     function navigateToRequests() {
-      // Preserve session when navigating back to requests
-      if (window.currentUser) {
-        const pin = sessionStorage.getItem(`calpeward.pin.${window.currentUser.id}`);
-        if (pin) {
-          const sessionData = { userId: window.currentUser.id, pin: pin };
-          window.name = "calpeward:" + btoa(JSON.stringify(sessionData));
-        }
-      }
       window.location.href = "index.html";
     }
 
     function navigateToAdmin() {
-      // Preserve session when navigating to admin
-      if (!window.currentUser) {
-        alert("Not logged in.");
-        return;
-      }
-      const pin = sessionStorage.getItem(`calpeward.pin.${window.currentUser.id}`);
-      if (!pin) {
-        alert("No session PIN. Log in again.");
-        return;
-      }
-      const sessionData = { userId: window.currentUser.id, pin: pin };
-      window.name = "calpeward:" + btoa(JSON.stringify(sessionData));
       window.location.href = "admin.html";
     }
 
@@ -2872,16 +2817,6 @@
         return;
       }
 
-      // Helper functions
-      function pinKey(userId){ return `calpeward.pin.${userId}`; }
-      
-      function getSessionPinOrThrow(){
-        if (!currentUser) throw new Error("Not logged in.");
-        const pin = sessionStorage.getItem(pinKey(currentUser.id));
-        if (!pin) throw new Error("Missing session PIN. Log in again.");
-        return pin;
-      }
-
       // Admin approve swap (from swap_pending notification)
       const adminApproveBtn = e.target.closest("button[data-admin-approve-swap]");
       if (adminApproveBtn) {
@@ -2896,7 +2831,6 @@
           }
           
           const swapRequestId = notification.payload.swap_request_id;
-          const pin = getSessionPinOrThrow();
           
           // Call admin approval RPC
           const { data, error } = await window.supabaseClient.rpc("admin_approve_swap_request", {
@@ -2935,7 +2869,6 @@
           }
           
           const swapRequestId = notification.payload.swap_request_id;
-          const pin = getSessionPinOrThrow();
           
           // Call admin decline RPC
           const { data, error } = await window.supabaseClient.rpc("admin_decline_swap_request", {
