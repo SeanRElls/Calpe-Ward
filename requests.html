@@ -593,16 +593,7 @@ tbody td{
       flex-wrap: wrap;
     }
 
-    input.pin{
-      flex: 1 1 220px;
-      font-size: 18px;
-      padding: 12px 12px;
-      border-radius: 12px;
-      border: 1px solid #ccc;
-      letter-spacing: 10px;
-      text-align: center;
-      min-width: 220px;
-    }
+
 
     .btns{
       display:flex;
@@ -679,7 +670,6 @@ tbody td{
       .wrap{ padding: 12px; }
       .titlebar{ flex-direction: column; align-items: flex-start; }
       .rightbits{ justify-content: flex-start; }
-      input.pin{ flex: 1 1 100%; min-width: 0; }
       .btns{ flex: 1 1 100%; min-width: 0; }
       button{ min-width: 0; }
     }
@@ -2150,26 +2140,6 @@ button.badge{
   </div>
 
   <!-- =========================
-       PIN MODAL (login)
-       ========================= -->
-  <div class="modal-backdrop" id="pinModal" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
-      <h2 id="pinTitle">Enter PIN</h2>
-      <p id="pinDesc">Enter your 4-digit PIN to unlock editing.</p>
-
-      <div class="row">
-        <input class="pin" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" />
-        <div class="btns">
-          <button id="pinCancel" type="button">Cancel</button>
-          <button class="primary" id="pinConfirm" type="button">Unlock</button>
-        </div>
-      </div>
-
-      <div class="err" id="pinErr">Wrong PIN.</div>
-    </div>
-  </div>
-
-  <!-- =========================
        SHIFT PICKER MODAL (Patch 2)
        ========================= -->
   <div class="modal-backdrop" id="shiftModal" aria-hidden="true">
@@ -3181,13 +3151,12 @@ async function fetchWeekComments(weekId){
 async function upsertWeekComment(weekId, userId, comment){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
+  const token = getTokenOrThrow();
 
   const { data, error } = await supabaseClient.rpc("upsert_week_comment", {
     p_week_id: weekId,
     p_user_id: userId,
-    p_pin: pin,
+    p_token: token,
     p_comment: comment ?? ""
   });
 
@@ -3306,24 +3275,12 @@ function isPeriodClosed(period){
 /* =========================================================
    3) STATE (who is logged in / what is unlocked)
    ========================================================= */
-let currentUser = null;      // user object when logged in (by PIN)
-let selectedUser = null;     // user you clicked before PIN entry
+let currentUser = null;      // user object when logged in (from token)
     let usersById = new Map();
     let allUsers = [];           // all users array (for print/export features)
-let sessionPin = null; // store PIN in memory only (not localStorage)
 
 
-    function pinKey(userId){ return `calpeward.pin.${userId}`; }
 
-function setSessionPin(userId, pin){
-  sessionPin = pin;
-  sessionStorage.setItem(pinKey(userId), pin);
-}
-
-function clearSessionPin(userId){
-  sessionPin = null;
-  if (userId) sessionStorage.removeItem(pinKey(userId));
-}
 
 /* =========================================================
    3a) PERMISSIONS
@@ -3385,13 +3342,6 @@ let weekWindowStart = 0; // index into allWeeks
     /* =========================================================
        4) DOM REFERENCES
        ========================================================= */
-    const modal = document.getElementById("pinModal");
-    const pinInput = document.getElementById("pinInput");
-    const pinErr = document.getElementById("pinErr");
-    const pinTitle = document.getElementById("pinTitle");
-    const pinDesc = document.getElementById("pinDesc");
-    const pinConfirmBtn = document.getElementById("pinConfirm");
-    const pinCancelBtn = document.getElementById("pinCancel");
     const loginBadge = document.getElementById("loginBadge");
     const adminBadge = document.getElementById("adminBadge");
     
@@ -3661,11 +3611,12 @@ shiftLockBtn?.addEventListener("click", async (e) => {
 
       if (reason === null) return;
 
+      const token = getTokenOrThrow();
       const { data, error } = await supabaseClient.rpc(
         "admin_lock_request_cell",
         {
           p_admin_id: currentUser.id,
-          p_pin: pin,
+          p_token: token,
           p_target_user_id: targetUserId,
           p_date: date,
           p_reason_en: currentLang === "es" ? null : reason,
@@ -3813,21 +3764,19 @@ function closeUserModal(){
 function logout(){
   if (!currentUser) return;
 
-  // clear stored login + pin
+  // clear stored login + token
   localStorage.removeItem(STORAGE_KEY);
-  clearSessionPin(currentUser.id);
+  sessionStorage.removeItem('calpe_ward_token');
 
   // clear state
   currentUser = null;
-  selectedUser = null;
-  sessionPin = null;
 
   closeUserModal();
   updateBadges();
   applyUnlockState();
 
-  // refresh UI (so any "editable" disappears + dropdown filtering updates)
-  loadRota();
+  // redirect to login
+  window.location.href = '/login.html';
 }
 
 // Wire badge click
@@ -3868,57 +3817,6 @@ async function setMyLanguage(lang){
 userLangEn?.addEventListener("click", () => setMyLanguage("en"));
 userLangEs?.addEventListener("click", () => setMyLanguage("es"));
 
-
-// Save PIN
-userSavePin?.addEventListener("click", async () => {
-  if (!currentUser) return;
-
-  userPinErr.style.display = "none";
-  userPinOk.style.display = "none";
-
-  const oldPin = userOldPin.value.trim();
-  const newPin = userNewPin.value.trim();
-  const newPin2 = userNewPin2.value.trim();
-
-  if (!/^\d{4}$/.test(oldPin)) return showUserPinErr("Current PIN must be 4 digits.");
-  if (!/^\d{4}$/.test(newPin)) return showUserPinErr("New PIN must be 4 digits.");
-  if (newPin !== newPin2) return showUserPinErr("New PINs do not match.");
-  if (oldPin === newPin) return showUserPinErr("New PIN must be different.");
-
-  userSavePin.disabled = true;
-
-  try {
-    // OPTIONAL: verify old pin first (you already have this RPC)
-    const { data: ok, error: vErr } = await supabaseClient.rpc("verify_user_pin", {
-      p_user_id: currentUser.id,
-      p_pin: oldPin
-    });
-    if (vErr) throw vErr;
-    if (ok !== true) return showUserPinErr("Current PIN is incorrect.");
-
-    // Change pin (YOU need this RPC - see SQL below)
-    const { error: cErr } = await supabaseClient.rpc("change_user_pin", {
-      p_user_id: currentUser.id,
-      p_old_pin: oldPin,
-      p_new_pin: newPin
-    });
-    if (cErr) throw cErr;
-
-    // Update session pin to the new one so their session keeps working
-    setSessionPin(currentUser.id, newPin);
-
-    userPinOk.style.display = "block";
-    userOldPin.value = "";
-    userNewPin.value = "";
-    userNewPin2.value = "";
-
-  } catch (e) {
-    console.error(e);
-    showUserPinErr("Failed to update PIN. Check console.");
-  } finally {
-    userSavePin.disabled = false;
-  }
-});
 
 function paintLangButtons(){
   const lang = (currentUser?.preferred_lang || "en");
@@ -5761,11 +5659,9 @@ noticeRoleChks.forEach(chk => {
 adminSaveUserBtn?.addEventListener("click", async () => {
   const name = adminEditUserName.value.trim();
   const role_id = Number(adminEditUserRole.value);
-  const pin = (adminEditUserPin.value || "").trim();
 
   if (!name) return alert("Name is required.");
   if (![1,2,3].includes(role_id)) return alert("Role invalid.");
-  if (pin && !/^\d{4}$/.test(pin)) return alert("PIN must be 4 digits.");
 
   try {
     const { data: userId, error } = await supabaseClient.rpc("admin_upsert_user", {
@@ -5775,8 +5671,6 @@ adminSaveUserBtn?.addEventListener("click", async () => {
       p_role_id: role_id
     });
     if (error) throw error;
-
-    if (pin) await adminSetUserPin(userId, pin);
 
     await loadRota();
     await loadAdminUsers();
@@ -5788,16 +5682,6 @@ adminSaveUserBtn?.addEventListener("click", async () => {
   }
 });
 
-/* =========================================================
-   [ADMIN-USERS-4] PIN setter via RPC (recommended)
-   ========================================================= */
-async function adminSetUserPin(userId, pin){
-  const { error } = await supabaseClient.rpc("set_user_pin", {
-    p_user_id: userId,
-    p_pin: pin
-  });
-  if (error) throw error;
-}
 
 /* =========================
    ADMIN PERIODS (v2 dropdown)
@@ -6019,9 +5903,10 @@ if (periodClosed) {
   nextOpen = !open;                      // normal behavior
 }
     try {
+      const token = getTokenOrThrow();
       const { error } = await supabaseClient.rpc("admin_set_week_open_flags", {
         p_admin_id: currentUser.id,
-        p_pin: pin,
+        p_token: token,
         p_week_id: weekId,
         p_open: nextOpen,
         p_open_after_close: nextOpenAfterClose
@@ -6301,106 +6186,14 @@ await resetWeeksOpen(adminSelectedPeriodId);
   });
 }
 
-    /* =========================================================
-       5) PIN MODAL (open/close)
-       ========================================================= */
-function openPinModal(user){
-  selectedUser = user;
-
-  // pick language based on the person you're logging in as
-  setLang(user.preferred_lang || "en");
-
-  pinTitle.textContent = t("pinTitle", user.name);
-  pinDesc.textContent  = t("pinDesc");
-
-  pinErr.style.display = "none";
-  pinInput.value = "";
-
-  document.body.classList.add("modal-open");
-  modal.style.display = "flex";
-  modal.setAttribute("aria-hidden", "false");
-  setTimeout(() => pinInput.focus(), 50);
-}
-
-function closePinModal(){
-  modal.style.display = "none";
-  modal.setAttribute("aria-hidden", "true");
-
-updateBodyModalOpen();
-
-
-  selectedUser = null;
-  pinConfirmBtn.disabled = false;
-}
-    
-pinCancelBtn.addEventListener("click", closePinModal);
-modal.addEventListener("click", (e) => { if(e.target === modal) closePinModal(); });
-
-pinInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    pinConfirmBtn.click();
-  }
-});
 
     /* =========================================================
-       6) AUTH (verify PIN via RPC)
+       5) SESSION / AUTH
        ========================================================= */
-    pinConfirmBtn.addEventListener("click", async () => {
-      const pin = pinInput.value.trim();
-      if(!selectedUser) return;
 
- if(!/^\d{4}$/.test(pin)){
-  pinErr.textContent = t("pinErrFormat");
-  pinErr.style.display = "block";
-  return;
-}
-
-      pinConfirmBtn.disabled = true;
-      pinErr.style.display = "none";
-
-      try{
-        const { data: ok, error } = await supabaseClient.rpc("verify_user_pin", {
-          p_user_id: selectedUser.id,
-          p_pin: pin
-        });
-
-        if(error){
-          console.error("RPC error:", error);
-          pinErr.textContent = "Server error (RPC).";
-          pinErr.style.display = "block";
-          pinConfirmBtn.disabled = false;
-          return;
-        }
-
-if(ok !== true){
-  pinErr.textContent = t("pinErrWrong");
-  pinErr.style.display = "block";
-  pinConfirmBtn.disabled = false;
-  return;
-}
-
-  currentUser = selectedUser;
-setSessionPin(selectedUser.id, pin); // ✅ critical (used for saving requests)
-localStorage.setItem(STORAGE_KEY, currentUser.id);
-
-await loadUserPermissions();
-
-closePinModal();
-applyLanguage();
-applyUnlockState();
-updateBadges();
-updateCloseLabel(activePeriodObj);
-refreshNoticesAndMaybeBlock();
-
-
-      }catch(err){
-        console.error("Login exception:", err);
-        pinErr.textContent = "Login error. Try again.";
-        pinErr.style.display = "block";
-        pinConfirmBtn.disabled = false;
-      }
-    });
+    /* =========================================================
+       6) SHIFT PICKER LOGIC (with OFF priority)
+       ========================================================= */
 function updateBadges(){
   const txt = loginBadge?.querySelector(".acc-txt");
 
@@ -6815,14 +6608,13 @@ function toast(msg){
 async function upsertRequestCell(userId, date, value, importantRank){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
+  const token = getTokenOrThrow();
 
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { data, error } = await supabaseClient.rpc("admin_set_request_cell", {
       p_admin_id: currentUser.id,
-      p_pin: pin,
+      p_token: token,
       p_target_user_id: userId,
       p_date: date,
       p_value: value,
@@ -6835,7 +6627,7 @@ async function upsertRequestCell(userId, date, value, importantRank){
   // Normal -> user RPC
   const { data, error } = await supabaseClient.rpc("set_request_cell", {
     p_user_id: userId,
-    p_pin: pin,
+    p_token: token,
     p_date: date,
     p_value: value,
     p_important_rank: importantRank ?? null
@@ -6850,14 +6642,13 @@ async function upsertRequestCell(userId, date, value, importantRank){
 async function deleteRequestCell(userId, date){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const pin = sessionStorage.getItem(pinKey(currentUser.id));
-  if (!pin) throw new Error("Missing session PIN. Log in again.");
+  const token = getTokenOrThrow();
 
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { error } = await supabaseClient.rpc("admin_clear_request_cell", {
       p_admin_id: currentUser.id,
-      p_pin: pin,
+      p_token: token,
       p_target_user_id: userId,
       p_date: date
     });
@@ -6868,7 +6659,7 @@ async function deleteRequestCell(userId, date){
   // Normal -> user RPC
   const { error } = await supabaseClient.rpc("clear_request_cell", {
     p_user_id: userId,
-    p_pin: pin,
+    p_token: token,
     p_date: date
   });
   if (error) throw error;
@@ -6895,21 +6686,23 @@ async function loadRota() {
   allUsers = users || [];
   usersById = new Map((users || []).map(u => [u.id, u.name]));
 
-  // 🔐 Restore logged-in user from localStorage (ONE TIME LOGIN)
-const savedId = localStorage.getItem(STORAGE_KEY);
-if (savedId && !currentUser) {
-  const restored = (users || []).find(u => String(u.id) === String(savedId));
-  const restoredPin = restored ? sessionStorage.getItem(pinKey(restored.id)) : null;
-
-  if (restored && restoredPin) {
-    currentUser = restored;
-    await loadUserPermissions();
-    updateBadges();
-    applyUnlockState();
-  } else {
+  // 🔐 Session validation: check if token is valid and find current user
+  const token = sessionStorage.getItem('calpe_ward_token');
+  const savedId = localStorage.getItem(STORAGE_KEY);
+  
+  if (token && savedId && !currentUser) {
+    const restored = (users || []).find(u => String(u.id) === String(savedId));
+    if (restored) {
+      currentUser = restored;
+      await loadUserPermissions();
+      updateBadges();
+      applyUnlockState();
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } else if (!token) {
     localStorage.removeItem(STORAGE_KEY);
   }
-}
 
 refreshNoticesAndMaybeBlock();
 
@@ -7176,12 +6969,11 @@ r1.appendChild(th);
       const tr = document.createElement("tr");
       tr.dataset.userId = u.id;
 
-      // name cell (PIN login)
+      // name cell
       const nameTd = document.createElement("td");
       nameTd.className = "name-col";
       nameTd.textContent = u.name;
       nameTd.title = u.name;
-      nameTd.addEventListener("click", () => openPinModal(u));
       tr.appendChild(nameTd);
 
       // date cells
