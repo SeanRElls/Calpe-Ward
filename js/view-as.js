@@ -221,6 +221,7 @@ async function stopViewingAs() {
 
   hideViewAsBanner();
   console.log("[VIEW AS] Returned to admin view");
+  updateViewAsBannerState();
 }
 
 // Check on page load if we're viewing as someone
@@ -256,7 +257,7 @@ async function populateViewAsSelector(targetSelector, statusEl) {
     let html = '<option value="">View As...</option>';
 
     [1, 2, 3].forEach(roleId => {
-      const roleUsers = users.filter(u => u.role_id === roleId && !u.is_admin);
+      const roleUsers = users.filter(u => Number(u.role_id) === roleId && !u.is_admin);
       if (roleUsers.length) {
         html += `<optgroup label="${roles[roleId]}">`;
         roleUsers.forEach(u => {
@@ -267,8 +268,15 @@ async function populateViewAsSelector(targetSelector, statusEl) {
     });
 
     if (html === '<option value="">View As...</option>') {
-      html += '<option value="" disabled>(No active non-admin users)</option>';
-      if (statusEl) statusEl.textContent = "No active non-admin users found.";
+      const nonAdmin = users.filter(u => !u.is_admin);
+      if (nonAdmin.length) {
+        nonAdmin.forEach(u => {
+          html += `<option value="${u.id}">${escapeHtml(u.name)}</option>`;
+        });
+      } else {
+        html += '<option value="" disabled>(No active non-admin users)</option>';
+        if (statusEl) statusEl.textContent = "No active non-admin users found.";
+      }
     }
 
     selector.innerHTML = html;
