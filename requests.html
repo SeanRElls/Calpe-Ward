@@ -3006,8 +3006,12 @@ function countUserRequestsThisWeek(userId, dateStr){
 
 // Token-based auth helper (replaces getSessionPinOrThrow)
 function getTokenOrThrow(){
-  const token = sessionStorage.getItem('calpe_ward_token');
+  // Prefer the in-memory token (updated during impersonation), fall back to storage
+  const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
   if (!token) throw new Error("No session token. Please log in again.");
+  // Keep both in sync so subsequent RPCs stay consistent across reloads
+  window.currentToken = token;
+  sessionStorage.setItem('calpe_ward_token', token);
   return token;
 }
     
