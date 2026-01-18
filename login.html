@@ -144,20 +144,14 @@
       color: var(--muted);
     }
 
-    .pin-input-group {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr;
-      gap: 10px;
-      margin-top: 6px;
-    }
-
-    .pin-digit {
-      padding: 12px 0 !important;
-      text-align: center;
-      font-size: 24px !important;
+    /* Password field styling */
+    input[type="password"] {
+      font-size: 24px;
       font-weight: 700;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.3em;
       font-family: "Monaco", "Menlo", monospace;
+      text-align: center;
+      padding: 16px 14px;
     }
 
     .error-message {
@@ -290,7 +284,7 @@
         <p class="subtitle">Off Duty Requests</p>
       </div>
 
-      <form id="loginForm">
+      <form id="loginForm" action="#" method="post">
         <!-- Username -->
         <div class="form-group">
           <label for="username">Username</label>
@@ -306,13 +300,17 @@
 
         <!-- PIN -->
         <div class="form-group">
-          <label>PIN</label>
-          <div class="pin-input-group">
-            <input type="text" class="pin-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
-            <input type="text" class="pin-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
-            <input type="text" class="pin-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
-            <input type="text" class="pin-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
-          </div>
+          <label for="password">PIN</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Enter 4-digit PIN"
+            autocomplete="current-password"
+            inputmode="numeric"
+            maxlength="4"
+            required
+          />
         </div>
 
         <!-- Error Message -->
@@ -356,27 +354,12 @@
       }
     }
 
-    // PIN input auto-advance
-    document.querySelectorAll('.pin-digit').forEach((input, index) => {
-      input.addEventListener('input', (e) => {
-        if (e.target.value.length === 1 && index < 3) {
-          document.querySelectorAll('.pin-digit')[index + 1].focus();
-        }
-      });
-
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
-          document.querySelectorAll('.pin-digit')[index - 1].focus();
-        }
-      });
-    });
-
     // Form submission
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const username = document.getElementById('username').value.trim();
-      const pinDigits = Array.from(document.querySelectorAll('.pin-digit')).map(input => input.value).join('');
+      const pin = document.getElementById('password').value.trim();
       const errorMsg = document.getElementById('errorMessage');
       const successMsg = document.getElementById('successMessage');
       const submitBtn = document.getElementById('submitBtn');
@@ -393,12 +376,12 @@
         return;
       }
 
-      if (pinDigits.length !== 4) {
+      if (pin.length !== 4) {
         showError('PIN must be 4 digits');
         return;
       }
 
-      if (!/^\d{4}$/.test(pinDigits)) {
+      if (!/^\d{4}$/.test(pin)) {
         showError('PIN must contain only digits');
         return;
       }
@@ -423,7 +406,7 @@
         // Call login RPC
         const { data, error } = await supabaseClient.rpc('verify_login', {
           p_username: username,
-          p_pin: pinDigits,
+          p_pin: pin,
           p_ip_hash: ipHash,
           p_user_agent_hash: userAgentHash
         });
