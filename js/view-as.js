@@ -4,6 +4,7 @@
 
 const VIEW_AS_STORAGE_KEY = "calpeward.viewAs";
 const REAL_USER_STORAGE_KEY = "calpeward.realUser";
+const REAL_TOKEN_STORAGE_KEY = "calpeward.realToken";
 
 // Get the "real" logged-in user (before any impersonation)
 function getRealUser() {
@@ -165,17 +166,40 @@ async function startViewingAs(userId) {
     if (error) throw error;
     if (!user) throw new Error("User not found");
 
-    // SECURITY PATCH: Log impersonation to audit trail
-    const realUser = getRealUser() || currentUser;
+    // SECURITY PATCH: Log impersonation start + request impersonation token
     if (window.currentToken) {
       try {
-        await supabaseClient.rpc("admin_start_impersonation_audit", {
+        const { data: auditData, error: auditErr } = await supabaseClient.rpc("admin_start_impersonation_audit", {
           p_token: window.currentToken,
           p_target_user_id: userId
         });
+        if (auditErr) console.warn("Impersonation audit failed", auditErr);
       } catch (auditErr) {
         console.warn("Failed to log impersonation audit:", auditErr);
-        // Continue despite audit failure (non-blocking)
+      }
+
+      try {
+        const { data: impData, error: impErr } = await supabaseClient.rpc("admin_impersonate_user", {
+          p_admin_token: window.currentToken,
+          p_target_user_id: userId,
+          p_ttl_hours: 12
+        });
+        if (impErr) throw impErr;
+        if (!impData || !impData[0]?.impersonation_token) {
+          throw new Error("No impersonation token returned");
+        }
+
+        // Store real token to restore later
+        if (!sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY)) {
+          sessionStorage.setItem(REAL_TOKEN_STORAGE_KEY, window.currentToken);
+        }
+
+        // Swap to impersonation token
+        window.currentToken = impData[0].impersonation_token;
+      } catch (impErr) {
+        console.error("Failed to obtain impersonation token", impErr);
+        alert("Impersonation token failed: " + (impErr.message || impErr));
+        return;
       }
     }
 
@@ -208,6 +232,13 @@ async function stopViewingAs() {
   currentUser = realUser;
   sessionStorage.removeItem(VIEW_AS_STORAGE_KEY);
   sessionStorage.removeItem(REAL_USER_STORAGE_KEY);
+
+   // Restore real token if present
+  const realToken = sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY);
+  if (realToken) {
+    window.currentToken = realToken;
+    sessionStorage.removeItem(REAL_TOKEN_STORAGE_KEY);
+  }
 
   if (typeof loadUserPermissions === "function") {
     await loadUserPermissions();

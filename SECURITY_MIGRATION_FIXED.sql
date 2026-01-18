@@ -306,7 +306,61 @@ $$;
 GRANT EXECUTE ON FUNCTION public.admin_start_impersonation_audit(UUID, UUID) TO authenticated;
 
 -- ========================================================================
--- STEP 7: Create Rate Limiting Helper (Optional - for future use)
+-- STEP 7: Create Impersonation Token RPC (admin -> user)
+-- ========================================================================
+
+CREATE OR REPLACE FUNCTION public.admin_impersonate_user(
+  p_admin_token UUID,
+  p_target_user_id UUID,
+  p_ttl_hours INTEGER DEFAULT 12
+)
+RETURNS TABLE(impersonation_token UUID, expires_at TIMESTAMPTZ, error_message TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+DECLARE
+  v_admin_uid UUID;
+  v_new_token UUID;
+  v_expires_at TIMESTAMPTZ;
+BEGIN
+  -- Validate admin token
+  BEGIN
+    v_admin_uid := public.require_session_permissions(p_admin_token, NULL);
+  EXCEPTION WHEN OTHERS THEN
+    RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'invalid_token'::text;
+    RETURN;
+  END;
+
+  -- Confirm admin
+  IF NOT EXISTS (SELECT 1 FROM public.users WHERE id = v_admin_uid AND is_admin = true) THEN
+    RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'not_admin'::text;
+    RETURN;
+  END IF;
+
+  -- TTL sanity
+  IF p_ttl_hours IS NULL OR p_ttl_hours < 1 OR p_ttl_hours > 72 THEN
+    p_ttl_hours := 12;
+  END IF;
+
+  v_new_token := gen_random_uuid();
+  v_expires_at := now() + (p_ttl_hours || ' hours')::interval;
+
+  -- Insert into session_tokens (assumes custom token table)
+  INSERT INTO public.session_tokens(token, user_id, expires_at)
+  VALUES (v_new_token, p_target_user_id, v_expires_at);
+
+  RETURN QUERY SELECT v_new_token, v_expires_at, NULL::text;
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, SQLERRM::text;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_impersonate_user(UUID, UUID, INTEGER) TO authenticated;
+
+-- ========================================================================
+-- STEP 8: Create Rate Limiting Helper (Optional - for future use)
 -- ========================================================================
 
 CREATE TABLE IF NOT EXISTS public.operation_rate_limits (
@@ -323,7 +377,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_rate_limits_user_op ON public.operation_ra
 CREATE INDEX IF NOT EXISTS idx_rate_limits_lockout ON public.operation_rate_limits(lockout_until);
 
 -- ========================================================================
--- STEP 8: Verify RLS Status
+-- STEP 9: Verify RLS Status
 -- ========================================================================
 
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
