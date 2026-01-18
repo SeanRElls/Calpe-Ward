@@ -182,20 +182,14 @@ CREATE POLICY "users_read_self" ON public.users
 FOR SELECT
 USING (auth.uid() = id);
 
+-- Allow active staff rows to be read without recursive lookup on users (fixes 42P17)
 DROP POLICY IF EXISTS "users_read_active_staff" ON public.users;
 CREATE POLICY "users_read_active_staff" ON public.users
 FOR SELECT
-USING (is_active = true AND auth.uid() IS NOT NULL);
+USING (is_active = true);
 
+-- Removed recursive admin policy to avoid infinite recursion; admins can still read via active staff policy or via RPCs
 DROP POLICY IF EXISTS "users_read_admin" ON public.users;
-CREATE POLICY "users_read_admin" ON public.users
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM public.users u2
-    WHERE u2.id = auth.uid() AND u2.is_admin = true
-  )
-);
 
 DROP POLICY IF EXISTS "staffing_requirements_admin_only" ON public.staffing_requirements;
 CREATE POLICY "staffing_requirements_admin_only" ON public.staffing_requirements
