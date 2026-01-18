@@ -2106,14 +2106,7 @@ button.badge{
 
 
       <div class="shift-grid" id="shiftGridContainer">
-        <button class="shift-btn" data-shift="LD" type="button">LD</button>
-        <button class="shift-btn" data-shift="8-8" type="button">8–8</button>
-        <button class="shift-btn" data-shift="N" type="button">N</button>
-        <button class="shift-btn" data-shift="W" type="button">W</button>
-        <button class="shift-btn" data-shift="O" type="button">O</button>
-        <button class="shift-btn off" data-shift="O*" type="button">O*</button>
-        <button class="shift-btn admin-only" id="shiftBtnL" data-shift="L" type="button" style="display:none; background:#e3f2fd; border-color:#90caf9;">L</button>
-        <button class="shift-btn" data-shift="CLEAR" type="button">Clear</button>
+        <!-- Shifts populated dynamically by shift-functions.js -->
       </div>
 
       <div class="btns">
@@ -2784,7 +2777,7 @@ function isOpenBackdrop(el){
 function updateBodyModalOpen(){
   const anyOpen =
     isOpenBackdrop(shiftModal) ||
-    isOpenBackdrop(modal) ||
+    isOpenBackdrop(adminModal) ||
     isOpenBackdrop(weekCommentModal) ||
     isOpenBackdrop(adminModal) ||
     isOpenBackdrop(userModal) ||
@@ -6538,7 +6531,6 @@ async function upsertRequestCell(userId, date, value, importantRank){
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { data, error } = await supabaseClient.rpc("admin_set_request_cell", {
-      p_admin_id: currentUser.id,
       p_token: token,
       p_target_user_id: userId,
       p_date: date,
@@ -6546,19 +6538,20 @@ async function upsertRequestCell(userId, date, value, importantRank){
       p_important_rank: importantRank ?? null
     });
     if (error) throw error;
-    return data;
+    // SETOF returns an array - return the first element
+    return Array.isArray(data) ? data[0] : data;
   }
 
   // Normal -> user RPC
   const { data, error } = await supabaseClient.rpc("set_request_cell", {
-    p_user_id: userId,
     p_token: token,
     p_date: date,
     p_value: value,
     p_important_rank: importantRank ?? null
   });
   if (error) throw error;
-  return data;
+  // SETOF returns an array - return the first element
+  return Array.isArray(data) ? data[0] : data;
 }
 
 
@@ -6572,7 +6565,6 @@ async function deleteRequestCell(userId, date){
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
     const { error } = await supabaseClient.rpc("admin_clear_request_cell", {
-      p_admin_id: currentUser.id,
       p_token: token,
       p_target_user_id: userId,
       p_date: date
@@ -6583,7 +6575,6 @@ async function deleteRequestCell(userId, date){
 
   // Normal -> user RPC
   const { error } = await supabaseClient.rpc("clear_request_cell", {
-    p_user_id: userId,
     p_token: token,
     p_date: date
   });
@@ -6684,11 +6675,11 @@ const start = selectedPeriod?.start_date;
 const end = selectedPeriod?.end_date;
 
 if (start && end) {
-  const { data: reqs, error: reqErr } = await supabaseClient
-    .from("requests")
-    .select("id, user_id, date, value, important_rank")
-    .gte("date", start)
-    .lte("date", end);
+  const { data: reqs, error: reqErr } = await supabaseClient.rpc('get_requests_for_period', {
+    p_token: window.currentToken,
+    p_start_date: start,
+    p_end_date: end
+  });
 
   if (reqErr) {
     console.error("Requests load error:", reqErr);
@@ -8137,6 +8128,9 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         return;
       }
 
+      // Store token globally for RPC calls
+      window.currentToken = token;
+
       // Validate token with server
       try {
         const { data, error } = await supabaseClient.rpc('validate_session', {
@@ -8174,16 +8168,21 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         
         // Set currentUser with full user data
         currentUser = userData;
+        window.currentUser = userData;  // Also set on window for shift-functions.js access
         
         // Store user ID in localStorage for consistency
         localStorage.setItem(STORAGE_KEY, userId);
         
         console.log('Session validated. Logged in as:', currentUser.name);
         
+        // Dispatch event for external modules (e.g., shift-functions.js) to listen for
+        window.dispatchEvent(new CustomEvent('calpe:user-ready'));
+        
         // Token is valid - proceed with page load
         await loadUserPermissions();
-        loadRota();
-        populateShiftGrid();
+        await loadRota();
+        // Note: shift grid population is handled by shift-functions.js listening to calpe:user-ready
+        await refreshNoticesAndNotifications();
       } catch (err) {
         console.error('Init error:', err);
         window.location.href = 'login.html';

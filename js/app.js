@@ -1421,7 +1421,7 @@ function isNoticeAcked(n){
 
 async function fetchNoticeAcksForAdmin(noticeId){
   const { data, error } = await supabaseClient
-    .rpc("admin_get_notice_acks", { p_notice_id: noticeId });
+    .rpc("admin_get_notice_acks", { p_token: currentToken, p_notice_id: noticeId });
 
   if (error) throw error;
 
@@ -1843,6 +1843,7 @@ async function adminFetchNoticeAckCounts(noticeIds){
   if (!Array.isArray(noticeIds) || noticeIds.length === 0) return [];
 
   const { data, error } = await supabaseClient.rpc("admin_notice_ack_counts", {
+    p_token: currentToken,
     p_notice_ids: noticeIds
   });
 

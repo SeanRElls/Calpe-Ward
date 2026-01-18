@@ -165,6 +165,20 @@ async function startViewingAs(userId) {
     if (error) throw error;
     if (!user) throw new Error("User not found");
 
+    // SECURITY PATCH: Log impersonation to audit trail
+    const realUser = getRealUser() || currentUser;
+    if (window.currentToken) {
+      try {
+        await supabaseClient.rpc("admin_start_impersonation_audit", {
+          p_token: window.currentToken,
+          p_target_user_id: userId
+        });
+      } catch (auditErr) {
+        console.warn("Failed to log impersonation audit:", auditErr);
+        // Continue despite audit failure (non-blocking)
+      }
+    }
+
     sessionStorage.setItem(VIEW_AS_STORAGE_KEY, JSON.stringify(user));
     currentUser = user;
 

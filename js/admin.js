@@ -120,6 +120,75 @@
       return pin;
     }
 
+    // SECURITY PATCH: PIN Challenge for sensitive admin operations
+    async function promptAdminPinChallenge() {
+      return new Promise((resolve) => {
+        const modal = document.createElement("div");
+        modal.id = "adminPinChallengeModal";
+        modal.style.cssText = `
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.5); display: flex; align-items: center;
+          justify-content: center; z-index: 10001; font-family: sans-serif;
+        `;
+        modal.innerHTML = `
+          <div style="
+            background: white; padding: 24px; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 400px;
+            text-align: center;
+          ">
+            <h3 style="margin: 0 0 12px 0; color: #333;">Verify Admin PIN</h3>
+            <p style="margin: 0 0 16px 0; color: #666; font-size: 14px;">
+              This is a sensitive operation. Please enter your 4-digit PIN to continue.
+            </p>
+            <input type="password" id="adminPinInput" maxlength="4" placeholder="0000"
+              inputmode="numeric" pattern="[0-9]*"
+              style="
+                width: 100%; padding: 10px; font-size: 16px; letter-spacing: 4px;
+                text-align: center; border: 1px solid #ddd; border-radius: 4px;
+                box-sizing: border-box; margin-bottom: 16px;
+              " />
+            <div style="display: flex; gap: 8px;">
+              <button id="adminPinCancel" style="
+                flex: 1; padding: 10px; border: 1px solid #ddd; background: #f5f5f5;
+                border-radius: 4px; cursor: pointer; font-weight: 500;
+              ">Cancel</button>
+              <button id="adminPinConfirm" style="
+                flex: 1; padding: 10px; border: none; background: #667eea; color: white;
+                border-radius: 4px; cursor: pointer; font-weight: 500;
+              ">Verify</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        
+        const input = modal.querySelector("#adminPinInput");
+        input.focus();
+        
+        const cleanup = () => {
+          modal.remove();
+        };
+        
+        modal.querySelector("#adminPinCancel").addEventListener("click", () => {
+          cleanup();
+          resolve(false);
+        });
+        
+        modal.querySelector("#adminPinConfirm").addEventListener("click", () => {
+          const enteredPin = input.value;
+          const correctPin = getSessionPinOrThrow();
+          const isCorrect = enteredPin === correctPin;
+          cleanup();
+          resolve(isCorrect);
+        });
+        
+        input.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            modal.querySelector("#adminPinConfirm").click();
+          }
+        });
+      });
+    }
+
     async function loadCurrentUser(){
       console.log("[SESSION DEBUG] loadCurrentUser: starting");
       restoreSessionFromWindow();
@@ -1971,7 +2040,7 @@
 
     async function adminFetchNoticeAcks(noticeId){
       const { data, error } = await supabaseClient
-        .rpc("admin_get_notice_acks", { p_notice_id: noticeId });
+        .rpc("admin_get_notice_acks", { p_token: currentToken, p_notice_id: noticeId });
 
       if (error) throw error;
 
@@ -2157,6 +2226,7 @@
       if (!Array.isArray(noticeIds) || noticeIds.length === 0) return [];
 
       const { data, error } = await supabaseClient.rpc("admin_notice_ack_counts", {
+        p_token: currentToken,
         p_notice_ids: noticeIds
       });
 
@@ -2436,6 +2506,13 @@
 
         try {
           approveBtn.disabled = true;
+          // SECURITY PATCH: Require PIN verification for sensitive operation
+          const pinVerified = await promptAdminPinChallenge();
+          if (!pinVerified) {
+            alert("PIN verification failed.");
+            approveBtn.disabled = false;
+            return;
+          }
           const pin = getSessionPinOrThrow();
           const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
             p_token: currentToken,
@@ -2464,6 +2541,13 @@
 
         try {
           declineBtn.disabled = true;
+          // SECURITY PATCH: Require PIN verification for sensitive operation
+          const pinVerified = await promptAdminPinChallenge();
+          if (!pinVerified) {
+            alert("PIN verification failed.");
+            declineBtn.disabled = false;
+            return;
+          }
           const pin = getSessionPinOrThrow();
           const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
             p_token: currentToken,

@@ -23,6 +23,7 @@ async function validateSessionOnLoad() {
 
   // Store token in memory for RPC calls
   currentToken = token;
+  window.currentToken = token;  // Expose globally for RPC calls
 
   // Initialize Supabase (from config.js)
   const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON);
