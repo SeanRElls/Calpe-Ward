@@ -39,9 +39,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON public.audit_logs(resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_target_user_id ON public.audit_logs(target_user_id);
 
--- Grant table access to authenticated role
-GRANT SELECT ON public.audit_logs TO authenticated;
-GRANT INSERT ON public.audit_logs TO authenticated;
+-- Enable RLS on audit logs
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Admins can read all audit logs
 DROP POLICY IF EXISTS "audit_logs_admin_read_all" ON public.audit_logs;
@@ -63,15 +62,19 @@ USING (
   impersonator_user_id = auth.uid()
 );
 
+-- Grant table access to authenticated role
+GRANT SELECT ON public.audit_logs TO authenticated;
+GRANT INSERT ON public.audit_logs TO authenticated;
+
 -- ========================================================================
 -- STEP 2: Create Audit Logging Helper Function
 -- ========================================================================
 
 CREATE OR REPLACE FUNCTION public.log_audit_event(
   p_user_id UUID,
-  p_impersonator_user_id UUID DEFAULT NULL,
   p_action TEXT,
   p_resource_type TEXT,
+  p_impersonator_user_id UUID DEFAULT NULL,
   p_resource_id UUID DEFAULT NULL,
   p_target_user_id UUID DEFAULT NULL,
   p_old_values JSONB DEFAULT NULL,
@@ -119,48 +122,36 @@ BEGIN
   );
 EXCEPTION
   WHEN OTHERS THEN
-    -- Silently fail to avoid breaking main operation
     NULL;
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.log_audit_event(UUID, UUID, TEXT, TEXT, UUID, UUID, JSONB, JSONB, TEXT, TEXT, TEXT, TEXT, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.log_audit_event(UUID, TEXT, TEXT, UUID, UUID, UUID, JSONB, JSONB, TEXT, TEXT, TEXT, TEXT, JSONB) TO authenticated;
 
 -- ========================================================================
 -- STEP 3: DROP OVERLY PERMISSIVE RLS POLICIES
 -- ========================================================================
 
--- REQUESTS table: Remove all "public read" and "read_all" policies
 DROP POLICY IF EXISTS "public read requests" ON public.requests;
 DROP POLICY IF EXISTS "requests_public_read" ON public.requests;
 DROP POLICY IF EXISTS "requests_read_all" ON public.requests;
 DROP POLICY IF EXISTS "public_read_requests" ON public.requests;
-
--- REQUEST_CELL_LOCKS table: Remove overly permissive policy
 DROP POLICY IF EXISTS "public read request_cell_locks" ON public.request_cell_locks;
-
--- USERS table: Remove "public can read" policies
 DROP POLICY IF EXISTS "public can read users" ON public.users;
 DROP POLICY IF EXISTS "users_public_read" ON public.users;
 DROP POLICY IF EXISTS "users_select_all" ON public.users;
 DROP POLICY IF EXISTS "users_select_public" ON public.users;
-
--- STAFFING_REQUIREMENTS table: Remove unrestricted access
 DROP POLICY IF EXISTS "Anyone can read staffing requirements" ON public.staffing_requirements;
 
 -- ========================================================================
 -- STEP 4: CREATE RESTRICTIVE RLS POLICIES
 -- ========================================================================
 
--- REQUESTS: Staff can only read their own requests
 DROP POLICY IF EXISTS "requests_read_own" ON public.requests;
 CREATE POLICY "requests_read_own" ON public.requests
 FOR SELECT
-USING (
-  auth.uid() = user_id
-);
+USING (auth.uid() = user_id);
 
--- REQUESTS: Admins can read all requests
 DROP POLICY IF EXISTS "requests_read_admin" ON public.requests;
 CREATE POLICY "requests_read_admin" ON public.requests
 FOR SELECT
@@ -171,15 +162,11 @@ USING (
   )
 );
 
--- REQUEST_CELL_LOCKS: Staff can only see their own locks
 DROP POLICY IF EXISTS "request_cell_locks_read_own" ON public.request_cell_locks;
 CREATE POLICY "request_cell_locks_read_own" ON public.request_cell_locks
 FOR SELECT
-USING (
-  auth.uid() = user_id
-);
+USING (auth.uid() = user_id);
 
--- REQUEST_CELL_LOCKS: Admins can see all locks
 DROP POLICY IF EXISTS "request_cell_locks_read_admin" ON public.request_cell_locks;
 CREATE POLICY "request_cell_locks_read_admin" ON public.request_cell_locks
 FOR SELECT
@@ -190,24 +177,16 @@ USING (
   )
 );
 
--- USERS: Read own user record
 DROP POLICY IF EXISTS "users_read_self" ON public.users;
 CREATE POLICY "users_read_self" ON public.users
 FOR SELECT
-USING (
-  auth.uid() = id
-);
+USING (auth.uid() = id);
 
--- USERS: Read active staff list (for swap selection, etc.)
 DROP POLICY IF EXISTS "users_read_active_staff" ON public.users;
 CREATE POLICY "users_read_active_staff" ON public.users
 FOR SELECT
-USING (
-  is_active = true AND
-  auth.uid() IS NOT NULL
-);
+USING (is_active = true AND auth.uid() IS NOT NULL);
 
--- USERS: Admins can read all user records
 DROP POLICY IF EXISTS "users_read_admin" ON public.users;
 CREATE POLICY "users_read_admin" ON public.users
 FOR SELECT
@@ -218,7 +197,6 @@ USING (
   )
 );
 
--- STAFFING_REQUIREMENTS: Admins only
 DROP POLICY IF EXISTS "staffing_requirements_admin_only" ON public.staffing_requirements;
 CREATE POLICY "staffing_requirements_admin_only" ON public.staffing_requirements
 FOR SELECT
@@ -247,7 +225,6 @@ DECLARE
   v_stored_pin_hash TEXT;
   v_pin_hash TEXT;
 BEGIN
-  -- Validate token
   BEGIN
     v_admin_uid := public.require_session_permissions(p_token, NULL);
   EXCEPTION WHEN OTHERS THEN
@@ -255,13 +232,11 @@ BEGIN
     RETURN;
   END;
 
-  -- Verify user is admin
   IF NOT EXISTS (SELECT 1 FROM public.users WHERE id = v_admin_uid AND is_admin = true) THEN
     RETURN QUERY SELECT false, 'not_admin'::text;
     RETURN;
   END IF;
 
-  -- Get stored PIN hash
   SELECT pin_hash INTO v_stored_pin_hash FROM public.users WHERE id = v_admin_uid;
   
   IF v_stored_pin_hash IS NULL THEN
@@ -269,10 +244,8 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Hash provided PIN
   v_pin_hash := crypt(p_pin, v_stored_pin_hash);
 
-  -- Verify PIN matches
   IF v_pin_hash = v_stored_pin_hash THEN
     RETURN QUERY SELECT true, NULL::text;
   ELSE
@@ -302,7 +275,6 @@ AS $$
 DECLARE
   v_admin_uid UUID;
 BEGIN
-  -- Validate token
   BEGIN
     v_admin_uid := public.require_session_permissions(p_token, NULL);
   EXCEPTION WHEN OTHERS THEN
@@ -310,13 +282,11 @@ BEGIN
     RETURN;
   END;
 
-  -- Verify admin
   IF NOT EXISTS (SELECT 1 FROM public.users WHERE id = v_admin_uid AND is_admin = true) THEN
     RETURN QUERY SELECT false, 'not_admin'::text;
     RETURN;
   END IF;
 
-  -- Log impersonation start
   PERFORM public.log_audit_event(
     p_user_id := v_admin_uid,
     p_action := 'impersonation_start',
@@ -356,56 +326,11 @@ CREATE INDEX IF NOT EXISTS idx_rate_limits_lockout ON public.operation_rate_limi
 -- STEP 8: Verify RLS Status
 -- ========================================================================
 
--- Check RLS is enabled on critical tables
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.request_cell_locks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.staffing_requirements ENABLE ROW LEVEL SECURITY;
 
 -- ========================================================================
--- SUMMARY OF CHANGES
--- ========================================================================
-
-/*
-CHANGES SUMMARY:
-
-✅ CREATED:
-  - audit_logs table + indexes + RLS
-  - log_audit_event() function
-  - admin_verify_pin_challenge() RPC
-  - admin_start_impersonation_audit() RPC
-  - operation_rate_limits table (for future use)
-
-✅ REPLACED RLS POLICIES:
-  - requests: Now "read_own" + "read_admin" (was "read_all")
-  - request_cell_locks: Now "read_own" + "read_admin" (was "true")
-  - users: Now "read_self" + "read_active_staff" + "read_admin" (was "read_all")
-  - staffing_requirements: Now "admin_only" (was "everyone")
-
-❌ REMOVED OVERLY PERMISSIVE POLICIES:
-  - "public can read users"
-  - "public read requests"
-  - "public read request_cell_locks"
-  - "Anyone can read staffing requirements"
-  - All "read_all" and "public_read" variants
-
-EXPECTED IMPACTS:
-  ✓ Non-admin users can only see their own requests/data
-  ✓ Non-admin users cannot enumerate all staff
-  ✓ All admin operations are now logged
-  ✓ Admins can be audited for impersonation abuse
-  ✓ PIN challenge can be enforced for sensitive operations
-
-TESTING REQUIRED:
-  ✓ Non-admin login: Test requests/locks visible
-  ✓ Admin login: All data still accessible
-  ✓ Verify audit_logs table receives entries
-  ✓ Test admin_verify_pin_challenge function
-  ✓ Test admin_start_impersonation_audit function
-
-*/
-
--- ========================================================================
 -- END OF MIGRATION
 -- ========================================================================
-

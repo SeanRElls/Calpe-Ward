@@ -2591,9 +2591,9 @@
       if (!window.currentUser) return;
 
       const { error } = await supabaseClient.rpc("ack_notice", {
-        p_token: window.currentToken,
         p_notice_id: noticeId,
-        p_version: noticeVersion
+        p_version: noticeVersion,
+        p_user_id: window.currentUser.id
       });
 
       if (error) throw error;
