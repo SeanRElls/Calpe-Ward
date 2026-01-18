@@ -5,7 +5,10 @@
 const VIEW_AS_STORAGE_KEY = "calpeward.viewAs";
 const REAL_USER_STORAGE_KEY = "calpeward.realUser";
 const REAL_TOKEN_STORAGE_KEY = "calpeward.realToken";
-const TOKEN_KEY = "calpe_ward_token";
+
+function getTokenStorageKey() {
+  return (typeof TOKEN_KEY !== "undefined" && TOKEN_KEY) ? TOKEN_KEY : "calpe_ward_token";
+}
 
 // Get the "real" logged-in user (before any impersonation)
 function getRealUser() {
@@ -193,14 +196,14 @@ async function startViewingAs(userId) {
         // Store real token to restore later
         if (!sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY)) {
           // Persist the real admin token so we can put it back when done impersonating
-          const liveToken = sessionStorage.getItem(TOKEN_KEY) || window.currentToken;
+          const liveToken = sessionStorage.getItem(getTokenStorageKey()) || window.currentToken;
           if (liveToken) {
             sessionStorage.setItem(REAL_TOKEN_STORAGE_KEY, liveToken);
           }
         }
 
         // Swap to impersonation token (persist + in-memory)
-        sessionStorage.setItem(TOKEN_KEY, impData[0].impersonation_token);
+        sessionStorage.setItem(getTokenStorageKey(), impData[0].impersonation_token);
         window.currentToken = impData[0].impersonation_token;
       } catch (impErr) {
         console.error("Failed to obtain impersonation token", impErr);
@@ -244,7 +247,7 @@ async function stopViewingAs() {
   if (realToken) {
     // Restore admin token both in-memory and in storage for subsequent RPCs
     window.currentToken = realToken;
-    sessionStorage.setItem(TOKEN_KEY, realToken);
+    sessionStorage.setItem(getTokenStorageKey(), realToken);
     sessionStorage.removeItem(REAL_TOKEN_STORAGE_KEY);
   }
 
