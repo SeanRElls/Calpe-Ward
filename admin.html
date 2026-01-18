@@ -1119,11 +1119,19 @@
         </section>
 
         <section id="audit" class="section panel" style="display:none;">
-          <h2>Audit</h2>
-          <p>Publish, overrides, approvals, post-publish edits.</p>
-          <div class="actions">
-            <button class="btn" type="button">View Audit Trail</button>
-            <button class="btn" type="button">Export Logs</button>
+          <h2>Superadmin Audit Trail</h2>
+          <p>View all system actions, impersonations, and security events.</p>
+          
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
+            <input id="auditFilterAction" class="control" placeholder="Filter by action..." style="min-width:180px;" />
+            <input id="auditFilterUser" class="control" placeholder="Filter by user..." style="min-width:180px;" />
+            <input id="auditFilterDays" class="control" type="number" value="7" min="1" max="365" placeholder="Days" style="max-width:80px;" />
+            <button id="auditLoadBtn" class="btn primary" type="button">Load Logs</button>
+            <button id="auditExportBtn" class="btn" type="button">Export CSV</button>
+          </div>
+
+          <div id="auditLogsTable" style="border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; margin-top:12px;">
+            <div style="padding:12px; text-align:center; color:var(--muted);">Click "Load Logs" to view audit trail</div>
           </div>
         </section>
 
@@ -1145,6 +1153,7 @@
   <script src="js/config.js"></script>
   <script src="js/notifications-shared.js" defer></script>
   <script src="js/admin.js"></script>
+  <script src="js/audit-trail.js"></script>
   <script>
     // Staffing defaults management
     const staffingDaySn = document.getElementById("staffingDaySn");
