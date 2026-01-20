@@ -349,8 +349,14 @@
     const linkDisplay = document.getElementById("calendarLinkDisplay");
     const generateBtn = document.getElementById("generateCalendarToken");
     const revokeBtn = document.getElementById("revokeCalendarToken");
+    const calendarURL = document.getElementById("calendarURL");
+    const webcalURL = document.getElementById("webcalURL");
 
     if (!statusEl) return;
+
+    const currentUserId = window.currentUser?.id;
+    const storedTokenKey = currentUserId ? `calpeward.calendarToken.${currentUserId}` : null;
+    const storedToken = storedTokenKey ? localStorage.getItem(storedTokenKey) : null;
 
     // Simple status - don't query table (blocked by RLS)
     // Users can generate/regenerate as needed
@@ -361,9 +367,22 @@
       </div>
     `;
     
-    if (generateBtn) generateBtn.textContent = "Generate Calendar Link";
+    if (generateBtn) generateBtn.textContent = storedToken ? "Regenerate Calendar Link" : "Generate Calendar Link";
     if (revokeBtn) revokeBtn.disabled = false;
-    if (linkDisplay) linkDisplay.style.display = "none";
+
+    // If we have a locally cached token, show it so the user doesn't need to regenerate
+    if (storedToken && linkDisplay && calendarURL && webcalURL) {
+      const baseURL = window.SUPABASE_URL || (typeof getSupabase === 'function' ? getSupabase()?.supabaseUrl : window.supabaseClient?.supabaseUrl);
+      if (baseURL) {
+        const icsURL = `${baseURL}/functions/v1/ics?token=${storedToken}`;
+        const webcalURLValue = icsURL.replace('https://', 'webcal://');
+        calendarURL.value = icsURL;
+        webcalURL.value = webcalURLValue;
+        linkDisplay.style.display = "block";
+      }
+    } else if (linkDisplay) {
+      linkDisplay.style.display = "none";
+    }
   }
 
   async function generateCalendarToken() {
@@ -401,6 +420,12 @@
       if (calendarURL) calendarURL.value = icsURL;
       if (webcalURL) webcalURL.value = webcalURLValue;
       if (linkDisplay) linkDisplay.style.display = "block";
+
+      // Cache token locally so it shows next time without regenerating
+      const currentUserId = window.currentUser?.id;
+      if (currentUserId) {
+        localStorage.setItem(`calpeward.calendarToken.${currentUserId}`, data.token);
+      }
 
       // Show success message
       if (okEl) {
@@ -445,6 +470,12 @@
 
       // Hide link display
       if (linkDisplay) linkDisplay.style.display = "none";
+
+      // Clear cached token
+      const currentUserId = window.currentUser?.id;
+      if (currentUserId) {
+        localStorage.removeItem(`calpeward.calendarToken.${currentUserId}`);
+      }
 
       // Show success message
       if (okEl) {

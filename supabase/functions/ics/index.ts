@@ -26,8 +26,8 @@ interface ShiftRow {
   shift_date: string;
   shift_code: string;
   shift_label: string;
-  start_time: string;
-  end_time: string;
+  start_time: string | null;
+  end_time: string | null;
   hours_value: number;
 }
 
@@ -43,26 +43,38 @@ function escapeICSText(text: string): string {
 }
 
 /**
- * Format datetime for ICS (UTC): YYYYMMDDTHHMMSSZ
+ * Format datetime for ICS (local time, no timezone): YYYYMMDDTHHMMSS
  */
 function formatICSDateTime(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return (
-    date.getUTCFullYear() +
-    pad(date.getUTCMonth() + 1) +
-    pad(date.getUTCDate()) +
+    date.getFullYear() +
+    pad(date.getMonth() + 1) +
+    pad(date.getDate()) +
     "T" +
-    pad(date.getUTCHours()) +
-    pad(date.getUTCMinutes()) +
-    pad(date.getUTCSeconds()) +
-    "Z"
+    pad(date.getHours()) +
+    pad(date.getMinutes()) +
+    pad(date.getSeconds())
+  );
+}
+
+/**
+ * Format date only for ICS (all-day events): YYYYMMDD
+ */
+function formatICSDate(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return (
+    date.getFullYear() +
+    pad(date.getMonth() + 1) +
+    pad(date.getDate())
   );
 }
 
 /**
  * Format time for display: HH:MM
  */
-function formatTimeDisplay(timeStr: string): string {
+function formatTimeDisplay(timeStr: string | null): string {
+  if (!timeStr) return "N/A";
   // timeStr format: "HH:MM:SS" or "HH:MM"
   return timeStr.substring(0, 5);
 }
@@ -72,7 +84,7 @@ function formatTimeDisplay(timeStr: string): string {
  */
 function foldLine(line: string): string {
   const maxLen = 75;
-  if (line.length <= maxLen) return line;
+  if (line.length <= maxLen) return line + "\r\n";
   
   let result = line.substring(0, maxLen) + "\r\n";
   let remaining = line.substring(maxLen);
@@ -90,22 +102,8 @@ function foldLine(line: string): string {
  * Build VEVENT from shift data
  */
 function buildVEvent(shift: ShiftRow): string {
-  // Combine date + time to create proper datetime
-  const shiftDate = new Date(shift.shift_date + "T00:00:00Z");
-  const [startHour, startMin] = shift.start_time.split(":").map(Number);
-  const [endHour, endMin] = shift.end_time.split(":").map(Number);
-  
-  // Start datetime
-  const dtStart = new Date(shiftDate);
-  dtStart.setUTCHours(startHour, startMin, 0, 0);
-  
-  // End datetime (handle overnight shifts)
-  const dtEnd = new Date(shiftDate);
-  dtEnd.setUTCHours(endHour, endMin, 0, 0);
-  if (endHour < startHour) {
-    // Overnight shift - add 1 day to end
-    dtEnd.setUTCDate(dtEnd.getUTCDate() + 1);
-  }
+  // Parse shift date (YYYY-MM-DD from DB)
+  const [year, month, day] = shift.shift_date.split('-').map(Number);
   
   // Stable UID for updates
   const uid = `shift-${shift.assignment_id}@calpeward`;
@@ -113,23 +111,50 @@ function buildVEvent(shift: ShiftRow): string {
   // Summary: "CODE - LABEL"
   const summary = escapeICSText(`${shift.shift_code} - ${shift.shift_label}`);
   
-  // Description: Hours with times
-  const startTimeDisplay = formatTimeDisplay(shift.start_time);
-  const endTimeDisplay = formatTimeDisplay(shift.end_time);
-  const description = escapeICSText(`Hours: ${startTimeDisplay} – ${endTimeDisplay}`);
-  
   // Current timestamp
   const dtstamp = formatICSDateTime(new Date());
   
-  // Build VEVENT
   let vevent = "";
   vevent += "BEGIN:VEVENT\r\n";
   vevent += foldLine(`UID:${uid}`);
   vevent += foldLine(`DTSTAMP:${dtstamp}`);
-  vevent += foldLine(`DTSTART:${formatICSDateTime(dtStart)}`);
-  vevent += foldLine(`DTEND:${formatICSDateTime(dtEnd)}`);
+  
+  // If shift has times, use DTSTART/DTEND with time; otherwise all-day event
+  if (shift.start_time && shift.end_time) {
+    const startTime = shift.start_time;
+    const endTime = shift.end_time;
+    const [startHour, startMin] = startTime.split(":").map(Number);
+    const [endHour, endMin] = endTime.split(":").map(Number);
+    
+    // Start datetime (local time, no timezone conversion)
+    const dtStart = new Date(year, month - 1, day, startHour, startMin, 0);
+    
+    // End datetime (handle overnight shifts)
+    let dtEnd = new Date(year, month - 1, day, endHour, endMin, 0);
+    if (endHour < startHour) {
+      // Overnight shift - add 1 day to end
+      dtEnd.setDate(dtEnd.getDate() + 1);
+    }
+    
+    vevent += foldLine(`DTSTART:${formatICSDateTime(dtStart)}`);
+    vevent += foldLine(`DTEND:${formatICSDateTime(dtEnd)}`);
+    
+    // Description with times
+    const startTimeDisplay = formatTimeDisplay(shift.start_time);
+    const endTimeDisplay = formatTimeDisplay(shift.end_time);
+    const description = escapeICSText(`Hours: ${startTimeDisplay} – ${endTimeDisplay}`);
+    vevent += foldLine(`DESCRIPTION:${description}`);
+  } else {
+    // All-day event (e.g., Leave)
+    const dtStart = new Date(year, month - 1, day);
+    const dtEnd = new Date(year, month - 1, day + 1); // End date is exclusive for all-day events
+    
+    vevent += foldLine(`DTSTART;VALUE=DATE:${formatICSDate(dtStart)}`);
+    vevent += foldLine(`DTEND;VALUE=DATE:${formatICSDate(dtEnd)}`);
+    vevent += foldLine(`DESCRIPTION:All-day event`);
+  }
+  
   vevent += foldLine(`SUMMARY:${summary}`);
-  vevent += foldLine(`DESCRIPTION:${description}`);
   vevent += foldLine("LOCATION:Calpe Ward");
   vevent += foldLine("STATUS:CONFIRMED");
   vevent += foldLine("TRANSP:OPAQUE");
