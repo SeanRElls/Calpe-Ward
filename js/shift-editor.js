@@ -108,6 +108,7 @@ function initDraftEditing({
   rotaTable.addEventListener("click", e => {
     const td = e.target.closest("td.cell");
     if (!td) return;
+    if (e.button === 2) return; // ignore right-clicks to allow context menu
 
     // Published flow: never open picker directly; route via host callback
     if (editMode === "published") {
@@ -129,6 +130,8 @@ function initDraftEditing({
     const td = e.target.closest("td.cell");
     if (!td) return;
     if (editMode === "published" && typeof onPublishedCellClick === "function") {
+      // Let admins use the custom context menu; otherwise keep the published click handling
+      if (window.currentUser?.is_admin) return; // allow context menu to handle
       e.preventDefault();
       onPublishedCellClick({ td, userId: td.dataset.userId, date: td.dataset.date, assignment: getAssignment(td.dataset.userId, td.dataset.date) });
     }
@@ -285,7 +288,7 @@ function initDraftEditing({
   document.addEventListener("keydown", gridKeyHandler);
 
   // Helper to open picker
-  function openShiftPicker(userId, date, currentAssignment) {
+  function openShiftPicker(userId, date, currentAssignment, showOverride = false) {
     pickerContext = { userId, date, currentAssignment };
     const backdrop = document.getElementById("shiftPickerBackdrop");
     const modal = document.getElementById("shiftPickerModal");
@@ -309,14 +312,14 @@ function initDraftEditing({
     // Initialize selected shift
     selectedShiftId = currentAssignment?.shift_id || null;
     
-    // Show override/comment sections only in published mode
-    const isPublished = editMode === "published";
-    if (overrideSection) overrideSection.style.display = isPublished ? "" : "none";
-    if (commentSection) commentSection.style.display = isPublished ? "" : "none";
-    if (saveBtn) saveBtn.style.display = isPublished ? "" : "none";
+    // Show override/comment sections only if showOverride is true
+    if (overrideSection) overrideSection.style.display = showOverride ? "" : "none";
+    if (commentSection) commentSection.style.display = showOverride ? "" : "none";
+    // Save button should always be visible
+    if (saveBtn) saveBtn.style.display = "";
     
-    // Load existing override data if in published mode
-    if (isPublished && typeof getOverride === "function") {
+    // Load existing override data if showOverride is true
+    if (showOverride && typeof getOverride === "function") {
       const override = currentAssignment?.id ? getOverride(currentAssignment.id) : null;
       
       // Get shift's default times/hours for prefilling
@@ -331,15 +334,8 @@ function initDraftEditing({
         if (overrideHours) overrideHours.value = override.override_hours || "";
         if (shiftComment) shiftComment.value = override.comment || "";
         if (commentVisibilitySelect) commentVisibilitySelect.value = override.comment_visibility || 'admin_only';
-      } else if (currentShift) {
-        // Preload with shift's default times/hours if they exist
-        if (overrideStartTime) overrideStartTime.value = currentShift.start_time || "";
-        if (overrideEndTime) overrideEndTime.value = currentShift.end_time || "";
-        if (overrideHours) overrideHours.value = currentShift.hours_value || "";
-        if (shiftComment) shiftComment.value = "";
-        if (commentVisibilitySelect) commentVisibilitySelect.value = 'admin_only';
       } else {
-        // No assignment or shift, clear fields
+        // No existing override - clear all fields
         if (overrideStartTime) overrideStartTime.value = "";
         if (overrideEndTime) overrideEndTime.value = "";
         if (overrideHours) overrideHours.value = "";
@@ -511,7 +507,7 @@ function initDraftEditing({
       btn.classList.add("primary");
     }
     document.querySelectorAll("#rota td.cell").forEach(td => td.classList.toggle("editable", isEditingUnlocked));
-    openShiftPicker(userId, date, assignment);
+    openShiftPicker(userId, date, assignment, false);  // showOverride = false
   };
 
   function closeShiftPicker() {

@@ -20,6 +20,10 @@ function getNotificationTitle(n){
   
   // Special handling for swap_request type
   if (n.type === "swap_request") {
+    // Check if this is a staff swap request or admin approval notification
+    if (payload?.notification_type === "swap_accepted") {
+      return `⏳ Swap Pending Approval`;
+    }
     const initiatorName = payload?.initiator_name || "Unknown";
     return `📬 Shift Swap Request from ${initiatorName}`;
   }
@@ -57,6 +61,13 @@ function getNotificationBody(n){
   
   // Special handling for swap_request type
   if (n.type === "swap_request") {
+    // Check if this is admin approval notification (swap was accepted by counterparty)
+    if (payload?.notification_type === "swap_accepted") {
+      const initiatorDate = payload.initiator_date ? new Date(payload.initiator_date).toLocaleDateString("en-GB") : "Unknown";
+      const counterpartyDate = payload.counterparty_date ? new Date(payload.counterparty_date).toLocaleDateString("en-GB") : "Unknown";
+      return `${payload.initiator_name || "Unknown"} and ${payload.counterparty_name || "Unknown"} have agreed to swap their shifts. ${payload.initiator_name} will work ${payload.counterparty_shift_code} on ${counterpartyDate}, and ${payload.counterparty_name} will work ${payload.initiator_shift_code} on ${initiatorDate}. Please approve to proceed.`;
+    }
+    // Standard staff request to counterparty
     const initiatorDate = payload.initiator_date ? new Date(payload.initiator_date).toLocaleDateString("en-GB") : "Unknown";
     const counterpartyDate = payload.counterparty_date ? new Date(payload.counterparty_date).toLocaleDateString("en-GB") : "Unknown";
     return `${payload.initiator_name || "Unknown"} wants to swap their shift on ${initiatorDate} with your shift on ${counterpartyDate}. Please accept or decline the request.`;

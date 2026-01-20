@@ -23,6 +23,9 @@ async function adminExecuteShiftSwap(counterpartyUserId, counterpartyDate){
   if (error) throw error;
   if (!data[0]?.success) throw new Error(data[0]?.error_message || "Swap failed");
 
+  // Note: History recording now happens in the RPC (admin_execute_shift_swap)
+  // via rota_assignment_history inserts after swap_executions record
+  
   return data[0];
 }
 

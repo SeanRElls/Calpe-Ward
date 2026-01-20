@@ -189,7 +189,7 @@ th.date{ font-weight: 700; height: 22px; color: #222; }
 }
 
 .closed{ background: var(--closed-fill) !important; color: #9b9b9b; }
-.weekend{ background: var(--weekend-fill); }
+.weekend{ /* Removed background for rota.html - weekends should not be grey there */ }
 
 tr.section-row td{
 	height: 22px;

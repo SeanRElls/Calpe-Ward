@@ -1,45 +1,71 @@
 /* =========================================================
-   VIEW AS FEATURE - Admin impersonation
+   VIEW AS FEATURE - SUPERADMIN Full Impersonation
    ========================================================= */
 
 const VIEW_AS_STORAGE_KEY = "calpeward.viewAs";
 const REAL_USER_STORAGE_KEY = "calpeward.realUser";
 const REAL_TOKEN_STORAGE_KEY = "calpeward.realToken";
+// IMPERSONATION_TOKEN_KEY is defined in session-validator.js
 
 function getTokenStorageKey() {
   return (typeof TOKEN_KEY !== "undefined" && TOKEN_KEY) ? TOKEN_KEY : "calpe_ward_token";
 }
 
-// Get the "real" logged-in user (before any impersonation)
+// Get the active token - impersonation token if viewing as, otherwise real token
+function getActiveToken() {
+  const impToken = sessionStorage.getItem("calpeward.impersonationToken");
+  if (impToken) return impToken;
+  return sessionStorage.getItem(getTokenStorageKey());
+}
+
 function getRealUser() {
   const stored = sessionStorage.getItem(REAL_USER_STORAGE_KEY);
   if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      return null;
-    }
+    try { return JSON.parse(stored); } catch (e) { return null; }
   }
   return null;
 }
 
-// Get the user being viewed as (if any)
 function getViewAsUser() {
   const stored = sessionStorage.getItem(VIEW_AS_STORAGE_KEY);
   if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      return null;
-    }
+    try { return JSON.parse(stored); } catch (e) { return null; }
   }
   return null;
 }
 
-// Ensure the banner/header exists and return it
 function ensureViewAsBanner() {
   let banner = document.getElementById("viewAsBanner");
   if (banner) return banner;
+
+  // Add global style for select options
+  if (!document.getElementById("viewAsDropdownStyles")) {
+    const style = document.createElement("style");
+    style.id = "viewAsDropdownStyles";
+    style.textContent = `
+      #viewAsSelectorBanner {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        background-size: 16px;
+        padding-right: 32px;
+      }
+      #viewAsSelectorBanner option {
+        background-color: #5a67d8 !important;
+        color: white !important;
+        padding: 8px !important;
+      }
+      #viewAsSelectorBanner optgroup {
+        background-color: #4c51bf !important;
+        color: white !important;
+        font-weight: bold !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   banner = document.createElement("div");
   banner.id = "viewAsBanner";
@@ -50,356 +76,391 @@ function ensureViewAsBanner() {
     right: 0;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 10px 18px;
+    padding: 12px 20px;
+    text-align: center;
     font-weight: 600;
-    font-size: 14px;
-    z-index: 10000;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-    display: none;
+    font-size: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 99999;
+    display: flex;
     align-items: center;
-    gap: 12px;
-    box-sizing: border-box;
+    justify-content: center;
+    gap: 16px;
   `;
 
-  banner.innerHTML = `
-    <span id="viewAsStatus" style="flex:1; min-width: 200px;"></span>
-    <select id="viewAsSelectorBanner" style="
-      min-width: 220px;
-      max-width: 360px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.35);
-      background: rgba(255,255,255,0.15);
-      color: #fff;
-      font-weight: 600;
-    "></select>
-    <button id="viewAsReturnBtn" style="
-      background: rgba(255,255,255,0.22);
-      border: 1px solid rgba(255,255,255,0.35);
-      color: white;
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-weight: 700;
-      cursor: pointer;
-      font-size: 13px;
-      display: none;
-    ">Return to Admin</button>
-    <button id="viewAsCloseBtn" aria-label="Hide View As" style="
-      background: transparent;
-      border: none;
-      color: white;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 6px;
-      line-height: 1;
-      opacity: 0.8;
-    ">×</button>
-  `;
-
-  document.body.prepend(banner);
-
-  banner.querySelector("#viewAsReturnBtn").addEventListener("click", stopViewingAs);
-  banner.querySelector("#viewAsCloseBtn").addEventListener("click", hideViewAsBanner);
-
-  return banner;
-}
-
-// Show/update the banner
-function showViewAsBanner() {
-  const banner = ensureViewAsBanner();
-  updateViewAsBannerState();
-  banner.style.display = "flex";
-  document.body.style.paddingTop = "60px";
-}
-
-// Hide the banner when not impersonating
-function hideViewAsBanner() {
-  const banner = document.getElementById("viewAsBanner");
-  const viewAsUser = getViewAsUser();
-  if (!banner) return;
-  if (viewAsUser) {
-    banner.style.display = "flex";
-    return;
-  }
-  banner.style.display = "none";
-  document.body.style.paddingTop = "0";
-}
-
-function updateViewAsBannerState() {
-  const banner = ensureViewAsBanner();
-  const statusEl = banner.querySelector("#viewAsStatus");
-  const returnBtn = banner.querySelector("#viewAsReturnBtn");
-  const selector = banner.querySelector("#viewAsSelectorBanner");
-  const viewAsUser = getViewAsUser();
-
-  if (!currentUser || !currentUser.is_admin) {
-    banner.style.display = "none";
-    document.body.style.paddingTop = "0";
-    return;
-  }
-
-  if (viewAsUser) {
-    statusEl.innerHTML = `👁️ Viewing as <strong>${escapeHtml(viewAsUser.name)}</strong>${viewAsUser.staff_group ? ` (${escapeHtml(viewAsUser.staff_group)})` : ""}`;
-    returnBtn.style.display = "inline-flex";
-  } else {
-    statusEl.textContent = "View another user to see their rota";
-    returnBtn.style.display = "none";
-  }
-
-  populateViewAsSelector(selector, statusEl);
-}
-
-// Start viewing as another user
-async function startViewingAs(userId) {
-  if (!currentUser || !currentUser.is_admin) {
-    alert("Only admins can use View As feature");
-    return;
-  }
-
-  try {
-    if (!getRealUser()) {
-      sessionStorage.setItem(REAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
-    }
-
-    const { data: user, error } = await supabaseClient
-      .from("users")
-      .select("id, name, role_id, is_admin, is_active, preferred_lang, display_order")
-      .eq("id", userId)
-      .single();
-
-    if (error) throw error;
-    if (!user) throw new Error("User not found");
-
-    // SECURITY PATCH: Log impersonation start + request impersonation token
-    if (window.currentToken) {
-      try {
-        const { data: auditData, error: auditErr } = await supabaseClient.rpc("admin_start_impersonation_audit", {
-          p_token: window.currentToken,
-          p_target_user_id: userId
-        });
-        if (auditErr) console.warn("Impersonation audit failed", auditErr);
-      } catch (auditErr) {
-        console.warn("Failed to log impersonation audit:", auditErr);
-      }
-
-      try {
-        const { data: impData, error: impErr } = await supabaseClient.rpc("admin_impersonate_user", {
-          p_admin_token: window.currentToken,
-          p_target_user_id: userId,
-          p_ttl_hours: 12
-        });
-        if (impErr) throw impErr;
-        if (!impData || !impData[0]?.impersonation_token) {
-          throw new Error("No impersonation token returned");
-        }
-
-        // Store real token to restore later
-        if (!sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY)) {
-          // Persist the real admin token so we can put it back when done impersonating
-          const liveToken = sessionStorage.getItem(getTokenStorageKey()) || window.currentToken;
-          if (liveToken) {
-            sessionStorage.setItem(REAL_TOKEN_STORAGE_KEY, liveToken);
-          }
-        }
-
-        // Swap to impersonation token (persist + in-memory)
-        sessionStorage.setItem(getTokenStorageKey(), impData[0].impersonation_token);
-        window.currentToken = impData[0].impersonation_token;
-      } catch (impErr) {
-        console.error("Failed to obtain impersonation token", impErr);
-        alert("Impersonation token failed: " + (impErr.message || impErr));
-        return;
-      }
-    }
-
-    sessionStorage.setItem(VIEW_AS_STORAGE_KEY, JSON.stringify(user));
-    currentUser = user;
-
-    if (typeof loadUserPermissions === "function") {
-      await loadUserPermissions();
-    }
-    if (typeof populateShiftGrid === "function") {
-      await populateShiftGrid();
-    }
-    if (typeof loadRota === "function") {
-      loadRota();
-    }
-
-    showViewAsBanner();
-    console.log("[VIEW AS] Now viewing as:", user.name);
-  } catch (e) {
-    console.error("Failed to start viewing as user", e);
-    alert("Failed to view as user: " + e.message);
-  }
-}
-
-// Stop viewing as and return to real admin user
-async function stopViewingAs() {
-  const realUser = getRealUser();
-  if (!realUser) return;
-
-  currentUser = realUser;
-  sessionStorage.removeItem(VIEW_AS_STORAGE_KEY);
-  sessionStorage.removeItem(REAL_USER_STORAGE_KEY);
-
-   // Restore real token if present
-  const realToken = sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY);
-  if (realToken) {
-    // Restore admin token both in-memory and in storage for subsequent RPCs
-    window.currentToken = realToken;
-    sessionStorage.setItem(getTokenStorageKey(), realToken);
-    sessionStorage.removeItem(REAL_TOKEN_STORAGE_KEY);
-  }
-
-  if (typeof loadUserPermissions === "function") {
-    await loadUserPermissions();
-  }
-  if (typeof populateShiftGrid === "function") {
-    await populateShiftGrid();
-  }
-  if (typeof loadRota === "function") {
-    loadRota();
-  }
-
-  hideViewAsBanner();
-  console.log("[VIEW AS] Returned to admin view");
-  updateViewAsBannerState();
-}
-
-// Check on page load if we're viewing as someone
-function checkViewAsOnLoad() {
   const viewAsUser = getViewAsUser();
   const realUser = getRealUser();
 
   if (viewAsUser && realUser) {
-    currentUser = viewAsUser;
-    showViewAsBanner();
-    console.log("[VIEW AS] Resumed viewing as:", viewAsUser.name);
+    // Already viewing as someone - show active impersonation banner
+    const message = document.createElement("span");
+    message.textContent = `🔒 Viewing as ${viewAsUser.name}`;
+    message.style.cssText = "flex: 1; text-align: center; font-size: 16px;";
+
+    const changeUserBtn = document.createElement("button");
+    changeUserBtn.textContent = "Change User";
+    changeUserBtn.style.cssText = `
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-right: 8px;
+    `;
+    changeUserBtn.onmouseover = () => changeUserBtn.style.background = "rgba(255,255,255,0.3)";
+    changeUserBtn.onmouseout = () => changeUserBtn.style.background = "rgba(255,255,255,0.2)";
+    changeUserBtn.onclick = () => {
+      console.log("[VIEW-AS] Change user clicked - restoring admin then showing selector");
+      
+      // Restore admin session
+      const realUserData = getRealUser();
+      const realToken = sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY);
+      
+      if (realUserData && realToken) {
+        // Clear impersonation
+        sessionStorage.removeItem("calpeward.viewAs");
+        sessionStorage.removeItem("calpeward.impersonationToken");
+        
+        // Restore admin token
+        sessionStorage.setItem(getTokenStorageKey(), realToken);
+        sessionStorage.setItem("calpe_ward_user", JSON.stringify(realUserData));
+        localStorage.setItem("calpeward.loggedInUserId", realUserData.id);
+        
+        // Don't clear realUser/realToken - keep them so we can impersonate again
+        // Just reload - the View As button will appear
+        window.location.reload();
+      } else {
+        console.error("[VIEW-AS] No real user/token to restore");
+        stopViewingAs();
+      }
+    };
+
+    const returnBtn = document.createElement("button");
+    returnBtn.textContent = "Return to Admin Account";
+    returnBtn.style.cssText = `
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    `;
+    returnBtn.onmouseover = () => returnBtn.style.background = "#f0f0f0";
+    returnBtn.onmouseout = () => returnBtn.style.background = "white";
+    returnBtn.onclick = () => stopViewingAs();
+
+    banner.appendChild(message);
+    banner.appendChild(changeUserBtn);
+    banner.appendChild(returnBtn);
+  } else {
+    // Not viewing as anyone - show selector
+    const label = document.createElement("span");
+    label.textContent = "👁️ SUPERADMIN View As:";
+    label.style.marginRight = "12px";
+
+    const selector = document.createElement("select");
+    selector.id = "viewAsSelectorBanner";
+    selector.style.cssText = `
+      background-color: #5a67d8;
+      color: white;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 6px;
+      padding: 8px 32px 8px 12px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      min-width: 500px;
+      max-width: 600px;
+    `;
+
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "Select a user to impersonate...";
+    defaultOpt.style.cssText = "background-color: #5a67d8; color: white; padding: 8px;";
+    selector.appendChild(defaultOpt);
+
+    selector.onchange = (e) => {
+      if (e.target.value) {
+        startViewingAs(e.target.value);
+      }
+    };
+
+    banner.appendChild(label);
+    banner.appendChild(selector);
   }
-  setupViewAsButton();
+
+  document.body.insertBefore(banner, document.body.firstChild);
+
+  // Adjust body padding to account for banner
+  const currentPadding = parseInt(window.getComputedStyle(document.body).paddingTop) || 0;
+  document.body.style.paddingTop = (currentPadding + 60) + "px";
+
+  return banner;
 }
 
-// Populate a View As dropdown with all users
-async function populateViewAsSelector(targetSelector, statusEl) {
-  const selector = typeof targetSelector === "string" ? document.getElementById(targetSelector) : targetSelector || document.getElementById("viewAsSelector");
+function removeViewAsBanner() {
+  const banner = document.getElementById("viewAsBanner");
+  if (banner) {
+    const currentPadding = parseInt(window.getComputedStyle(document.body).paddingTop) || 0;
+    document.body.style.paddingTop = Math.max(0, currentPadding - 60) + "px";
+    banner.remove();
+  }
+}
+
+async function buildOptions(allUsers, supabaseClient) {
+  if (!allUsers || !Array.isArray(allUsers)) return;
+
+  const selector = document.getElementById("viewAsSelectorBanner");
   if (!selector) return;
 
-  if (!currentUser || !currentUser.is_admin) {
-    selector.style.display = "none";
-    return;
+  // Clear existing options except first
+  while (selector.options.length > 1) {
+    selector.remove(1);
   }
 
-  const buildOptions = (users) => {
-    const roles = {
-      1: "Charge Nurses",
-      2: "Staff Nurses",
-      3: "Nursing Assistants"
-    };
+  // Group by role
+  const byRole = {};
+  allUsers.forEach(u => {
+    const roleName = u.role_name || "Unknown";
+    if (!byRole[roleName]) byRole[roleName] = [];
+    byRole[roleName].push(u);
+  });
 
-    let html = '<option value="">View As...</option>';
+  // Sort role names
+  const roleNames = Object.keys(byRole).sort();
 
-    [1, 2, 3].forEach(roleId => {
-      const roleUsers = users.filter(u => Number(u.role_id) === roleId && !u.is_admin);
-      if (roleUsers.length) {
-        html += `<optgroup label="${roles[roleId]}">`;
-        roleUsers.forEach(u => {
-          html += `<option value="${u.id}">${escapeHtml(u.name)}</option>`;
-        });
-        html += "</optgroup>";
-      }
+  roleNames.forEach(roleName => {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = roleName;
+    optgroup.style.cssText = "background-color: #4c51bf; color: white; font-weight: bold;";
+
+    const users = byRole[roleName].sort((a, b) => a.name.localeCompare(b.name));
+    users.forEach(user => {
+      const opt = document.createElement("option");
+      opt.value = user.id;
+      opt.textContent = `${user.name}${user.is_active ? '' : ' (inactive)'}`;
+      opt.style.cssText = "background-color: #5a67d8; color: white; padding: 8px;";
+      optgroup.appendChild(opt);
     });
 
-    if (html === '<option value="">View As...</option>') {
-      const nonAdmin = users.filter(u => !u.is_admin);
-      if (nonAdmin.length) {
-        nonAdmin.forEach(u => {
-          html += `<option value="${u.id}">${escapeHtml(u.name)}</option>`;
-        });
-      } else {
-        html += '<option value="" disabled>(No active non-admin users)</option>';
-        if (statusEl) statusEl.textContent = "No active non-admin users found.";
-      }
-    }
-
-    selector.innerHTML = html;
-    selector.onchange = async function() {
-      if (this.value) {
-        await startViewingAs(this.value);
-      } else {
-        await stopViewingAs();
-      }
-      this.value = "";
-      updateViewAsBannerState();
-    };
-  };
-
-  try {
-    // Prefer already-loaded users if available
-    const preloaded = Array.isArray(window.allUsers) && window.allUsers.length ? window.allUsers : null;
-    if (preloaded) {
-      buildOptions(preloaded);
-      return;
-    }
-
-    if (typeof supabaseClient === "undefined") {
-      if (statusEl) statusEl.textContent = "Loading… (waiting for Supabase)";
-      setTimeout(() => populateViewAsSelector(selector, statusEl), 600);
-      return;
-    }
-
-    const { data: users, error } = await supabaseClient
-      .from("users")
-      .select("id, name, role_id, is_admin, is_active")
-      .eq("is_active", true)
-      .order("role_id", { ascending: true })
-      .order("name", { ascending: true });
-
-    if (error) throw error;
-
-    buildOptions(users || []);
-  } catch (e) {
-    console.error("Failed to populate View As selector", e);
-    const fallbackUsers = Array.isArray(window.allUsers) ? window.allUsers : [];
-    if (fallbackUsers.length) {
-      if (statusEl) statusEl.textContent = "Using cached users (supabase unavailable)";
-      buildOptions(fallbackUsers);
-      return;
-    }
-
-    selector.innerHTML = '<option value="">View As unavailable</option>';
-    if (statusEl) statusEl.textContent = `View As unavailable: ${e?.message || "Check network/sign-in and avoid file://."}`;
-  }
-}
-
-function setupViewAsButton() {
-  const btn = document.getElementById("viewAsBtn");
-  if (!btn) return;
-
-  if (!currentUser || !currentUser.is_admin) {
-    btn.style.display = "none";
-    return;
-  }
-
-  btn.style.display = "inline-flex";
-  btn.addEventListener("click", () => {
-    const banner = document.getElementById("viewAsBanner");
-    if (banner && banner.style.display === "flex" && !getViewAsUser()) {
-      hideViewAsBanner();
-    } else {
-      showViewAsBanner();
-    }
+    selector.appendChild(optgroup);
   });
 }
 
-// Initialize on page load
-window.addEventListener("DOMContentLoaded", () => {
-  setTimeout(checkViewAsOnLoad, 500);
-  setTimeout(populateViewAsSelector, 1000);
-});
+async function startViewingAs(targetUserId) {
+  const supaClient = window.supabaseClient || window.supabase;
+  if (!supaClient) {
+    alert("Supabase client not available");
+    return;
+  }
 
-// Expose functions globally
-window.startViewingAs = startViewingAs;
-window.stopViewingAs = stopViewingAs;
-window.populateViewAsSelector = populateViewAsSelector;
+  const adminToken = sessionStorage.getItem(getTokenStorageKey());
+  if (!adminToken) {
+    alert("No admin token found");
+    return;
+  }
 
-console.log("[VIEW AS] Module loaded");
+  // Get target user details
+  const { data: users, error: userError } = await supaClient
+    .from("users")
+    .select("id, name, role_id, is_active, is_admin")
+    .eq("id", targetUserId);
+
+  if (userError || !users || users.length === 0) {
+    alert("Failed to find target user");
+    return;
+  }
+
+  const targetUser = users[0];
+
+  // Call admin_impersonate_user RPC
+  console.log("Calling admin_impersonate_user...", { targetUserId });
+  const { data, error } = await supaClient.rpc("admin_impersonate_user", {
+    p_admin_token: adminToken,
+    p_target_user_id: targetUserId,
+    p_ttl_hours: 12
+  });
+
+  if (error) {
+    console.error("Impersonation failed:", error);
+    alert(`Impersonation failed: ${error.message}`);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    alert("No impersonation token returned");
+    return;
+  }
+
+  const result = data[0];
+  if (result.error_message) {
+    alert(`Impersonation error: ${result.error_message}`);
+    return;
+  }
+
+  if (!result.impersonation_token) {
+    alert("No impersonation token in response");
+    return;
+  }
+
+  console.log("Impersonation successful", { token: result.impersonation_token.slice(0, 8) + "..." });
+
+  // Store original admin context
+  const currentUser = window.currentUser || JSON.parse(sessionStorage.getItem("calpe_ward_user") || "null");
+  sessionStorage.setItem(REAL_USER_STORAGE_KEY, JSON.stringify(currentUser));
+  sessionStorage.setItem(REAL_TOKEN_STORAGE_KEY, adminToken);
+
+  // Store impersonation context
+  sessionStorage.setItem(VIEW_AS_STORAGE_KEY, JSON.stringify(targetUser));
+  sessionStorage.setItem("calpeward.impersonationToken", result.impersonation_token);
+
+  // Update current user to target user
+  sessionStorage.setItem("calpe_ward_user", JSON.stringify(targetUser));
+  if (window.currentUser) {
+    window.currentUser = targetUser;
+  }
+
+  // Reload page to apply impersonation
+  window.location.reload();
+}
+
+function stopViewingAs() {
+  console.log("[VIEW-AS] Stopping impersonation, returning to admin");
+  
+  const realUser = getRealUser();
+  const realToken = sessionStorage.getItem(REAL_TOKEN_STORAGE_KEY);
+
+  if (!realUser || !realToken) {
+    console.error("[VIEW-AS] No real user/token stored - clearing all and redirecting to login");
+    // Clear everything and redirect to login
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.href = "login.html";
+    return;
+  }
+
+  console.log("[VIEW-AS] Restoring admin user:", realUser.name);
+
+  // Clear impersonation context
+  sessionStorage.removeItem(VIEW_AS_STORAGE_KEY);
+  sessionStorage.removeItem("calpeward.impersonationToken");
+  sessionStorage.removeItem(REAL_USER_STORAGE_KEY);
+  sessionStorage.removeItem(REAL_TOKEN_STORAGE_KEY);
+
+  // Restore admin context in sessionStorage
+  sessionStorage.setItem(getTokenStorageKey(), realToken);
+  sessionStorage.setItem("calpe_ward_user", JSON.stringify(realUser));
+  
+  // Restore admin ID in localStorage
+  localStorage.setItem("calpeward.loggedInUserId", realUser.id);
+  
+  if (window.currentUser) {
+    window.currentUser = realUser;
+  }
+
+  console.log("[VIEW-AS] Admin restored, reloading page");
+
+  // Remove banner and reload
+  removeViewAsBanner();
+  window.location.reload();
+}
+
+// Helper function to clear stuck impersonation (call from console if needed)
+window.clearStuckImpersonation = function() {
+  console.log("[VIEW-AS] Clearing stuck impersonation");
+  sessionStorage.removeItem("calpeward.viewAs");
+  sessionStorage.removeItem("calpeward.impersonationToken");
+  sessionStorage.removeItem("calpeward.realUser");
+  sessionStorage.removeItem("calpeward.realToken");
+  window.location.reload();
+};
+
+async function initViewAs(supabaseClient, currentUser) {
+  const viewAsUser = getViewAsUser();
+  const realUser = getRealUser();
+
+  // If actively viewing as someone, ALWAYS show the banner (even if current user is not admin)
+  if (viewAsUser && realUser) {
+    console.log("[VIEW-AS] Active impersonation detected, showing banner");
+    ensureViewAsBanner();
+    return;
+  }
+
+  // Only show for superadmin (is_admin = true)
+  if (!currentUser || !currentUser.is_admin) {
+    console.log("[VIEW-AS] Not admin, skipping init");
+    return;
+  }
+
+  console.log("[VIEW-AS] Initializing for admin:", currentUser.name);
+
+  // If View As button clicked, show selector banner
+  const viewAsBtn = document.getElementById("viewAsBtn");
+  if (viewAsBtn) {
+    console.log("[VIEW-AS] Adding click handler to View As button");
+    viewAsBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      console.log("[VIEW-AS] Button clicked");
+      
+      const banner = ensureViewAsBanner();
+      
+      // Load all users for selector
+      console.log("[VIEW-AS] Loading users...");
+      const { data: allUsers, error } = await supabaseClient
+        .from("users")
+        .select("id, name, role_id, is_active, roles(name)")
+        .order("name");
+
+      if (error) {
+        console.error("[VIEW-AS] Failed to load users:", error);
+        return;
+      }
+
+      console.log("[VIEW-AS] Loaded", allUsers.length, "users");
+
+      const usersWithRoles = allUsers.map(u => ({
+        ...u,
+        role_name: u.roles?.name || "Unknown"
+      }));
+
+      await buildOptions(usersWithRoles, supabaseClient);
+    });
+  } else {
+    console.warn("[VIEW-AS] View As button not found in DOM");
+  }
+}
+
+// Expose globally so pages can call it
+window.initViewAs = initViewAs;
+
+// Auto-init with retry logic (max 50 retries = 5 seconds)
+let retryCount = 0;
+const MAX_RETRIES = 50;
+
+function tryInitViewAs() {
+  const supabaseClient = window.supabaseClient || window.supabase;
+  const currentUser = window.currentUser;
+  
+  if (supabaseClient && currentUser) {
+    console.log("[VIEW-AS] Initializing - supabase:", !!supabaseClient, "currentUser:", currentUser.name);
+    initViewAs(supabaseClient, currentUser);
+  } else if (retryCount < MAX_RETRIES) {
+    retryCount++;
+    // Retry after a short delay if user not loaded yet
+    setTimeout(tryInitViewAs, 100);
+  } else {
+    console.warn("[VIEW-AS] Max retries reached - supabase:", !!supabaseClient, "currentUser:", !!currentUser);
+  }
+}
+
+// Auto-init on DOMContentLoaded
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", tryInitViewAs);
+} else {
+  tryInitViewAs();
+}

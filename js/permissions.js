@@ -14,7 +14,29 @@
  */
 async function loadCurrentUserPermissions() {
   const STORAGE_KEY = "calpeward.loggedInUserId";
-  const savedId = localStorage.getItem(STORAGE_KEY);
+  const IMPERSONATION_TOKEN_KEY = "calpeward.impersonationToken";
+  const VIEW_AS_STORAGE_KEY = "calpeward.viewAs";
+  
+  // Check if we're in impersonation mode
+  const impersonationToken = sessionStorage.getItem(IMPERSONATION_TOKEN_KEY);
+  const viewAsUser = sessionStorage.getItem(VIEW_AS_STORAGE_KEY);
+  
+  let savedId;
+  
+  if (impersonationToken && viewAsUser) {
+    // We're viewing as someone - use the impersonated user
+    try {
+      const parsedUser = JSON.parse(viewAsUser);
+      savedId = parsedUser.id;
+      console.log("[PERMISSIONS] Loading impersonated user:", parsedUser.name);
+    } catch (e) {
+      console.error("[PERMISSIONS] Failed to parse viewAsUser:", e);
+      savedId = localStorage.getItem(STORAGE_KEY);
+    }
+  } else {
+    // Normal mode - use admin's ID
+    savedId = localStorage.getItem(STORAGE_KEY);
+  }
   
   if (!savedId) {
     console.warn("[PERMISSIONS] No user ID in localStorage");
@@ -66,7 +88,11 @@ async function loadCurrentUserPermissions() {
         console.warn("[PERMISSIONS] Failed to load permissions:", permsError);
       } else {
         userPermissions.clear();
-        (perms || []).forEach(p => userPermissions.add(p.permission_key));
+        (perms || []).forEach(p => {
+          if (p.permission_key) {
+            userPermissions.add(p.permission_key);
+          }
+        });
         console.log("[PERMISSIONS] Loaded permissions:", Array.from(userPermissions));
       }
     }

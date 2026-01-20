@@ -382,11 +382,17 @@
       if (!user || !ok){
         adminUserStatus.classList.remove("is-active");
         if (label) label.textContent = "Not signed in";
+        // Hide View As button
+        const viewAsBtn = document.getElementById("viewAsBtn");
+        if (viewAsBtn) viewAsBtn.style.display = "none";
         return;
       }
       adminUserStatus.classList.add("is-active");
       const roleLabel = user.is_admin ? "superadmin" : "admin";
       if (label) label.textContent = `Signed in: ${user.name} (${roleLabel})`;
+      // Show View As button only for superadmin
+      const viewAsBtn = document.getElementById("viewAsBtn");
+      if (viewAsBtn) viewAsBtn.style.display = user.is_admin ? "block" : "none";
     }
 
     let currentUserLoaded = false;
@@ -496,7 +502,8 @@
             .join("");
 
           return `
-            <div class="user-row" data-user-id="${u.id}" data-role-id="${g.role_id}">
+            <div class="user-row" draggable="true" data-user-id="${u.id}" data-role-id="${g.role_id}">
+              <div class="drag-handle" title="Drag to reorder">|||</div>
               <div class="user-meta">
                 <div class="user-name">
                   ${escapeHtml(u.name || "")}
@@ -2323,6 +2330,51 @@
       targetRow.classList.remove('drag-over');
 
       const allRows = Array.from(adminUsersReorderList.querySelectorAll(`.user-row[data-role-id="${draggedRoleId}"]`));
+      const draggedIndex = allRows.indexOf(draggedElement);
+      const targetIndex = allRows.indexOf(targetRow);
+      if (draggedIndex < targetIndex) {
+        targetRow.parentNode.insertBefore(draggedElement, targetRow.nextSibling);
+      } else {
+        targetRow.parentNode.insertBefore(draggedElement, targetRow);
+      }
+      await updateUserDisplayOrder(draggedRoleId);
+    });
+
+    // Main users list (View page) - same drag-and-drop functionality
+    adminUsersList?.addEventListener("dragstart", (e) => {
+      const userRow = e.target.closest('.user-row[draggable="true"]');
+      if (!userRow) return;
+      draggedElement = userRow;
+      draggedRoleId = userRow.dataset.roleId;
+      userRow.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    adminUsersList?.addEventListener("dragend", () => {
+      adminUsersList.querySelectorAll('.user-row').forEach(row => row.classList.remove('dragging', 'drag-over'));
+      draggedElement = null;
+      draggedRoleId = null;
+    });
+
+    adminUsersList?.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const userRow = e.target.closest('.user-row[draggable="true"]');
+      if (!userRow || !draggedElement) return;
+      if (userRow.dataset.roleId !== draggedRoleId) return;
+      if (userRow === draggedElement) return;
+      adminUsersList.querySelectorAll('.user-row').forEach(row => row.classList.remove('drag-over'));
+      userRow.classList.add('drag-over');
+    });
+
+    adminUsersList?.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      const targetRow = e.target.closest('.user-row[draggable="true"]');
+      if (!targetRow || !draggedElement) return;
+      if (targetRow.dataset.roleId !== draggedRoleId) return;
+      if (targetRow === draggedElement) return;
+      targetRow.classList.remove('drag-over');
+
+      const allRows = Array.from(adminUsersList.querySelectorAll(`.user-row[data-role-id="${draggedRoleId}"]`));
       const draggedIndex = allRows.indexOf(draggedElement);
       const targetIndex = allRows.indexOf(targetRow);
       if (draggedIndex < targetIndex) {

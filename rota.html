@@ -13,7 +13,8 @@
   <script src="js/config.js"></script>
   <script src="js/session-validator.js"></script>
   <script src="js/permissions.js"></script>
-  <script src="js/view-as.v3.js"></script>
+  <script src="js/nav-bar.js"></script>
+  <script src="js/view-as.js?v=8"></script>
   <script src="js/swap-functions.js" defer></script>
   <script src="js/notifications-shared.js" defer></script>
   <script src="js/shift-functions.js" defer></script>
@@ -23,11 +24,11 @@
 <body>
   <div class="wrap">
     <!-- Page Navigation -->
-    <div id="pageNav" style="padding: 8px 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; gap: 12px; font-size: 14px;">
+    <div id="pageNav" style="padding: 8px 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; gap: 12px; font-size: 14px; align-items: center;">
       <a href="#" onclick="navigateToRequests(); return false;" style="color: #4F8DF7; text-decoration: none;">📋 Requests</a>
       <a href="rota.html" style="color: #4F8DF7; text-decoration: none; font-weight: 600;">📅 View Rota</a>
       <a href="#" id="navAdminLink" onclick="navigateToAdmin(); return false;" style="color: #4F8DF7; text-decoration: none; display: none;">⚙️ Admin</a>
-      <button id="viewAsBtn" class="badge" type="button" style="display:none;">👁 View As</button>
+      <button id="viewAsBtn" class="badge" type="button" style="display:none; padding: 6px 12px; white-space: nowrap;">👁 View As</button>
     </div>
     
     <!-- Title + Status -->
@@ -68,10 +69,10 @@
       <select id="periodSelect">
         <option>Loading...</option>
       </select>
-      <button id="publishBtn" class="btn" style="margin-left: 12px; display: none; background: #10b981; color: white;">📤 Publish Period</button>
-      <button id="unpublishBtn" class="btn" style="margin-left: 12px; display: none; background: #f59e0b; color: white;">⚠️ Unpublish</button>
+      <button id="publishBtn" class="btn" style="margin-left: 12px; display: none; background: #059669; color: white; padding: 10px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📤 Publish Period</button>
+      <button id="unpublishBtn" class="btn" style="margin-left: 12px; display: none; background: #dc2626; color: white; padding: 10px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">⚠️ Unpublish</button>
       <button id="toggleEditingBtn" class="btn" style="margin-left: 8px;">🔒 Locked</button>
-      <button id="toggleRequestsBtn" class="btn" style="margin-left: auto;">👁️ Show Requests</button>
+      <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: auto;">👁️ Show Requests</button>
     </div>
 
     <!-- Metadata Display (shown when editing) -->
@@ -192,9 +193,11 @@
         </div>
 
         <div class="modal-bubble">
-          <div class="shift-display">
-            <span class="shift-code" id="publishedShiftCode"></span>
-            <span class="shift-name" id="publishedShiftName"></span>
+          <div style="padding: 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 8px;">
+            <div class="shift-display">
+              <span class="shift-code" id="publishedShiftCode"></span>
+              <span class="shift-name" id="publishedShiftName"></span>
+            </div>
           </div>
           <div class="rest-day" id="restDayLabel" style="display:none; margin-top:8px; font-size:13px; color:#64748b; font-style:italic;">Rest day</div>
           
@@ -225,12 +228,47 @@
 
         <div class="btns">
           <button id="publishedChangeBtn" class="primary" type="button">Change shift</button>
+          <button id="publishedOverrideBtn" class="primary" type="button">Override shift</button>
           <button id="publishedCommentsBtn" type="button">View comments</button>
           <button id="publishedSwapBtn" type="button">Swap shift</button>
           <button id="publishedHistoryBtn" type="button">View history</button>
           <div class="close-row">
             <button id="publishedDetailsClose" type="button">Close</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Override Amendment Modal -->
+    <div class="modal-backdrop" id="overrideAmendmentModalBackdrop" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="overrideAmendmentTitle">
+        <h2 id="overrideAmendmentTitle">Override Shift Times</h2>
+        <p id="overrideAmendmentSubtitle" class="subtitle"></p>
+        
+        <div class="modal-bubble" style="padding: 16px;">
+          <div style="font-size: 13px; color: #64748b; margin-bottom: 12px; font-weight: 600;">Amendment Details</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;">Start</label>
+              <input type="time" id="amendmentStartTime" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;">End</label>
+              <input type="time" id="amendmentEndTime" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;">Hours</label>
+              <input type="number" id="amendmentHours" step="0.25" min="0" max="24" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;">
+            </div>
+          </div>
+          
+          <label style="font-size: 13px; color: #dc2626; display: block; margin-bottom: 8px; margin-top: 12px; font-weight: 600;">Reason (internal note)</label>
+          <textarea id="amendmentReason" rows="3" placeholder="Reason for override..." style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box; margin-bottom: 12px;"></textarea>
+        </div>
+        
+        <div class="btns">
+          <button id="amendmentSaveBtn" type="button" class="primary">Save Override</button>
+          <button id="amendmentCancelBtn" type="button">Cancel</button>
         </div>
       </div>
     </div>
@@ -317,6 +355,8 @@
 
   </div> <!-- close .wrap -->
 
+  <script src="js/assignment-history.js"></script>
+  <script src="js/rota-context-menu.js"></script>
   <script>
     console.log("ROTA.HTML LOADING - VERSION 3", "readyState=", document.readyState);
     // Supabase + storage accessors (tolerate early execution before defer scripts)
@@ -345,6 +385,10 @@
     let canEditPublished = false;
     let currentEditContext = "draft";
     let lastPublishedCell = null;
+
+    // Expose context for helper modules (context menu, history)
+    window.currentEditContext = currentEditContext;
+    window.periodData = periodData;
     
     // Load staffing defaults from localStorage (set in admin panel)
     function getStaffingDefaults() {
@@ -399,6 +443,10 @@
       const navAdminLink = document.getElementById("navAdminLink");
       if (navAdminLink) navAdminLink.style.display = currentUser.is_admin ? "inline" : "none";
 
+      // Show View As button only for superadmin
+      const viewAsBtn = document.getElementById("viewAsBtn");
+      if (viewAsBtn) viewAsBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
+
       return currentUser;
     }
 
@@ -409,14 +457,6 @@
       });
     } else {
       console.warn("[ROTA BOOT] logoutBtn not found; skipping logout binding");
-    }
-
-    function navigateToRequests() {
-      window.location.href = "requests.html";
-    }
-
-    function navigateToAdmin() {
-      window.location.href = "admin.html";
     }
 
     // ========== HELPERS ==========
@@ -479,14 +519,17 @@
 
       try {
         // Load period info
-        const { data: period } = await supabaseClient
+        console.log("[LOAD] Loading period...");
+        const { data: period, error: pErr } = await supabaseClient
           .from("rota_periods")
           .select("*")
           .eq("id", periodId)
           .single();
 
+        if (pErr) throw new Error(`Period load failed: ${pErr.message}`);
         if (!period) throw new Error("Period not found");
         periodData = period;
+        window.periodData = periodData;
         displayPeriodStatus(period);
 
         // Generate dates from period start_date to end_date
@@ -494,6 +537,7 @@
         allWeeks = groupDatesIntoWeeks(dates);
 
         // Load users (active only) using same ordering as main app (role -> display_order -> created_at)
+        console.log("[LOAD] Loading users...");
         const { data: users, error: uErr } = await supabaseClient
           .from("users")
           .select("id, name, role_id, is_admin, display_order")
@@ -502,20 +546,22 @@
           .order("display_order", { ascending: true })
           .order("created_at", { ascending: true });
 
-        if (uErr) throw uErr;
+        if (uErr) throw new Error(`Users load failed: ${uErr.message}`);
         allUsers = (users || []).map(u => ({ ...u, name: u.name }));
 
         // Load shift catalogue
+        console.log("[LOAD] Loading shifts...");
         const { data: shifts, error: sErr } = await supabaseClient
           .from("shifts")
           .select("*");
 
-        if (sErr) throw sErr;
+        if (sErr) throw new Error(`Shifts load failed: ${sErr.message}`);
         shiftMap.clear();
         (shifts || []).forEach(s => shiftMap.set(s.id, s));
 
         // Load assignments for this date range
         // Only show assignments if user has draft permission OR period is published
+        console.log("[LOAD] Loading assignments...");
         const canViewDraft = window.PermissionsModule.hasPermission("rota.view_draft");
         const isPeriodPublished = period.status === "published";
         
@@ -528,7 +574,7 @@
             .gte("date", period.start_date)
             .lte("date", period.end_date);
 
-          if (aErr) throw aErr;
+          if (aErr) throw new Error(`Assignments load failed: ${aErr.message}`);
           
           const assignmentIds = [];
           (assignments || []).forEach(a => {
@@ -552,83 +598,66 @@
           }
         }
 
-        // Load requests for this date range
-        // Filter based on permissions: view_all shows all, view_own shows only current user's
-        let requestsQuery = supabaseClient
-          .from("requests")
-          .select("*")
-          .gte("date", period.start_date)
-          .lte("date", period.end_date);
-        
-        // If user can only view own, filter to their requests
-        if (!canViewAllRequests && canViewOwnRequests && window.currentUser) {
-          requestsQuery = requestsQuery.eq("user_id", window.currentUser.id);
-        }
-        
-        const { data: requests, error: rErr } = await requestsQuery;
+        // Load requests for this date range using RPC function (respects RLS policies)
+        console.log("[LOAD] Loading requests via RPC...");
+        const { data: requests, error: rErr } = await supabaseClient.rpc("get_requests_for_period", {
+          p_token: window.currentToken,
+          p_start_date: period.start_date,
+          p_end_date: period.end_date,
+          p_force_view_all: false
+        });
 
-        if (rErr) throw rErr;
+        if (rErr) throw new Error(`Requests load failed: ${rErr.message}`);
         requestsMap.clear();
         (requests || []).forEach(r => {
           requestsMap.set(`${r.user_id}_${r.date}`, r);
         });
-
-        // Load assignment overrides
-        const { data: overrides, error: oErr } = await supabaseClient
-          .from("rota_assignment_overrides")
-          .select("*");
-
-        if (oErr) throw oErr;
-        overridesMap.clear();
-        (overrides || []).forEach(o => {
-          overridesMap.set(o.rota_assignment_id, o);
-        });
+        console.log("[LOAD] requestsMap populated with", requestsMap.size, "entries");
 
         // Load assignment comments (for published periods only)
+        console.log("[LOAD] Loading comments...");
         commentsMap.clear();
         if (isPeriodPublished) {
-          console.log('[COMMENTS LOAD] Loading comments for published period...');
           const { data: comments, error: cErr } = await supabaseClient
             .from("rota_assignment_comments")
             .select("*");
 
-          if (!cErr) {
-            console.log('[COMMENTS LOAD] Loaded comments:', comments);
-            (comments || []).forEach(c => {
-              const existing = commentsMap.get(c.rota_assignment_id) || [];
-              existing.push(c);
-              commentsMap.set(c.rota_assignment_id, existing);
-            });
-            console.log('[COMMENTS LOAD] CommentsMap populated:', commentsMap.size, 'assignments with comments');
-          } else {
-            console.error('[COMMENTS LOAD] Error loading comments:', cErr);
-          }
-        } else {
-          console.log('[COMMENTS LOAD] Skipping - period not published');
+          if (cErr) throw new Error(`Comments load failed: ${cErr.message}`);
+          (comments || []).forEach(c => {
+            const existing = commentsMap.get(c.rota_assignment_id) || [];
+            existing.push(c);
+            commentsMap.set(c.rota_assignment_id, existing);
+          });
+          console.log('[LOAD] CommentsMap populated:', commentsMap.size, 'assignments with comments');
         }
 
         // Load patterns
-        const { data: pats } = await supabaseClient
+        console.log("[LOAD] Loading patterns...");
+        const { data: pats, error: patErr } = await supabaseClient
           .from("pattern_definitions")
           .select("*");
 
+        if (patErr) throw new Error(`Patterns load failed: ${patErr.message}`);
         patterns.clear();
         (pats || []).forEach(p => patterns.set(p.id, p));
 
-        const { data: upats } = await supabaseClient
+        console.log("[LOAD] Loading user patterns...");
+        const { data: upats, error: upatErr } = await supabaseClient
           .from("user_patterns")
           .select("*");
 
+        if (upatErr) throw new Error(`User patterns load failed: ${upatErr.message}`);
         userPatterns.clear();
         (upats || []).forEach(up => userPatterns.set(up.user_id, up));
 
         // Load all shifts for admin editing from the shifts table
+        console.log("[LOAD] Loading draft shifts...");
         const { data: draftShiftsData, error: dsErr } = await supabaseClient
           .from("shifts")
           .select("*")
           .order("code", { ascending: true });
 
-        if (dsErr) throw dsErr;
+        if (dsErr) throw new Error(`Draft shifts load failed: ${dsErr.message}`);
         draftShifts = draftShiftsData || [];
         console.log("[ROTA] Loaded draftShifts:", draftShifts);
         console.log("[ROTA] Sample shift object:", draftShifts[0]);
@@ -648,7 +677,7 @@
         generatePatternWarnings();
 
       } catch (err) {
-        console.error("Load error:", err);
+        console.error("[LOAD] Fatal error:", err);
         alert("Error loading rota: " + err.message);
       }
     }
@@ -800,6 +829,7 @@
               const assignment = assignmentsMap.get(key);
               
               if (assignment) {
+                td.dataset.assignmentId = assignment.id;
                 const shift = shiftMap.get(assignment.shift_id);
                 const override = (periodData?.status === "published" && assignment.id) ? overridesMap.get(assignment.id) : null;
                 
@@ -812,12 +842,19 @@
                   wrapper.style.width = "100%";
                   wrapper.style.height = "100%";
                   wrapper.style.display = "flex";
-                  wrapper.style.alignItems = "center";
-                  wrapper.style.justifyContent = "center";
-                  
+                  wrapper.style.flexDirection = "column";
+                  wrapper.style.alignItems = "stretch";
+                  wrapper.style.justifyContent = "flex-start";
+                  wrapper.style.padding = "4px 2px";
+                  wrapper.style.boxSizing = "border-box";
+                  wrapper.style.rowGap = "2px";
+
+                  const shiftBlock = document.createElement("div");
+                  shiftBlock.className = "shift-block";
                   const codeSpan = document.createElement("span");
                   codeSpan.textContent = shift.code;
-                  wrapper.appendChild(codeSpan);
+                  shiftBlock.appendChild(codeSpan);
+                  wrapper.appendChild(shiftBlock);
                   
                   // Add badges container (for published periods only)
                   if (periodData?.status === "published" && assignment.id) {
@@ -883,16 +920,16 @@
 
                   // Apply shift metadata styling from catalogue
                   if (shift.text_bold) {
-                    td.style.fontWeight = "700";
+                    shiftBlock.style.fontWeight = "700";
                   }
                   if (shift.text_italic) {
-                    td.style.fontStyle = "italic";
+                    shiftBlock.style.fontStyle = "italic";
                   }
                   if (shift.text_color) {
-                    td.style.color = shift.text_color;
+                    shiftBlock.style.color = shift.text_color;
                   }
                   if (shift.fill_color) {
-                    td.style.backgroundColor = shift.fill_color;
+                    td.style.backgroundColor = shift.fill_color; // color the whole cell like before
                   }
 
                   // Add request hint if exists (only if showRequests is enabled)
@@ -900,9 +937,17 @@
                     const request = requestsMap.get(key);
                     if (request) {
                       const hint = document.createElement("div");
+                      const requestValue = (request.value || "").trim();
+                      const isImportant = request.important_rank && (request.important_rank === 1 || request.important_rank === 2);
+
                       hint.className = "request-hint";
-                      hint.textContent = request.value || "";
-                      td.appendChild(hint);
+                      hint.classList.add(isImportant ? "important" : "normal");
+                      hint.textContent = isImportant
+                        ? `${requestValue}${request.important_rank === 1 ? "¹" : "²"}`
+                        : requestValue;
+
+                      // Stack under the shift inside wrapper so it always shows beneath
+                      wrapper.appendChild(hint);
                     }
                   }
                 }
@@ -1374,28 +1419,232 @@
     }
 
     function handlePublishedChange() {
-      if (!lastPublishedCell) return;
+      const cell = window.lastPublishedCell || lastPublishedCell;
+      if (!cell) return;
       if (!canEditPublished) {
         alert("You don't have permission to edit published rotas.");
         return;
       }
       closePublishedDetails();
       if (typeof window.openShiftPickerForPublished === "function") {
-        window.openShiftPickerForPublished(lastPublishedCell.userId, lastPublishedCell.date);
+        window.openShiftPickerForPublished(cell.userId, cell.date);
       } else {
         alert("Editor not ready yet. Try again.");
       }
     }
 
+    function handlePublishedOverride() {
+      const cell = window.lastPublishedCell || lastPublishedCell;
+      if (!cell) return;
+      if (!canEditPublished) {
+        alert("You don't have permission to edit published rotas.");
+        return;
+      }
+      closePublishedDetails();
+      openOverrideAmendmentModal(cell.userId, cell.date);
+    }
+
+    function openOverrideAmendmentModal(userId, date) {
+      try {
+        const backdrop = document.getElementById("overrideAmendmentModalBackdrop");
+        const title = document.getElementById("overrideAmendmentTitle");
+        const subtitle = document.getElementById("overrideAmendmentSubtitle");
+        const startTimeInput = document.getElementById("amendmentStartTime");
+        const endTimeInput = document.getElementById("amendmentEndTime");
+        const hoursInput = document.getElementById("amendmentHours");
+        const reasonInput = document.getElementById("amendmentReason");
+        
+        if (!backdrop) {
+          console.error("[OVERRIDE AMENDMENT] Modal backdrop not found");
+          alert("Modal not initialized");
+          return;
+        }
+        
+        const assignment = (typeof getAssignment === "function"
+          ? getAssignment(userId, date)
+          : window.getAssignment?.(userId, date))
+          || assignmentsMap?.get(`${userId}_${date}`);
+        const user = allUsers?.find(u => u.id === userId);
+        const dateObj = new Date(date);
+        
+        console.log("[OVERRIDE AMENDMENT] Opening modal for assignment:", assignment);
+        
+        if (title) title.textContent = user ? `${user.name} - Override Shift Times` : "Override Shift Times";
+        if (subtitle) subtitle.textContent = dateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+        
+        // Load existing override if any
+        if (assignment?.id) {
+          const override = overridesMap?.get(assignment.id);
+          console.log("[OVERRIDE AMENDMENT] Found override:", override);
+          if (override) {
+            if (startTimeInput) startTimeInput.value = override.override_start_time || "";
+            if (endTimeInput) endTimeInput.value = override.override_end_time || "";
+            if (hoursInput) hoursInput.value = override.override_hours || "";
+            if (reasonInput) reasonInput.value = override.comment || "";
+          } else {
+            // No override yet – prefill with scheduled shift times to make entry quicker
+            const shift = assignment.shift_id ? shiftMap?.get(assignment.shift_id) : null;
+            const start = shift?.start_time ? shift.start_time.slice(0,5) : "";
+            const end = shift?.end_time ? shift.end_time.slice(0,5) : "";
+            if (startTimeInput) startTimeInput.value = start;
+            if (endTimeInput) endTimeInput.value = end;
+            if (hoursInput) {
+              if (shift?.hours != null) {
+                hoursInput.value = shift.hours;
+              } else if (start && end) {
+                const [sh, sm] = start.split(":").map(Number);
+                const [eh, em] = end.split(":").map(Number);
+                let mins = (eh*60 + em) - (sh*60 + sm);
+                if (mins < 0) mins += 24*60; // overnight safeguard
+                hoursInput.value = Math.round((mins/60)*4)/4;
+              } else {
+                hoursInput.value = "";
+              }
+            }
+            if (reasonInput) reasonInput.value = "";
+          }
+        }
+        
+        // Store context for save
+        window.overrideAmendmentContext = { userId, date, assignmentId: assignment?.id };
+        
+        console.log("[OVERRIDE AMENDMENT] Opening modal, context:", window.overrideAmendmentContext);
+        backdrop.setAttribute("aria-hidden", "false");
+      } catch (err) {
+        console.error("[OVERRIDE AMENDMENT] Error opening modal:", err);
+        alert("Error opening override modal. Check console.");
+      }
+    }
+
+    // Keep hours in sync if start/end change in the override amendment modal
+    function attachAmendmentHourAutoCalc() {
+      const startInput = document.getElementById("amendmentStartTime");
+      const endInput = document.getElementById("amendmentEndTime");
+      const hoursInput = document.getElementById("amendmentHours");
+      if (!startInput || !endInput || !hoursInput) return;
+
+      const recompute = () => {
+        if (!startInput.value || !endInput.value) return;
+        const [sh, sm] = startInput.value.split(":").map(Number);
+        const [eh, em] = endInput.value.split(":").map(Number);
+        let minutes = (eh * 60 + em) - (sh * 60 + sm);
+        if (minutes < 0) minutes += 24 * 60; // handle overnight
+        const hrs = Math.round((minutes / 60) * 4) / 4; // nearest 0.25
+        hoursInput.value = hrs;
+      };
+
+      startInput.addEventListener("change", recompute);
+      endInput.addEventListener("change", recompute);
+    }
+
+    function closeOverrideAmendmentModal() {
+      const backdrop = document.getElementById("overrideAmendmentModalBackdrop");
+      if (backdrop) backdrop.setAttribute("aria-hidden", "true");
+      window.overrideAmendmentContext = null;
+    }
+
+    function saveOverrideAmendment() {
+      const context = window.overrideAmendmentContext;
+      if (!context) {
+        alert("No amendment context.");
+        return;
+      }
+
+      const startTime = document.getElementById("amendmentStartTime")?.value || "";
+      const endTime = document.getElementById("amendmentEndTime")?.value || "";
+      const hours = parseFloat(document.getElementById("amendmentHours")?.value || 0);
+      const reason = document.getElementById("amendmentReason")?.value || "";
+
+      if (!startTime || !endTime) {
+        alert("Please enter both start and end times.");
+        return;
+      }
+
+      // Call the direct save function
+      console.log("[OVERRIDE AMENDMENT] Calling saveOverrideAmendmentDirect with:", {
+        assignmentId: context.assignmentId,
+        startTime,
+        endTime,
+        hours,
+        reason
+      });
+      window.saveOverrideAmendmentDirect(context.assignmentId, startTime, endTime, hours, reason);
+    }
+
+    // Simplified implementation: direct Supabase update
+    window.saveOverrideAmendmentDirect = async function(assignmentId, startTime, endTime, hours, reason) {
+      console.log("[OVERRIDE AMENDMENT DIRECT] Received parameters:", {
+        assignmentId,
+        assignmentIdType: typeof assignmentId,
+        startTime,
+        endTime,
+        hours,
+        reason
+      });
+      try {
+        if (!window.supabaseClient) {
+          alert("Database client not initialized.");
+          return;
+        }
+
+        const { data, error } = await window.supabaseClient
+          .from("rota_assignment_overrides")
+          .upsert({
+            rota_assignment_id: assignmentId,
+            override_start_time: startTime,
+            override_end_time: endTime,
+            override_hours: hours,
+            comment: reason,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'rota_assignment_id'
+          })
+          .select();
+
+        if (error) {
+          console.error("[OVERRIDE AMENDMENT] Error:", error);
+          alert(`Failed to save override: ${error.message}`);
+          return;
+        }
+
+        console.log("[OVERRIDE AMENDMENT] Override saved successfully", data);
+        
+        // Update overridesMap with the new/updated override
+        if (data && data[0]) {
+          overridesMap.set(assignmentId, data[0]);
+        }
+        
+        alert("Override amended successfully.");
+        closeOverrideAmendmentModal();
+        
+        // Reload the rota to show changes
+        if (typeof renderRota === "function") {
+          renderRota();
+        }
+      } catch (err) {
+        console.error("[OVERRIDE AMENDMENT] Unexpected error:", err);
+        alert("Unexpected error saving override.");
+      }
+    };
+
     function handlePublishedHistory() {
-      alert("History view coming soon.");
+      const cell = window.lastPublishedCell || lastPublishedCell;
+      if (!cell) return;
+      
+      if (window.AssignmentHistoryModule?.loadAssignmentHistory) {
+        closePublishedDetails();
+        window.AssignmentHistoryModule.loadAssignmentHistory(cell.userId, cell.date);
+      } else {
+        alert("History module not loaded.");
+      }
     }
 
     async function handlePublishedSwap() {
-      if (!lastPublishedCell) return;
+      const cell = window.lastPublishedCell || lastPublishedCell;
+      if (!cell) return;
       if (!window.currentUser) return;
 
-      const { userId, date } = lastPublishedCell;
+      const { userId, date } = cell;
       // Allow all logged-in staff; admins can still act. Permission gate removed for staff.
       const isAdmin = !!window.currentUser.is_admin;
 
@@ -1507,7 +1756,7 @@
         const peer = candidates.find(c => c.id === peerId);
         if (peer) {
           dateSelect.innerHTML = `<option value="">Select their shift date...</option>` +
-            peer.dates.map(d => `<option value="${d.date}">${d.label} (${d.code})</option>`).join("");
+            peer.dates.map(d => `<option value="${d.date}">${d.label}</option>`).join("");
           dateSelect.disabled = false;
         }
       };
@@ -1754,6 +2003,7 @@
             shiftFilter: (shift) => shift?.allow_post_publish === true
           });
           currentEditContext = "published";
+          window.currentEditContext = currentEditContext;
         } else {
           window.setShiftEditContext({
             permissionKey: "rota.edit_draft",
@@ -1764,6 +2014,7 @@
             shiftFilter: (shift) => shift?.allow_draft !== false
           });
           currentEditContext = "draft";
+          window.currentEditContext = currentEditContext;
         }
       }
 
@@ -1829,6 +2080,79 @@
           // Don't throw - period is already published, this is just cleanup
         }
 
+        // Create history records for all assignments at publication time
+        // Note: Only create ONE history record per unique user/date combination to avoid duplicates
+        try {
+          console.log('[PUBLISH] Creating history records for assignments in date range:', periodData.start_date, 'to', periodData.end_date);
+          
+          const { data: assignments, error: assignFetchErr } = await supabaseClient
+            .from("rota_assignments")
+            .select("id, user_id, date, shift_id, shifts!shift_id(code), created_at")
+            .gte("date", periodData.start_date)
+            .lte("date", periodData.end_date)
+            .order("user_id, date, created_at", { ascending: true });
+
+          console.log('[PUBLISH] Fetch assignments result:', { assignFetchErr, assignmentCount: assignments?.length });
+          
+          if (assignFetchErr) throw assignFetchErr;
+
+          if (assignments && assignments.length > 0) {
+            console.log('[PUBLISH] Sample assignment:', assignments[0]);
+            
+            // Remove duplicates by keeping only the most recent assignment per user/date
+            const seenUserDates = new Set();
+            const uniqueAssignments = [];
+            
+            // Process in reverse chronological order and keep only the latest per user/date
+            for (let i = assignments.length - 1; i >= 0; i--) {
+              const a = assignments[i];
+              const key = `${a.user_id}_${a.date}`;
+              if (!seenUserDates.has(key)) {
+                seenUserDates.add(key);
+                uniqueAssignments.push(a);
+              } else {
+                console.log('[PUBLISH] Skipping duplicate assignment for', key);
+              }
+            }
+            
+            const historyRecords = uniqueAssignments
+              .filter(a => a.shifts) // Only include if shift data exists
+              .map(a => ({
+                rota_assignment_id: a.id,
+                user_id: a.user_id,
+                date: a.date,
+                old_shift_id: null,
+                old_shift_code: null,
+                new_shift_id: a.shift_id,
+                new_shift_code: a.shifts.code,
+                change_reason: 'Rota published',
+                changed_by: publishedBy,
+                changed_by_name: window.currentUser?.name || "System",
+                changed_at: nowIso
+              }));
+
+            console.log('[PUBLISH] Created', historyRecords.length, 'history records from', assignments.length, 'assignments (', seenUserDates.size, 'unique user/dates)');
+            
+            if (historyRecords.length > 0) {
+              const { error: histErr } = await supabaseClient
+                .from("rota_assignment_history")
+                .insert(historyRecords);
+
+              console.log('[PUBLISH] History insert result:', { histErr, recordCount: historyRecords.length });
+
+              if (histErr) {
+                console.error("Error creating history records:", histErr);
+                // Don't throw - publication was successful, just history recording failed
+              } else {
+                console.log('[PUBLISH] Successfully created history records');
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error recording publication history:", e);
+          // Don't throw - publication was successful, just history recording failed
+        }
+
         // Re-fetch to confirm state and update UI
         const { data: refreshed, error: fetchErr } = await supabaseClient
           .from("rota_periods")
@@ -1869,8 +2193,13 @@
         return;
       }
       
+      // Format period display (matching what's shown in the UI)
+      const start = new Date(periodData.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const end = new Date(periodData.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const periodLabel = `${start} - ${end}`;
+      
       const confirmed = confirm(
-        `⚠️ WARNING: Unpublish ${periodData.label}?\n\n` +
+        `⚠️ WARNING: Unpublish period (${periodLabel})?\n\n` +
         `This will REVERT the period back to draft status.\n\n` +
         `⚠️ IMPORTANT:\n` +
         `• Only use this if you need to make changes BEFORE staff see the rota\n` +
@@ -1884,7 +2213,7 @@
       // Second confirmation
       const doubleCheck = confirm(
         `Final confirmation:\n\n` +
-        `You are about to unpublish ${periodData.label}.\n` +
+        `You are about to unpublish the period (${periodLabel}).\n` +
         `This should only be used for testing or emergency corrections.\n\n` +
         `Proceed?`
       );
@@ -1915,6 +2244,105 @@
         if (assignErr) {
           console.error("Error updating assignment status:", assignErr);
           // Don't throw - period is already unpublished, this is just cleanup
+        }
+
+        // Delete all history records for this period (since we're reverting to draft)
+        try {
+          const { error: histErr } = await supabaseClient
+            .from("rota_assignment_history")
+            .delete()
+            .gte("date", periodData.start_date)
+            .lte("date", periodData.end_date);
+          
+          if (histErr) {
+            console.error("Error deleting history records:", histErr);
+          } else {
+            console.log("History records cleared for unpublished period");
+          }
+        } catch (e) {
+          console.error("Error clearing history:", e);
+        }
+
+        // Delete all swap requests for this period (by date range)
+        try {
+          const { error: swapReqErr } = await supabaseClient
+            .from("swap_requests")
+            .delete()
+            .or(`initiator_shift_date.gte.${periodData.start_date},initiator_shift_date.lte.${periodData.end_date},counterparty_shift_date.gte.${periodData.start_date},counterparty_shift_date.lte.${periodData.end_date}`);
+          
+          if (swapReqErr) {
+            console.error("Error deleting swap requests:", swapReqErr);
+          } else {
+            console.log("Swap requests cleared for unpublished period");
+          }
+        } catch (e) {
+          console.error("Error clearing swap requests:", e);
+        }
+
+        // Delete all swap executions for this period (by date range)
+        try {
+          const { error: swapExecErr } = await supabaseClient
+            .from("swap_executions")
+            .delete()
+            .or(`initiator_old_shift_date.gte.${periodData.start_date},initiator_old_shift_date.lte.${periodData.end_date},initiator_new_shift_date.gte.${periodData.start_date},initiator_new_shift_date.lte.${periodData.end_date},counterparty_old_shift_date.gte.${periodData.start_date},counterparty_old_shift_date.lte.${periodData.end_date},counterparty_new_shift_date.gte.${periodData.start_date},counterparty_new_shift_date.lte.${periodData.end_date}`);
+          
+          if (swapExecErr) {
+            console.error("Error deleting swap executions:", swapExecErr);
+          } else {
+            console.log("Swap executions cleared for unpublished period");
+          }
+        } catch (e) {
+          console.error("Error clearing swap executions:", e);
+        }
+
+        // Delete all comments on assignments in this period
+        try {
+          // First, get all assignment IDs for this period
+          const { data: assignments, error: assignListErr } = await supabaseClient
+            .from("rota_assignments")
+            .select("id")
+            .gte("date", periodData.start_date)
+            .lte("date", periodData.end_date);
+          
+          if (assignListErr) {
+            console.error("Error fetching assignments:", assignListErr);
+          } else if (assignments && assignments.length > 0) {
+            const assignmentIds = assignments.map(a => a.id);
+            
+            // Delete comments for these assignments
+            const { error: commErr } = await supabaseClient
+              .from("rota_assignment_comments")
+              .delete()
+              .in("rota_assignment_id", assignmentIds);
+            
+            if (commErr) {
+              console.error("Error deleting comments:", commErr);
+            } else {
+              console.log("Comments cleared for unpublished period");
+            }
+          }
+        } catch (e) {
+          console.error("Error clearing comments:", e);
+        }
+
+        // Delete all notifications related to swap requests in this period
+        try {
+          // Delete notifications of type 'swap_request' created during this period
+          // These are tied to swap operations in the period
+          const { error: notifErr } = await supabaseClient
+            .from("notifications")
+            .delete()
+            .eq("type", "swap_request")
+            .gte("created_at", new Date(periodData.start_date).toISOString())
+            .lte("created_at", new Date(periodData.end_date).toISOString() + "T23:59:59Z");
+          
+          if (notifErr) {
+            console.error("Error deleting swap notifications:", notifErr);
+          } else {
+            console.log("Swap notifications cleared for unpublished period");
+          }
+        } catch (e) {
+          console.error("Error clearing swap notifications:", e);
         }
 
         const { data: refreshed, error: fetchErr } = await supabaseClient
@@ -1955,6 +2383,11 @@
       const btn = document.getElementById("toggleRequestsBtn");
       btn.textContent = showRequests ? "👁️ Hide Requests" : "👁️ Show Requests";
       btn.classList.toggle("primary", showRequests);
+      
+      // Debug: log what's in requestsMap
+      console.log("[REQUESTS DEBUG] showRequests toggled to:", showRequests);
+      console.log("[REQUESTS DEBUG] requestsMap size:", requestsMap.size);
+      console.log("[REQUESTS DEBUG] requestsMap contents:", Array.from(requestsMap.entries()));
       
       // Re-render the table to apply request visibility
       renderRota();
@@ -2023,6 +2456,8 @@
         });
         const publishedChangeBtn = getElement("publishedChangeBtn");
         if (publishedChangeBtn) publishedChangeBtn.addEventListener("click", handlePublishedChange);
+        const publishedOverrideBtn = getElement("publishedOverrideBtn");
+        if (publishedOverrideBtn) publishedOverrideBtn.addEventListener("click", handlePublishedOverride);
         const publishedHistoryBtn = getElement("publishedHistoryBtn");
         if (publishedHistoryBtn) publishedHistoryBtn.addEventListener("click", handlePublishedHistory);
         const publishedCommentsBtn = getElement("publishedCommentsBtn");
@@ -2042,6 +2477,19 @@
             commentsModalBackdrop.setAttribute("aria-hidden", "true");
           }
         });
+
+        // Override amendment modal handlers
+        const amendmentSaveBtn = getElement("amendmentSaveBtn");
+        if (amendmentSaveBtn) amendmentSaveBtn.addEventListener("click", saveOverrideAmendment);
+        const amendmentCancelBtn = getElement("amendmentCancelBtn");
+        if (amendmentCancelBtn) amendmentCancelBtn.addEventListener("click", closeOverrideAmendmentModal);
+        const overrideAmendmentModalBackdrop = getElement("overrideAmendmentModalBackdrop");
+        if (overrideAmendmentModalBackdrop) overrideAmendmentModalBackdrop.addEventListener("click", (e) => {
+          if (e.target.id === "overrideAmendmentModalBackdrop") {
+            closeOverrideAmendmentModal();
+          }
+        });
+        attachAmendmentHourAutoCalc();
 
         // Shift swap modal handlers
         const swapCancelBtn = getElement("swapCancelBtn");
@@ -2075,12 +2523,10 @@
             if (isAdmin) {
               // Admin direct swap - call directly from window context
               if (typeof window.adminExecuteShiftSwap === "function") {
-                await window.adminExecuteShiftSwap(peerId, peerDate);
+                console.log("[SWAP] Admin swap: initiator=", initiatorId, "peer=", peerId, "initiator_date=", initiatorDate, "peer_date=", peerDate);
+                const result = await window.adminExecuteShiftSwap(peerId, peerDate);
+                console.log("[SWAP] Admin swap result:", result);
                 closePublishedDetails();
-                // Reload the rota to show the swapped shifts
-                if (currentPeriod?.id) {
-                  await loadPeriod(currentPeriod.id);
-                }
                 alert("Swap executed successfully.");
               } else {
                 alert("Admin swap function not ready.");
@@ -2088,7 +2534,9 @@
             } else {
               // Staff propose swap
               if (typeof window.staffRequestShiftSwap === "function") {
-                await window.staffRequestShiftSwap(peerId, peerDate);
+                console.log("[SWAP] Staff swap request: initiator=", initiatorId, "peer=", peerId, "initiator_date=", initiatorDate, "peer_date=", peerDate);
+                const result = await window.staffRequestShiftSwap(peerId, peerDate);
+                console.log("[SWAP] Staff swap result:", result);
                 alert("Swap request sent. Awaiting peer and admin approval.");
               } else {
                 alert("Swap function not ready.");
@@ -2098,8 +2546,15 @@
             const modal = getElement("shiftSwapModal");
             if (modal) modal.setAttribute("aria-hidden", "true");
             window.swapInitiatorContext = null;
+            
+            // Reload rota to show updated shifts - fetch fresh data from database
+            if (typeof loadPeriod === "function" && window.currentPeriod && window.currentPeriod.id) {
+              console.log("[SWAP] Reloading period:", window.currentPeriod.id);
+              await loadPeriod(window.currentPeriod.id);
+              console.log("[SWAP] Period reload complete");
+            }
           } catch (err) {
-            console.error(err);
+            console.error("[SWAP] Error:", err);
             alert(`Swap failed: ${err.message}`);
           } finally {
             swapSubmitBtn.disabled = false;
@@ -2119,10 +2574,12 @@
         console.log("[ROTA BOOT] User authenticated, loading periods...");
         // Apply permission-based UI visibility and store globally
         // For now, default to true if PermissionsModule not available (will be replaced with real permission system)
-        canViewAllRequests = window.PermissionsModule?.hasPermission("requests.view_all") ?? true;
-        canViewOwnRequests = window.PermissionsModule?.hasPermission("requests.view_own") ?? true;
-        canEditDraft = window.PermissionsModule?.hasPermission("rota.edit_draft") ?? true;
-        canEditPublished = window.PermissionsModule?.hasPermission("rota.edit_published") ?? true;
+        canViewAllRequests = window.PermissionsModule?.hasPermission("requests.view_all") ?? false;
+        canViewOwnRequests = window.PermissionsModule?.hasPermission("requests.view_own") ?? false;
+        canEditDraft = window.PermissionsModule?.hasPermission("rota.edit_draft") ?? false;
+        canEditPublished = window.PermissionsModule?.hasPermission("rota.edit_published") ?? false;
+        
+        console.log("[ROTA] Permission check: canViewAllRequests=", canViewAllRequests, "canViewOwnRequests=", canViewOwnRequests);
         
         // Hide buttons if user lacks permissions
         const toggleRequestsBtnPerm = document.getElementById("toggleRequestsBtn");
@@ -2130,7 +2587,10 @@
         
         // Show requests button if user can view all OR view own
         if (!canViewAllRequests && !canViewOwnRequests && toggleRequestsBtnPerm) {
+          console.log("[ROTA] Hiding Show Requests button - no request view permissions");
           toggleRequestsBtnPerm.style.display = "none";
+        } else {
+          console.log("[ROTA] Show Requests button visible");
         }
 
         // Initialize modular draft editing (shift-editor.js) after auth
@@ -2160,11 +2620,16 @@
               console.log("[ROTA ONSAVE] Called with:", { userId, date, shiftId, overrideData });
               
               const key = `${userId}_${date}`;
-              const shift = draftShifts.find(s => s.id === shiftId);
+              const newShift = draftShifts.find(s => s.id === shiftId);
               
               // Optimistic update: update local map immediately
               const existing = assignmentsMap.get(key);
+              let oldShiftId = null;
+              let oldShiftCode = null;
               if (existing) {
+                oldShiftId = existing.shift_id;
+                const oldShift = shiftMap.get(oldShiftId);
+                oldShiftCode = oldShift?.code || 'UNKNOWN';
                 existing.shift_id = shiftId;
               } else {
                 assignmentsMap.set(key, { user_id: userId, date, shift_id: shiftId, status: "draft" });
@@ -2193,20 +2658,80 @@
                   // Update assignmentsMap with the ID
                   const existing = assignmentsMap.get(key);
                   if (existing) existing.id = existingDb.id;
+                  
+                  // Record history if in published mode and shift changed or added
+                  if (currentEditContext === "published") {
+                    // Only record if shift actually changed (or was added to empty cell)
+                    if (!oldShiftId || oldShiftId !== shiftId) {
+                      console.log("[ROTA ONSAVE] Recording history for shift change:", { oldShiftId, newShiftId: shiftId, assignmentId });
+                      const { error: histErr } = await supabaseClient
+                        .from("rota_assignment_history")
+                        .insert([{
+                          rota_assignment_id: assignmentId,
+                          user_id: userId,
+                          date: date,
+                          old_shift_id: oldShiftId || null,
+                          old_shift_code: oldShiftCode || null,
+                          new_shift_id: shiftId,
+                          new_shift_code: newShift?.code || 'UNKNOWN',
+                          change_reason: oldShiftId ? 'Admin changed shift' : 'Admin added shift',
+                          changed_by: window.currentUser?.id,
+                          changed_by_name: window.currentUser?.name,
+                          changed_at: new Date().toISOString()
+                        }]);
+                      if (histErr) {
+                        console.error("[ROTA ONSAVE] Error recording history:", histErr);
+                      } else {
+                        console.log("[ROTA ONSAVE] History recorded successfully");
+                      }
+                    }
+                  }
                 } else {
                   const { data: newAssignment } = await supabaseClient
                     .from("rota_assignments")
-                    .insert([{ user_id: userId, date, shift_id: shiftId, status: "draft" }])
+                    .insert([{ user_id: userId, date, shift_id: shiftId, status: currentEditContext === "published" ? "published" : "draft" }])
                     .select()
                     .single();
                   assignmentId = newAssignment?.id;
                   // Update assignmentsMap with the new ID
                   const existing = assignmentsMap.get(key);
                   if (existing && assignmentId) existing.id = assignmentId;
+                  
+                  // Record history for new assignment (if in published mode)
+                  if (currentEditContext === "published" && assignmentId) {
+                    console.log("[ROTA ONSAVE] Recording history for new shift:", { shiftId, assignmentId });
+                    const { error: histErr } = await supabaseClient
+                      .from("rota_assignment_history")
+                      .insert([{
+                        rota_assignment_id: assignmentId,
+                        user_id: userId,
+                        date: date,
+                        old_shift_id: null,
+                        old_shift_code: null,
+                        new_shift_id: shiftId,
+                        new_shift_code: newShift?.code || 'UNKNOWN',
+                        change_reason: 'Admin added shift',
+                        changed_by: window.currentUser?.id,
+                        changed_by_name: window.currentUser?.name,
+                        changed_at: new Date().toISOString()
+                      }]);
+                    if (histErr) {
+                      console.error("[ROTA ONSAVE] Error recording history:", histErr);
+                    } else {
+                      console.log("[ROTA ONSAVE] History recorded successfully");
+                    }
+                  }
                 }
                 
                 // Save override data if provided (published mode only)
-                if (overrideData && assignmentId) {
+                // Only save if there's actual override data (not just empty fields)
+                const hasActualOverride = overrideData && (
+                  overrideData.override_start_time || 
+                  overrideData.override_end_time || 
+                  overrideData.override_hours
+                );
+                
+                if (hasActualOverride && assignmentId) {
                   console.log("[ROTA ONSAVE] Saving override for assignmentId:", assignmentId, overrideData);
                   const { data: existingOverride } = await supabaseClient
                     .from("rota_assignment_overrides")
@@ -2263,11 +2788,42 @@
                   renderRota();
                 } else {
                   console.log("[ROTA ONSAVE] No override data to save");
+                  
+                  // If there's an existing override but no new override data, delete it
+                  if (assignmentId) {
+                    const { data: existingOverride } = await supabaseClient
+                      .from("rota_assignment_overrides")
+                      .select("id")
+                      .eq("rota_assignment_id", assignmentId)
+                      .maybeSingle();
+                    
+                    if (existingOverride?.id) {
+                      console.log("[ROTA ONSAVE] Deleting old override:", existingOverride.id);
+                      const { error: deleteErr } = await supabaseClient
+                        .from("rota_assignment_overrides")
+                        .delete()
+                        .eq("id", existingOverride.id);
+                      
+                      if (deleteErr) {
+                        console.error("[ROTA ONSAVE] Error deleting override:", deleteErr);
+                      } else {
+                        console.log("[ROTA ONSAVE] Override deleted successfully");
+                        overridesMap.delete(assignmentId);
+                        renderRota(); // Re-render to remove override badge
+                      }
+                    }
+                  }
                 }
               }
             },
             onClear: async (userId, date) => {
               const key = `${userId}_${date}`;
+              
+              // Get the current shift info before deleting (for history)
+              const existingAssignment = assignmentsMap.get(key);
+              const oldShiftId = existingAssignment?.shift_id;
+              const oldShift = oldShiftId ? shiftMap.get(oldShiftId) : null;
+              const oldShiftCode = oldShift?.code;
               
               // Optimistic update: remove from local map immediately
               assignmentsMap.delete(key);
@@ -2284,6 +2840,32 @@
                 .maybeSingle();
               
               if (!getErr && existing?.id) {
+                // Record history before deleting (if in published mode)
+                if (currentEditContext === "published" && oldShiftId) {
+                  console.log("[ROTA ONCLEAR] Recording history for cleared shift:", { oldShiftId, assignmentId: existing.id });
+                  const { error: histErr } = await supabaseClient
+                    .from("rota_assignment_history")
+                    .insert([{
+                      rota_assignment_id: existing.id,
+                      user_id: userId,
+                      date: date,
+                      old_shift_id: oldShiftId,
+                      old_shift_code: oldShiftCode || 'UNKNOWN',
+                      new_shift_id: null,
+                      new_shift_code: null,
+                      change_reason: 'Admin cleared shift',
+                      changed_by: window.currentUser?.id,
+                      changed_by_name: window.currentUser?.name,
+                      changed_at: new Date().toISOString()
+                    }]);
+                  if (histErr) {
+                    console.error("[ROTA ONCLEAR] Error recording history:", histErr);
+                  } else {
+                    console.log("[ROTA ONCLEAR] History recorded successfully");
+                  }
+                }
+                
+                // Now delete the assignment
                 await supabaseClient
                   .from("rota_assignments")
                   .delete()
@@ -2422,10 +3004,32 @@
       if (!window.currentUser) return [];
 
       const roleId = Number(window.currentUser.role_id);
+      const isAdmin = !!window.currentUser.is_admin;
+      
+      // Check if user is in Admin permission group
+      let isAdminGroup = false;
+      if (!isAdmin) {
+        try {
+          const { data: groups } = await supabaseClient
+            .from("user_permission_groups")
+            .select("permission_groups(name)")
+            .eq("user_id", window.currentUser.id);
+          if (groups && groups.some(g => g.permission_groups?.name === "Admin")) {
+            isAdminGroup = true;
+          }
+        } catch (e) {
+          console.warn("Failed to check admin group", e);
+        }
+      }
+      
       const clauses = ["target_scope.eq.all_staff"];
 
       if (window.currentUser.id) {
         clauses.push(`and(target_scope.eq.user,target_user_id.eq.${window.currentUser.id})`);
+      }
+
+      if (isAdmin || isAdminGroup) {
+        clauses.push(`target_scope.eq.admin`);
       }
 
       if (!Number.isNaN(roleId)) {
@@ -2697,28 +3301,58 @@
           console.log("[DEBUG] Accept clicked - notification:", notification);
           
           if (notification && notification.type === "swap_request") {
-            console.log("[DEBUG] Calling staff_respond_to_swap_request with:", {
-              user_id: window.currentUser.id,
-              swap_request_id: notification.payload?.swap_request_id,
-              response: "accepted"
-            });
-            
-            // Call staff_respond_to_swap_request for swap acceptance
-            const { data, error } = await supabaseClient.rpc(
-              "staff_respond_to_swap_request",
-              {
-                p_token: window.currentToken,
-                p_swap_request_id: notification.payload?.swap_request_id,
-                p_response: "accepted"
-              }
-            );
-            console.log("[DEBUG] RPC response:", { data, error });
-            if (error) throw error;
-            if (data && data.length > 0 && !data[0].success) {
-              throw new Error(data[0].error_message || "Unknown error");
+            let payload = notification.payload;
+            if (typeof payload === 'string') {
+              payload = JSON.parse(payload);
             }
-            console.log("[DEBUG] Swap request accepted successfully!");
-            alert("Swap request accepted!");
+            
+            // Check if this is an admin approval notification (swap_accepted)
+            if (payload?.notification_type === "swap_accepted" && window.currentUser?.is_admin) {
+              console.log("[DEBUG] Admin approving swap request with:", {
+                admin_id: window.currentUser.id,
+                swap_request_id: payload?.swap_request_id
+              });
+              
+              // Call admin_approve_swap_request for admin approval
+              const { data, error } = await supabaseClient.rpc(
+                "admin_approve_swap_request",
+                {
+                  p_token: window.currentToken,
+                  p_swap_request_id: payload?.swap_request_id
+                }
+              );
+              console.log("[DEBUG] Admin approve RPC response:", { data, error });
+              if (error) throw error;
+              if (data && data.length > 0 && !data[0].success) {
+                throw new Error(data[0].error_message || "Unknown error");
+              }
+              console.log("[DEBUG] Swap request approved successfully!");
+              alert("Swap approved!");
+            } else {
+              // Staff responding to swap request (not an admin)
+              console.log("[DEBUG] Calling staff_respond_to_swap_request with:", {
+                user_id: window.currentUser.id,
+                swap_request_id: payload?.swap_request_id,
+                response: "accepted"
+              });
+              
+              // Call staff_respond_to_swap_request for swap acceptance
+              const { data, error } = await supabaseClient.rpc(
+                "staff_respond_to_swap_request",
+                {
+                  p_token: window.currentToken,
+                  p_swap_request_id: payload?.swap_request_id,
+                  p_response: "accepted"
+                }
+              );
+              console.log("[DEBUG] RPC response:", { data, error });
+              if (error) throw error;
+              if (data && data.length > 0 && !data[0].success) {
+                throw new Error(data[0].error_message || "Unknown error");
+              }
+              console.log("[DEBUG] Swap request accepted successfully!");
+              alert("Swap request accepted!");
+            }
           } else {
             // Standard notification acceptance
             await updateNotificationStatus(id, "accepted");
@@ -2749,27 +3383,57 @@
           console.log("[DEBUG] Decline clicked - notification:", notification);
           
           if (notification && notification.type === "swap_request") {
-            console.log("[DEBUG] Calling staff_respond_to_swap_request with:", {
-              user_id: window.currentUser.id,
-              swap_request_id: notification.payload?.swap_request_id,
-              response: "declined"
-            });
-            
-            // Call staff_respond_to_swap_request for swap decline
-            const { data, error } = await supabaseClient.rpc(
-              "staff_respond_to_swap_request",
-              {
-                p_token: window.currentToken,
-                p_swap_request_id: notification.payload?.swap_request_id,
-                p_response: "declined"
-              }
-            );
-            console.log("[DEBUG] RPC response:", { data, error });
-            if (error) throw error;
-            if (data && data.length > 0 && !data[0].success) {
-              throw new Error(data[0].error_message || "Unknown error");
+            let payload = notification.payload;
+            if (typeof payload === 'string') {
+              payload = JSON.parse(payload);
             }
-            alert("Swap request declined!");
+            
+            // Check if this is an admin approval notification (swap_accepted)
+            if (payload?.notification_type === "swap_accepted" && window.currentUser?.is_admin) {
+              console.log("[DEBUG] Admin declining swap request with:", {
+                admin_id: window.currentUser.id,
+                swap_request_id: payload?.swap_request_id
+              });
+              
+              // Call admin_decline_swap_request for admin decline
+              const { data, error } = await supabaseClient.rpc(
+                "admin_decline_swap_request",
+                {
+                  p_token: window.currentToken,
+                  p_swap_request_id: payload?.swap_request_id
+                }
+              );
+              console.log("[DEBUG] Admin decline RPC response:", { data, error });
+              if (error) throw error;
+              if (data && data.length > 0 && !data[0].success) {
+                throw new Error(data[0].error_message || "Unknown error");
+              }
+              console.log("[DEBUG] Swap request declined successfully!");
+              alert("Swap declined!");
+            } else {
+              // Staff responding to swap request (not an admin)
+              console.log("[DEBUG] Calling staff_respond_to_swap_request with:", {
+                user_id: window.currentUser.id,
+                swap_request_id: payload?.swap_request_id,
+                response: "declined"
+              });
+              
+              // Call staff_respond_to_swap_request for swap decline
+              const { data, error } = await supabaseClient.rpc(
+                "staff_respond_to_swap_request",
+                {
+                  p_token: window.currentToken,
+                  p_swap_request_id: payload?.swap_request_id,
+                  p_response: "declined"
+                }
+              );
+              console.log("[DEBUG] RPC response:", { data, error });
+              if (error) throw error;
+              if (data && data.length > 0 && !data[0].success) {
+                throw new Error(data[0].error_message || "Unknown error");
+              }
+              alert("Swap request declined!");
+            }
           } else {
             // Standard notification decline
             await updateNotificationStatus(id, "declined");
@@ -2896,6 +3560,36 @@
         return;
       }
     });
+
+    // Add hover effects to publish/unpublish buttons
+    const publishBtn = document.getElementById("publishBtn");
+    const unpublishBtn = document.getElementById("unpublishBtn");
+    
+    if (publishBtn) {
+      publishBtn.addEventListener("mouseenter", function() {
+        this.style.background = "#047857";
+        this.style.boxShadow = "0 4px 8px rgba(0,0,0,0.15)";
+        this.style.transform = "translateY(-2px)";
+      });
+      publishBtn.addEventListener("mouseleave", function() {
+        this.style.background = "#059669";
+        this.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+        this.style.transform = "translateY(0)";
+      });
+    }
+    
+    if (unpublishBtn) {
+      unpublishBtn.addEventListener("mouseenter", function() {
+        this.style.background = "#b91c1c";
+        this.style.boxShadow = "0 4px 8px rgba(0,0,0,0.15)";
+        this.style.transform = "translateY(-2px)";
+      });
+      unpublishBtn.addEventListener("mouseleave", function() {
+        this.style.background = "#dc2626";
+        this.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+        this.style.transform = "translateY(0)";
+      });
+    }
 
   </script>
 </body>

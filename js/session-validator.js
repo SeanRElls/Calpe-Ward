@@ -7,13 +7,30 @@
 
 const TOKEN_KEY = "calpe_ward_token";
 const SESSION_KEY = "calpe_ward_session";
+const IMPERSONATION_TOKEN_KEY = "calpeward.impersonationToken";
 
 let currentToken = null;
+let supabaseClient = null; // Reuse single Supabase client instance
+
+// Get or create Supabase client
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON);
+  }
+  return supabaseClient;
+}
+
+// Get the active token - impersonation token if viewing as, otherwise normal token
+function getActiveSessionToken() {
+  const impToken = sessionStorage.getItem(IMPERSONATION_TOKEN_KEY);
+  if (impToken) return impToken;
+  return sessionStorage.getItem(TOKEN_KEY);
+}
 
 // Validate session on page load
 async function validateSessionOnLoad() {
-  // Get token from sessionStorage
-  const token = sessionStorage.getItem(TOKEN_KEY);
+  // Get token from sessionStorage (prioritize impersonation token)
+  const token = getActiveSessionToken();
 
   if (!token) {
     // No token - redirect to login
@@ -25,12 +42,9 @@ async function validateSessionOnLoad() {
   currentToken = token;
   window.currentToken = token;  // Expose globally for RPC calls
 
-  // Initialize Supabase (from config.js)
-  const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON);
-
   // Validate token with server
   try {
-    const { data, error } = await supabaseClient.rpc('validate_session', {
+    const { data, error } = await getSupabaseClient().rpc('validate_session', {
       p_token: token
     });
 
@@ -58,7 +72,7 @@ function redirectToLogin(message) {
   if (message) {
     sessionStorage.setItem('loginMessage', message);
   }
-  window.location.href = '/login.html';
+  window.location.href = 'index.html';
 }
 
 // Clear all session data
@@ -77,10 +91,8 @@ async function logout() {
   }
 
   try {
-    const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON);
-    
     // Revoke session on server
-    await supabaseClient.rpc('revoke_session', {
+    await getSupabaseClient().rpc('revoke_session', {
       p_token: currentToken
     });
   } catch (err) {

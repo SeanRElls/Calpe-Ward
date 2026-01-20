@@ -137,3 +137,25 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# ====================================
+# Database dumps and sensitive files
+# ====================================
+# PostgreSQL dumps
+*.sql.dump
+*.dump
+*dump*.sql
+full_dump*.sql
+backup*.sql
+
+# Database connection strings and credentials
+.env.local
+.env.*.local
+service_role_key.txt
+database_credentials.txt
+
+# Sensitive config
+*password*
+*secret*
+!package.json
+!package-lock.json

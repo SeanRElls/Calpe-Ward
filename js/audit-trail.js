@@ -13,30 +13,18 @@ async function loadAuditLogs() {
     return;
   }
 
-  const filterAction = document.getElementById("auditFilterAction")?.value?.trim() || "";
-  const filterUser = document.getElementById("auditFilterUser")?.value?.trim() || "";
+  const filterAction = document.getElementById("auditFilterAction")?.value?.trim() || null;
+  const filterUser = document.getElementById("auditFilterUser")?.value?.trim() || null;
   const daysBack = parseInt(document.getElementById("auditFilterDays")?.value || "7");
 
   try {
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - daysBack);
-
-    // Build query
-    let query = window.supabaseClient
-      .from("audit_logs")
-      .select("*")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    if (filterAction) {
-      query = query.ilike("action", `%${filterAction}%`);
-    }
-
-    const { data: logs, error } = await query;
+    // Use unified audit trail RPC that combines audit_logs and rota_assignment_history
+    const { data: logs, error } = await window.supabaseClient
+      .rpc("get_unified_audit_trail", {
+        p_days_back: daysBack,
+        p_action_filter: filterAction,
+        p_user_filter: filterUser
+      });
 
     if (error) {
       console.error("Error loading audit logs:", error);

@@ -1,2648 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Calpe Ward Off Duty Requests</title>
-  
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Calpe Ward Requests">
-  <link rel="manifest" href="manifest.webmanifest">
-
-  <!-- Supabase JS (v2) -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="js/config.js"></script>
-  <script src="js/session-validator.js"></script>
-  <script src="js/nav-bar.js"></script>
-  <script src="js/view-as.js?v=8"></script>
-
-  <!-- Quill Rich Text Editor -->
-  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
-
-  <!-- Shift Functions -->
-  <script src="js/shift-functions.js" defer></script>
-  <script src="js/notifications-shared.js" defer></script>
-
-  <!-- =========================
-       STYLES
-       ========================= -->
-
-  <style>
- :root{
-  --grid: #d9d9d9;
-  --grid-soft: #ececec;
-  --text: #111;
-  --muted: #6b6b6b;
-  --header: #f4f4f4;
-  --sheet-bg: #ffffff;
-  --sep: #c0c0c0;
-  --sep-fill: #e3e3e3;
-
-  --closed-fill: #f0f0f0;
-  --weekend-fill: #fafafa;
-
-  --cn-band: #a8e6a1;
-  --sn-band: #9fd0ff;
-  --na-band: #ffd18a;
-
-  /* ✅ shared modal/admin theme vars (so userModal doesn't rely on later CSS order) */
-  --accent: #4F8DF7;
-  --accent-hover: #2F6FEA;
-  --accent-weak: rgba(79,141,247,0.16);
-  --accent-weak-hover: rgba(79,141,247,0.24);
-
-  --ink: #0f172a;
-  --card: #ffffff;
-  --line: #e6e8ee;
-  --soft: #f6f7fb;
-}
-
-
-    body{
-      font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      margin: 18px;
-      color: var(--text);
-      background: #f7f7f7;
-    }
-
-.wrap{
-  background: var(--sheet-bg);
-  border: 1px solid var(--grid);
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-  padding: 10px;
-  overflow: hidden;
-  
-}
-/* Scroll container for the whole rota */
-.rota-scroll{
-  width: 100%;
-  overflow: auto;                 /* both x + y */
-  max-height: calc(100vh - 220px);/* adjust this number */
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
-}
-
-
-/* ===== nice status pill for closeLabel ===== */
-#closeLabel{
-  margin-top: 6px;
-}
-.close-pill .msg{ font-weight: 650; }
-
-    .close-pill{
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: #f2f4f7;
-  border: 1px solid #d7dbe0;
-  color: #222;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-    body.modal-open{
-  overflow: hidden;
-  
-}
-    
-.close-pill .dot{
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #2e7d32; /* green */
-  flex: 0 0 auto;
-}
-
-.close-pill.is-soon{
-  background: #fff4e5;
-  border-color: #ffd59a;
-}
-.close-pill.is-soon .dot{ background:#d97706; } /* amber */
-
-.close-pill.is-closed{
-  background: #f3f3f3;
-  border-color: #d0d0d0;
-  color: #666;
-}
-.close-pill.is-closed .dot{ background:#888; }
-
-.close-pill strong{
-  font-weight: 750;
-}
-
-.close-pill .mini{
-  opacity: 0.85;
-}
-.week-toggle-btn{
-  min-height: 40px;
-  padding: 10px 14px;
-}
-.close-pill .timeleft{
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.06);
-}
-
-#adminPeriodSelect{
-  min-height: 40px;
-}
-    .titlebar{
-      display:flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      margin: 2px 2px 12px;
-    }
-
-    h1{
-      font-size: 22px;
-      margin: 0;
-      font-weight: 750;
-      letter-spacing: 0.2px;
-    }
-
-    .subtitle{
-      font-size: 13px;
-      color: var(--muted);
-    }
-
-    .rightbits{
-      display:flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .badge{
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background:#eee;
-      color:#222;
-      white-space: nowrap;
-    }
-
-    .badge.admin{
-      background:#222;
-      color:#fff;
-    }
-
-  .week-toggle-btn{
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  padding: 6px 10px;
-  min-width: 0;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1;
-}
-
-    table{
-      border-collapse: separate;
-      border-spacing: 0;
-      width: max-content;
-      min-width: 100%;
-      font-size: 12px;
-    }
-
-    th, td{
-      border-right: 1px solid var(--grid-soft);
-      border-bottom: 1px solid var(--grid-soft);
-      text-align: center;
-      vertical-align: middle;
-      padding: 0;
-      height: 24px;
-      background: #fff;
-      min-width: 34px;
-    }
-
-    table tr:first-child th{ border-top: 1px solid var(--grid); }
-    table tr th:first-child, table tr td:first-child{ border-left: 1px solid var(--grid); }
-    table tr:last-child td{ border-bottom: 1px solid var(--grid); }
-    table tr th{ border-bottom: 1px solid var(--grid); }
-
-/* =========================================================
-   STICKY HEADER (single source of truth)
-   Fixes iOS "see-through" + keeps your old look
-   ========================================================= */
-
-:root{
-  --h-week: 28px; /* row 1 height */
-  --h-day:  22px; /* row 2 height */
-  --h-date: 22px; /* row 3 height */
-}
-
-/* Make sure the scroll container forms a stacking context */
-.rota-scroll{
-  position: relative;
-  isolation: isolate; /* stops weird bleed-through compositing */
-}
-
-/* Header cells: force truly opaque paint on iOS */
-thead th{
-  position: sticky;
-  background: var(--header) !important;
-  background-clip: padding-box;
-  opacity: 1;
-
-  /* force its own composited layer */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-
-  /* crucial: always above tbody */
-  z-index: 100;
-}
-
-/* Exact heights so Safari can’t invent half-pixel gaps */
-thead tr:nth-child(1) th{ height: var(--h-week); top: 0; z-index: 130; background:#ededed !important; }
-thead tr:nth-child(2) th{ height: var(--h-day);  top: calc(var(--h-week) - 1px); z-index: 120; }
-thead tr:nth-child(3) th{ height: var(--h-date); top: calc(var(--h-week) + var(--h-day) - 2px); z-index: 110; }
-
-/* Draw the bottom line once */
-thead tr:nth-child(3) th{
-  box-shadow: inset 0 -1px 0 var(--grid);
-}
-
-/* Keep the pinned name header above everything */
-thead .name-col{
-  z-index: 200 !important;
-  background: #ededed !important;
-}
-/* Rota name cells (tbody) */
-    tbody td.name-col{
-    font-weight: 600;   /* 500 if you want softer */
-    background: #fff;
-    position: sticky;
-    left: 0;
-    z-index: 50;
-  }
-
-    thead th.name-col{
-  font-weight: 750;
-}
-
-    
-/* Keep body cells below header no matter what Safari feels like */
-tbody td{
-  position: relative;
-  z-index: 1;
-}
-
-    
-
-    
-@media (max-width: 480px){
-  .name-col{
-    font-size: 12px;
-  }
-}
-
-  .week-comment-btn{
-  flex: 0 0 auto;          /* stop flex stretching */
-  min-width: 0 !important; /* override global min-width:110px */
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  margin-left: 6px;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  border: 1px solid #ccc;
-  border-radius: 999px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-}
-.week-comment-btn.has-comment{
-  border-color:#111;
-  font-weight:700;
-}
-    
-.week-label { font-weight: 600; }
-
-    .header-subrow{
-  display:flex;
-  flex-wrap:wrap;
-  gap: 8px;              /* <-- this is your "space after the badge" */
-  align-items:center;
-}
-#periodLabel{ margin: 0; }
-#closeLabel{ margin: 0; }
-    th.week-label{
-      font-weight: 800;
-      font-size: 12px;
-      letter-spacing: 0.2px;
-      color: #222;
-      height: 28px;
-      background: #ededed;
-    }
-
-    th.day{
-      font-weight: 800;
-      height: 22px;
-      color: #222;
-    }
-
-    th.date{
-      font-weight: 700;
-      height: 22px;
-      color: #222;
-    }
-
-    .week-sep{
-      min-width: 14px;
-      width: 14px;
-      background: var(--sep-fill) !important;
-      border-right: 2px solid var(--sep) !important;
-      border-left: 0 !important;
-    }
-
-    .closed{
-      background: var(--closed-fill) !important;
-      color: #9b9b9b;
-    }
-
-    .weekend{
-      background: var(--weekend-fill);
-    }
-    
-.badge.admin{
-  cursor: pointer;
-  user-select: none;
-}
-
-.badge.admin:hover{
-  filter: brightness(0.9);
-}
-
-.badge.admin:active{
-  transform: scale(0.97);
-}
-    tr.section-row td{
-      height: 22px;
-      font-weight: 850;
-      text-align: left;
-      padding: 0 10px;
-      border-top: 2px solid #9a9a9a;
-      border-bottom: 2px solid #9a9a9a;
-    }
-
-    tr.section-row td span{
-      color: #1b1b1b;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-    }
-
-    td.section-cn { background: var(--cn-band) !important; }
-    td.section-sn { background: var(--sn-band) !important; }
-    td.section-na { background: var(--na-band) !important; }
-
-    td.cell{
-      font-size: 12px;
-      color: #111;
-    }
-
-    td.cell:hover{
-      background: #f6fbff;
-    }
-
-    /* Locked vs unlocked rows (admin-only highlight) */
-    /* Locked cells get a faint warm background and subtle left accent when
-       viewed by admins so staff-visible locked slots are obvious at a glance. */
-    /* Make the selector specific and use !important so it overrides the
-       `.closed` rule (which uses !important) when admins view the rota. */
-    body.admin-view tr.locked td.cell,
-    body.admin-view tr.locked td.cell.closed,
-    body.admin-view td.cell.locked-admin {
-      background-color: #fff7e0 !important; /* faint warm yellow/gold */
-      box-shadow: inset 4px 0 0 rgba(255, 183, 0, 0.12) !important; /* subtle left accent */
-      opacity: 1 !important; /* keep text legible */
-      color: inherit !important;
-    }
-
-    body.admin-view tr.locked td.cell:hover,
-    body.admin-view td.cell.locked-admin:hover{
-      background-color: #fff7e0 !important; /* keep hover from reverting to white */
-    }
-
-    tr.unlocked td.cell{ opacity: 1; }
-    tr.unlocked td.cell.editable{ outline: 2px solid rgba(0,0,0,0.08); cursor: pointer; }
-
-    /* ===== MODALS (shared) ===== */
-.modal-backdrop{
-  position: fixed;
-  inset: 0;
-  background: rgba(15,23,42,0.28);
-  backdrop-filter: blur(3px);
-  display: none;
-  z-index: 1000;
-
-  padding: 14px;
-  padding-bottom: calc(14px + env(safe-area-inset-bottom));
-
-  overflow: hidden;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-/* ✅ When any modal backdrop is opened (including userModal) */
-.modal-backdrop[aria-hidden="false"]{
-  display: flex;
-}
-
-
-.modal{
-  width: min(520px, 100%);
-  background: linear-gradient(180deg, #ffffff 0%, #f6f8fc 100%);
-  border-radius: 22px;
-  border: 1px solid rgba(15,23,42,0.05);
-  box-shadow: var(--modal-shadow);
-  padding: 18px;
-  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color: var(--ink);
-
-  /* ✅ scrolling */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-
-  /* ✅ REAL viewport height on modern mobile */
-  max-height: calc(100dvh - 28px);
-
-  /* ✅ keep last content reachable above iPhone home bar */
-  padding-bottom: calc(18px + env(safe-area-inset-bottom));
-}
-
-/* ✅ fallback for older iOS that doesn't support dvh properly */
-@supports not (height: 100dvh){
-  .modal{ max-height: calc(100vh - 28px); }
-}
-
-
-    .modal h2{
-      margin: 0 0 8px 0;
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: 0.1px;
-    }
-
-    .modal p{
-      margin: 0 0 12px 0;
-      font-size: 12.5px;
-      color: #6b7387;
-      line-height: 1.35;
-    }
-
-    .row{
-      display:flex;
-      gap: 10px;
-      align-items: stretch;
-      flex-wrap: wrap;
-    }
-
-
-
-    .btns{
-      display:flex;
-      gap: 10px;
-      flex: 1 1 200px;
-      justify-content: flex-end;
-      min-width: 200px;
-    }
-
-    button{
-      font-size: 14px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 1px solid #ccc;
-      background: #f7f7f7;
-      cursor: pointer;
-      flex: 1;
-      min-width: 110px;
-
-      
-    }
-/* =========================
-   HEADER BUTTON FIX
-   ========================= */
-.rightbits button{
-  flex: 0 0 auto !important;
-  min-width: 0 !important;
-  width: auto;
-  padding: 4px 10px !important;
-  border-radius: 999px !important;
-  font-size: 12px !important;
-  line-height: 1 !important;
-  height: 28px;
-}
-
-#noticeBell{
-  width: 36px;
-  padding: 0 !important;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-#noticeBellDot{
-  position: absolute;
-  right: 6px;
-  top: 3px;
-}
-
-
-
-    
-    button.primary{
-      background:#111;
-      border-color:#111;
-      color:#fff;
-    }
-
-    button:disabled{
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .err{
-      margin-top: 10px;
-      font-size: 12px;
-      color: #b00020;
-      display:none;
-    }
-
-    @media (max-width: 480px){
-      body{ margin: 12px; }
-      .wrap{ padding: 12px; }
-      .titlebar{ flex-direction: column; align-items: flex-start; }
-      .rightbits{ justify-content: flex-start; }
-      .btns{ flex: 1 1 100%; min-width: 0; }
-      button{ min-width: 0; }
-    }
-
-
-#adminUsersList{
-  border: 1px solid #eceef2;
-  border-radius: 14px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.user-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-  cursor: grab;
-}
-
-.user-row:active {
-  cursor: grabbing;
-}
-
-.user-row.dragging {
-  opacity: 0.5;
-}
-
-.user-row.drag-over {
-  border-top: 2px solid #4A90E2;
-}
-
-.drag-handle {
-  cursor: grab;
-  user-select: none;
-  font-size: 14px;
-  color: #ccc;
-  padding: 2px 4px;
-  margin-left: -4px;
-  margin-right: 4px;
-}
-
-.drag-handle:hover {
-  color: #999;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-.user-meta{ min-width:0; }              /* allows name to shrink */
-.user-name{
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-
-
-.user-actions button{
-  white-space: nowrap;                  /* ✅ prevents button text wrapping */
-}
-
-.user-meta{
-  min-width:0;
-}
-
-.user-name{
-  font-weight: 600;           /* or 500 if you want even quieter */
-  font-size: 13px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-
-
-
-
-.user-actions{
-  display:flex;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.user-tag{
-  display:inline-block;
-  margin-left: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  border: 1px solid #ddd;
-  background: #f7f7f7;
-  color: #333;
-}
-
-.user-tag.admin{
-  background:#111;
-  border-color:#111;
-  color:#fff;
-}
-
-.user-tag.inactive{
-  background:#f3f3f3;
-  color:#666;
-}
-
-    #adminViewUsers #adminSaveUserBtn,
-#adminViewUsers #adminCancelUserEditBtn{
-  height: 36px;
-  border-radius: 999px;
-}
-
-    /* ===== SHIFT PICKER ===== */
-    .shift-grid{
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin: 12px 0 16px;
-    }
-
-    .shift-btn{
-      padding: 14px 0;
-      font-size: 14px;
-      border-radius: 12px;
-      border: 1px solid #ccc;
-      background: #f7f7f7;
-      cursor: pointer;
-      font-weight: 700;
-    }
-
-    .shift-btn:hover{
-      background: #e9f2ff;
-    }
-
-    .shift-btn.off{
-      background: #ffecec;
-      border-color: #ffb3b3;
-    }
-    
-#periodSelect{
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid #ccc;
-  background: #fff;
-  font-size: 12px;
-  min-width: 220px;
-  flex: 0 0 auto;
-}
-
-.week-head{ z-index: 35; }
-.week-comment-btn{ position: relative; z-index: 60; }
-
-    
-  @media (max-width: 480px){
-  .shift-grid{
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* =========================
-   USER MODAL - match ADMIN
-   ========================= */
-
-#userModal .modal{
-  padding: 18px;
-  border-radius: 22px;
-  background: linear-gradient(180deg, #ffffff 0%, #f6f8fc 100%);
-  border: 1px solid rgba(15,23,42,0.05);
-  color: var(--ink);
-  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-}
-
-#userModal h2{
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  margin: 0 0 6px;
-}
-
-#userModal .subtitle{
-  font-size: 12px;
-  color: #667085;
-}
-
-/* card block */
-/* Only make actual “cards” look like cards */
-#userModal .card{
-  border: 1px solid #e7ebf3;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 8px 20px rgba(15,23,42,0.06);
-}
-
-
-/* stack the 3 inputs */
-#userModal .row{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* compact inputs */
-#userModal input.user-pin{
-  height: 32px;
-  padding: 4px 12px;
-  border-radius: 10px;
-  border: 1px solid #e5eaf3;
-  font-size: 12.5px;
-  background: #fff;
-  letter-spacing: 2px;
-  text-align: center;
-  box-sizing: border-box;
-}
-
-/* buttons like admin */
-#userModal button{
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 12px;
-  font-size: 12.5px;
-  border: 1px solid #e5eaf3;
-  background: #fff;
-  color: var(--ink);
-  min-width: auto;
-  flex: 0 0 auto;
-}
-
-#userModal button.primary{
-  background: linear-gradient(180deg, #6f8bff 0%, #5472f2 100%);
-  border: 1px solid rgba(84,114,242,0.5);
-  color: #fff;
-}
-
-#userModal button.primary:hover{
-  background: linear-gradient(180deg, #6382ff 0%, #4a67e2 100%);
-  border-color: rgba(74,103,226,0.6);
-}
-
-/* save button right aligned */
-#userModal #userSavePin{
-  align-self: flex-end;
-}
-
-/* bottom row: logout left, close right */
-#userModal .btns:last-of-type{
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-/* ===== User modal header with FLAGS ===== */
-#userModal .user-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-#userModal .user-flags{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-end;
-  gap: 6px;
-}
-
-#userModal .flags-label{
-  font-size: 11px;
-  font-weight: 500;
-  color: #667085;
-}
-
-#userModal .flags-buttons{
-  display:flex;
-  gap: 6px;
-}
-
-#userModal .flag-btn{
-  width: 38px;
-  height: 30px;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid #d6dbe4;
-  background: #fff;
-  font-size: 14px;
-  line-height: 1;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-}
-
-#userModal .flag-img{
-  width: 20px;
-  height: 20px;
-  display: block;
-  border-radius: 4px;
-}
-
-/* =========================
-   USER MODAL (clean header)
-   ========================= */
-
-#userModal .user-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-#userModal .user-head-left{ min-width:0; }
-
-#userModal .user-flags{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-end;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-#userModal .flags-label{
-  font-size: 12px;
-  font-weight: 600;        /* not shouty, not “FLAGS” energy */
-  color: #667085;
-}
-
-#userModal .flags-buttons{
-  display:flex;
-  gap: 8px;
-}
-
-#userModal .flag-btn{
-  font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji", system-ui, sans-serif;
-  font-size: 18px;
-  line-height: 1;
-
-  width: 38px;
-  height: 34px;
-  padding: 0;
-
-  border-radius: 999px;
-  border: 1px solid #d6dbe4;
-  background: #fff;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  cursor: pointer;
-  user-select: none;
-}
-
-#userModal .flag-btn.is-active{
-  border-color: rgba(79,141,247,0.45);
-  background: rgba(79,141,247,0.10);
-  opacity: 1;
-}
-
-#userModal .flag-btn:not(.is-active){
-  opacity: 0.7;
-}
-
-#userModal .user-footer{
-  display:flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-/* =========================
-   WEEK COMMENT MODAL
-   ========================= */
-#weekCommentModal #weekCommentAdminList{
-  border: 1px solid #e7ebf3 !important;
-  border-radius: 16px !important;
-  padding: 12px !important;
-  background: #ffffff !important;
-  box-shadow: inset 0 1px 2px rgba(15,23,42,0.06);
-}
-
-#weekCommentModal .week-comment-row{
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid #eef1f6;
-  background: #f9fafc;
-}
-
-#weekCommentModal .week-comment-row + .week-comment-row{
-  margin-top: 10px;
-}
-
-#weekCommentModal .week-comment-name{
-  font-weight: 700;
-}
-
-#weekCommentModal .week-comment-meta{
-  font-size: 11px;
-  color: #6b7387;
-  margin-top: 2px;
-}
-
-#weekCommentModal .week-comment-text{
-  margin-top: 6px;
-  white-space: pre-wrap;
-}
-
-#weekCommentModal #weekCommentYourLabel{
-  font-size: 12.5px;
-  color: #6b7387;
-}
-
-#weekCommentModal #weekCommentInput{
-  width: 100%;
-  min-height: 110px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid #e5eaf3;
-  background: #ffffff;
-  font-size: 12.5px;
-  line-height: 1.4;
-  box-shadow: inset 0 1px 2px rgba(15,23,42,0.06);
-  box-sizing: border-box;
-}
-
-#weekCommentModal .btns{
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-
-#weekCommentModal button{
-  height: 32px !important;
-  padding: 0 14px !important;
-  border-radius: 12px !important;
-  font-size: 12.5px !important;
-  min-width: auto !important;
-  flex: 0 0 auto !important;
-}
-
-/* =========================
-   PRINT MODAL
-   ========================= */
-#printModal .card{
-  border: 1px solid #e7ebf3;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15,23,42,0.06);
-}
-
-#printModal #printCloseX{
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid #e5eaf3 !important;
-  background: #ffffff !important;
-  color: #64748b !important;
-  box-shadow: none;
-  flex: 0 0 auto;
-  min-width: 0 !important;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px !important;
-}
-
-#printModal button{
-  height: 32px !important;
-  padding: 0 14px !important;
-  border-radius: 12px !important;
-  font-size: 12.5px !important;
-  border: 1px solid #e5eaf3 !important;
-  background: #ffffff !important;
-  color: var(--ink) !important;
-  box-shadow: 0 3px 8px rgba(15,23,42,0.05) !important;
-  min-width: 0 !important;
-}
-
-#printModal button{
-  box-sizing: border-box !important;
-  height: 32px !important;
-  padding: 0 14px !important;
-  border-radius: 12px !important;
-  font-size: 12.5px !important;
-  min-width: auto !important;
-  flex: 0 0 auto !important;
-  background: #ffffff !important;
-  border: 1px solid #e5eaf3 !important;
-  color: var(--ink) !important;
-  box-shadow: 0 2px 6px rgba(15,23,42,0.05) !important;
-}
-
-#printModal button.primary,
-#printModal #printAdminOptions button[onclick]{
-  background: #eaf0ff !important;
-  border: 1px solid #c6d4ff !important;
-  color: #2e50d6 !important;
-  box-shadow: 0 4px 10px rgba(46,80,214,0.12) !important;
-}
-
-#printModal button.primary:hover,
-#printModal #printAdminOptions button[onclick]:hover{
-  background: #e0e9ff !important;
-  border-color: #b6c7ff !important;
-}
-
-     /* =========================
-   MOBILE HEADER LAYOUT (FINAL)
-   ========================= */
-@media (max-width: 520px){
-
-  /* Title area tighter */
-  .titlebar{
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    margin: 0 0 10px;
-  }
-
-  h1{
-    font-size: 20px;
-    line-height: 1.1;
-  }
-
-  /* Space under Requests closed/open pill */
-  #closeLabel{
-    margin-top: 4px;
-    margin-bottom: 8px;
-  }
-
-  .close-pill{
-    padding: 6px 10px;
-    gap: 8px;
-    font-size: 11px;
-  }
-
-  .close-pill .timeleft{
-    padding: 3px 7px;
-    font-size: 11px;
-  }
-
-  .close-pill .mini{
-    display: none;
-  }
-
-  /* RIGHT SIDE CONTROLS */
-  .rightbits{
-    width: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: flex-start;
-  }
-
-  /* Dropdown takes full row */
-  #periodSelect{
-    flex: 1 1 100%;
-    width: 100%;
-    height: 34px;
-    font-size: 12px;
-    border-radius: 999px;
-  }
-
-  /* Logged-in + ADMIN sit together underneath */
-  #loginBadge,
-  #adminBadge{
-    flex: 0 0 auto;
-    font-size: 11px;
-    padding: 6px 10px;
-    white-space: nowrap;
-  }
-}
-/* =========================================================
-   ADMIN UI PATCH: compact, colored, tabs sticky
-   ========================================================= */
-:root{
-  --accent: #5b7cfa;
-  --accent-hover: #4f6df0;
-  --accent-weak: rgba(91,124,250,0.12);
-  --accent-weak-hover: rgba(91,124,250,0.18);
-
-  --ink: #0f172a;
-  --card: #ffffff;
-  --line: #eef1f6;
-  --soft: #f7f9fc;
-  --modal-card: #ffffff;
-  --modal-shadow: 0 28px 80px rgba(15,23,42,0.14);
-}
-
-/* Make ADMIN badge not "villain mode" */
-.badge.admin{
-  background: var(--accent);
-  border: 1px solid rgba(0,0,0,0.06);
-  color: #fff;
-}
-
-    
-/* Admin modal container tighter + nicer */
-#adminModal{
-  background: rgba(15,23,42,0.28);
-  backdrop-filter: blur(3px);
-}
-
-#adminModal .modal h2{
-  margin: 2px 0 4px;
-  line-height: 1.15;
-}
-
-#adminModal .modal p.subtitle{
-  margin: 0 0 8px;
-}
-
-#adminModal .modal{
-  padding: 18px;
-  border-radius: 22px;
-  background: linear-gradient(180deg, #ffffff 0%, #f6f8fc 100%);
-  border: 1px solid rgba(15,23,42,0.05);
-  box-shadow: var(--modal-shadow);
-}
-
-/* Sticky tab row (so it doesn't "disappear" when you scroll) */
-#adminModal .modal > div:first-of-type{
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
-  padding-top: 4px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-/* Tabs container */
-.admin-tabs{
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px 6px;
-  margin: 6px 0 16px;
-  border-radius: 14px;
-  background: #f5f7fb;
-  border: 1px solid #e7ecf4;
-  box-shadow: none;
-  justify-content: flex-start;
-  align-items: center;
-  width: fit-content;
-}
-
-/* Tabs: compact segmented control style */
-#adminTabPeriods,
-#adminTabGenerate,
-#adminTabUsers,
-#adminTabNotices {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: transparent;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #6b7387;
-  min-width: 0;
-  flex: 0 0 auto;
-}
-#adminModal .admin-tab{
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  border-radius: 12px !important;
-  height: 28px !important;
-  padding: 0 10px !important;
-  line-height: 28px !important;
-}
-#adminModal .admin-tab:hover{
-  color: var(--ink);
-  background: rgba(15,23,42,0.04) !important;
-}
-#adminTabPeriods.is-active,
-#adminTabGenerate.is-active,
-#adminTabUsers.is-active,
-#adminTabNotices.is-active{
-  background: #ffffff;
-  color: var(--ink);
-  border: 1px solid #e4e9f2;
-  box-shadow: 0 4px 10px rgba(15,23,42,0.08);
-}
-
-/* Buttons inside admin: smaller by default */
-#adminModal button{
-  box-sizing: border-box !important;
-  height: 32px !important;
-  padding: 0 14px !important;
-  border-radius: 12px !important;
-  font-size: 12.5px !important;
-  min-width: auto !important;
-  flex: 0 0 auto !important;  /* stops the "stretch to huge" look */
-  background: #ffffff !important;
-  border: 1px solid #e5eaf3 !important;
-  color: var(--ink) !important;
-  box-shadow: 0 3px 8px rgba(15,23,42,0.05) !important;
-}
-
-/* Primary action buttons: colored, not black */
-#adminModal button.primary{
-  background: linear-gradient(180deg, #6f8bff 0%, #5472f2 100%) !important;
-  border: 1px solid rgba(84,114,242,0.5) !important;
-  color: #fff !important;
-  box-shadow: 0 6px 14px rgba(66,95,210,0.25) !important;
-}
-#adminModal button.primary:hover{
-  background: linear-gradient(180deg, #6382ff 0%, #4a67e2 100%) !important;
-  border-color: rgba(74,103,226,0.6) !important;
-}
-
-/* keep ADMIN badge readable but not “villain button” */
-.badge.admin{
-  background: var(--accent-weak);
-  border: 1px solid rgba(91,124,250,0.25);
-  color: var(--accent);
-  box-shadow: none;
-}
-.badge.admin:hover{
-  background: var(--accent-weak-hover);
-  border-color: rgba(91,124,250,0.35);
-}
-    
-/* Cards inside admin: softer */
-#adminViewUsers > div,
-#adminViewPeriods > div,
-#adminViewGenerate > div,
-#adminViewNotices > div{
-  border: 1px solid #e7ebf3 !important;
-  border-radius: 16px !important;
-  background: var(--modal-card) !important;
-  box-shadow: 0 8px 20px rgba(15,23,42,0.06);
-  padding: 14px !important;
-}
-
-
-
-/* Inputs/selects: compact + clean */
-#adminModal input,
-#adminModal select{
-  box-sizing: border-box !important;
-  height: 32px !important;
-  padding: 4px 12px !important;
-  border-radius: 10px !important;
-  border: 1px solid #e5eaf3 !important;
-  font-size: 12.5px !important;
-  background: #ffffff !important;
-}
-
-#adminViewNotices #adminNoticeSearch{
-  border-color: #e2e8f0 !important;
-  background: #ffffff !important;
-  box-shadow: inset 0 1px 2px rgba(15,23,42,0.06);
-}
-
-#adminViewNotices label.subtitle{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#adminModal input:focus,
-#adminModal select:focus{
-  outline: none;
-  border-color: rgba(47,91,255,0.5) !important;
-  box-shadow: 0 0 0 3px rgba(47,91,255,0.12);
-}
-
-/* Users list rows: tighter */
-.user-row{
-  padding: 8px 10px;
-}
-.user-name{
-  font-size: 13px;
-}
-.user-role{
-  font-size: 11px;
-  color: #6b7280;
-}
-
-/* User action buttons: small and subtle */
-.user-actions button{
-  height: 30px !important;
-  padding: 0 10px !important;
-  border-radius: 999px !important;
-  font-size: 12px !important;
-  background: #fff !important;
-  border: 1px solid #d6dbe4 !important;
-  color: #0f172a !important;
-}
-.user-actions button:hover{
-  background: #f8fafc !important;
-}
-
-/* Tags */
-.user-tag.admin{
-  background: var(--accent-weak);
-  border-color: rgba(90,121,201,0.32);
-  color: var(--accent);
-}
-.user-tag.inactive{
-  background: #f1f2f6;
-  border-color: #e2e5ee;
-  color: #6b7280;
-}
-#adminModal .modal{
-  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color: var(--ink);
-  font-size: 13px;
-}
-
-#adminModal h2{
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.1px;
-}
-
-#adminModal .subtitle{
-  font-size: 12.5px;
-  color: #6b7387;
-}
-  
-    .user-group-title{
-  padding: 10px 12px;
-  font-weight: 800;
-  font-size: 12px;
-  color: #64748b;
-  background: #f8fafc;
-  border-top: 1px solid #eef2f7;
-}
-
-
-
-/* Account badge: make the badge a real button without button ugliness */
-button.badge{
-  appearance: none;
-  -webkit-appearance: none;
-  border: 1px solid var(--grid, #d9d9d9);
-  background: #fff;
-  cursor: pointer;
-}
-
-.account-badge{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.account-badge .acc-ic{
-  font-size: 13px;
-  line-height: 1;
-}
-
-.account-badge .acc-txt{
-  white-space: nowrap;
-}
-
-/* Shift modal title bar */
-.shift-titlebar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  width:100%;
-  margin: 0 0 6px 0;
-}
-
-.help-badge{
-  /* override your global button flex/min-width */
-  flex: 0 0 auto !important;
-  min-width: 0 !important;
-  width: 34px;                 /* small pill button */
-  height: 30px;
-  padding: 0;
-
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid var(--grid);
-  cursor: pointer;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-
-.help-badge:hover{
-  background: var(--accent-weak);
-  border-color: rgba(37,99,235,0.28);
-}
-
-.help-badge:active{
-  transform: scale(0.96);
-}
-
-  .notice-card{
-    border: 1px solid var(--line, #e6e8ee);
-    border-radius: 14px;
-    padding: 14px;
-    background: #fff;
-    margin-bottom: 12px;
-    box-shadow: 0 6px 16px rgba(16,24,40,0.06);
-  }
-.notice-title{ font-weight: 900; margin-bottom: 6px; }
-.notice-meta{ font-size: 11px; color: #667085; margin-bottom: 8px; }
-.notice-body{ white-space: pre-wrap; line-height: 1.45; font-size: 13px; color: #334155; }
-  .notice-pill{
-    display:inline-block; font-size:11px; font-weight:800;
-    padding:2px 8px; border-radius:999px; border:1px solid #d6dbe4; background:#f8fafc;
-  }
-  .notice-pill.unread{ border-color:#ffb3b3; background:#ffecec; color:#8a1f1f; }
-
-  details.notification-card,
-  details.notice-card{
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 0;
-    margin: 0 0 8px 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
-  }
-
-  details.notification-card:hover,
-  details.notice-card:hover{
-    border-color: #d0d0d0;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  }
-
-  details.notification-card summary,
-  details.notice-card summary{
-    cursor: pointer;
-    padding: 12px 16px;
-    font-weight: 600;
-    font-size: 0.95em;
-    color: #1a1a1a;
-    user-select: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    list-style: none;
-  }
-
-  details.notification-card summary::-webkit-details-marker,
-  details.notice-card summary::-webkit-details-marker{
-    display: none;
-  }
-
-  details.notification-card summary::after,
-  details.notice-card summary::after{
-    content: "v";
-    font-size: 0.8em;
-    color: #666;
-    transition: transform 0.2s ease;
-    margin-left: 8px;
-    flex-shrink: 0;
-  }
-
-  details.notification-card[open] summary::after,
-  details.notice-card[open] summary::after{
-    transform: rotate(-180deg);
-  }
-
-  details.notification-card > div,
-  details.notice-card > div{
-    padding: 12px 16px;
-    border-top: 1px solid #f0f0f0;
-    font-size: 0.9em;
-    line-height: 1.5;
-    color: #555;
-    display: block;
-  }
-
-  .notification-body{
-    margin: 0;
-    padding: 12px 16px;
-    border-top: 1px solid #f0f0f0;
-    display: block;
-  }
-
-  .notification-body > div:first-child{
-    margin-bottom: 12px;
-    line-height: 1.6;
-    color: #555;
-    display: block;
-  }
-
-  .notification-body > div:last-child{
-    margin-top: 12px;
-  }
-
-  .notification-actions,
-  .notice-actions{
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-    flex-wrap: wrap;
-  }
-
-  .notification-actions button,
-  .notice-actions button{
-    flex: 1;
-    min-width: 100px;
-    padding: 6px 12px;
-    font-size: 0.85em;
-    font-weight: 500;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    background: #f5f5f5;
-    color: #1a1a1a;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .notification-actions button:hover,
-  .notice-actions button:hover{
-    background: #e8e8e8;
-    border-color: #b0b0b0;
-  }
-
-  .notification-actions button.primary,
-  .notice-actions button.primary{
-    background: #4F8DF7;
-    color: #ffffff;
-    border-color: #4F8DF7;
-  }
-
-  .notification-actions button.primary:hover,
-  .notice-actions button.primary:hover{
-    background: #2F6FEA;
-    border-color: #2F6FEA;
-  }
-
-  .notification-actions button.danger,
-  .notice-actions button.danger{
-    background: #fee2e2;
-    color: #991b1b;
-    border-color: #fecaca;
-  }
-
-  .notification-actions button.danger:hover,
-  .notice-actions button.danger:hover{
-    background: #fecaca;
-    border-color: #f87171;
-  }
-
-/* Expandable "Acknowledged by" */
-.notice-acks{
-  margin-top: 10px;
-  border-top: 1px dashed #e6e8ee;
-  padding-top: 8px;
-}
-
-.notice-acks summary{
-  cursor: pointer;
-  font-weight: 800;
-  font-size: 12px;
-  color: #334155;
-  list-style: none;
-}
-
-.notice-acks summary::-webkit-details-marker{ display:none; }
-
-.notice-acks .ack-grid{
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.notice-acks .ack-pill{
-  display:inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  border: 1px solid #d6dbe4;
-  background: #f8fafc;
-  color:#334155;
-  margin: 2px 6px 0 0;
-}
-
-.notice-acks .ack-title{
-  font-weight: 900;
-  font-size: 11px;
-  color:#667085;
-  margin-bottom: 4px;
-}
-
-.notice-acks .ack-list{
-  max-height: 160px;       /* keeps it sane */
-  overflow: auto;
-  border: 1px solid #eef2f7;
-  border-radius: 10px;
-  padding: 8px;
-  background: #fff;
-}
-
-/* Quill editor styles */
-.ql-toolbar.ql-snow {
-  border-top-left-radius: 10px !important;
-  border-top-right-radius: 10px !important;
-  border: 1px solid #ccc !important;
-  background: #f9fafb !important;
-  padding: 10px !important;
-  margin: 0 !important;
-}
-
-.ql-toolbar.ql-snow .ql-formats {
-  margin-right: 20px !important;
-}
-
-.ql-toolbar.ql-snow .ql-stroke {
-  stroke: #667085 !important;
-}
-
-.ql-toolbar.ql-snow .ql-fill {
-  fill: #667085 !important;
-}
-
-.ql-toolbar.ql-snow .ql-picker-label {
-  color: #667085 !important;
-}
-
-.ql-toolbar.ql-snow button:hover,
-.ql-toolbar.ql-snow button.ql-active,
-.ql-toolbar.ql-snow .ql-picker-label:hover,
-.ql-toolbar.ql-snow .ql-picker-item:hover,
-.ql-toolbar.ql-snow .ql-picker-item.ql-selected {
-  color: #2F6FEA !important;
-}
-
-.ql-toolbar.ql-snow button:hover .ql-stroke,
-.ql-toolbar.ql-snow button.ql-active .ql-stroke,
-.ql-toolbar.ql-snow .ql-picker-label:hover .ql-stroke,
-.ql-toolbar.ql-snow .ql-picker-item:hover .ql-stroke,
-.ql-toolbar.ql-snow .ql-picker-item.ql-selected .ql-stroke {
-  stroke: #2F6FEA !important;
-}
-
-.ql-toolbar.ql-snow button:hover .ql-fill,
-.ql-toolbar.ql-snow button.ql-active .ql-fill,
-.ql-toolbar.ql-snow .ql-picker-label:hover .ql-fill,
-.ql-toolbar.ql-snow .ql-picker-item:hover .ql-fill,
-.ql-toolbar.ql-snow .ql-picker-item.ql-selected .ql-fill {
-  fill: #2F6FEA !important;
-}
-
-.ql-container.ql-snow {
-  border-bottom-left-radius: 10px !important;
-  border-bottom-right-radius: 10px !important;
-  border: 1px solid #ccc !important;
-  border-top: none !important;
-  margin: 0 !important;
-}
-
-.ql-editor {
-  min-height: 180px;
-  padding: 12px;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.ql-editor.ql-blank::before {
-  color: #aaa;
-  font-style: italic;
-}
-
-.ql-editor h2 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 12px 0 8px 0;
-}
-
-.ql-editor h3 {
-  font-size: 17px;
-  font-weight: 700;
-  margin: 10px 0 6px 0;
-}
-
-.ql-editor ul, .ql-editor ol {
-  margin: 8px 0;
-  padding-left: 24px;
-}
-
-.ql-editor li {
-  margin: 4px 0;
-}
-
-.ql-editor blockquote {
-  border-left: 4px solid #ccc;
-  margin: 8px 0;
-  padding-left: 12px;
-  color: #667085;
-}
-
-/* =========================================================================
-   PRINT STYLES
-   ========================================================================= */
-
-/**
- * Print-specific styles for landscape A4 printing
- * Optimized for fitting 5-week rota on a single page
- */
-@media print {
-  /* Hide all UI chrome - only show the rota table and print header */
-  .titlebar, 
-  .rightbits, 
-  select, 
-  button, 
-  .modal-backdrop, 
-  .badge, 
-  .subtitle,
-  .nav-arrows,
-  #printBtn,
-  #noticeBell,
-  #loginBadge,
-  #adminBadge,
-  #periodSelect,
-  .scroll-btn { 
-    display: none !important; 
-  }
-  
-  /* Show week separators in print */
-  .week-sep {
-    display: table-cell !important;
-    background: #bbb !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    border-left: 2pt solid #333 !important;
-    border-right: 2pt solid #333 !important;
-    width: 2pt !important;
-    min-width: 2pt !important;
-    padding: 0 !important;
-  }
-  
-  /* Page setup for landscape A4 */
-  @page { 
-    size: landscape; 
-    margin: 2mm; 
-  }
-  
-  /* Reset body and container */
-  body { 
-    margin: 0; 
-    padding: 0; 
-    background: #fff; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-  
-  .wrap { 
-    width: 100%; 
-    max-width: none; 
-    margin: 0; 
-    padding: 0; 
-    box-shadow: none; 
-    border-radius: 0;
-    background: #fff;
-    overflow: visible;
-  }
-  
-  /* Show the rota table without scroll container constraints */
-  .rota-scroll { 
-    overflow: visible !important; 
-    max-height: none !important; 
-    height: auto !important; 
-    width: 100%;
-  }
-  
-  /* Rota table formatting */
-  #rota { 
-    width: 100%; 
-    font-size: 5.5pt; 
-    page-break-inside: avoid;
-    border-collapse: collapse;
-    table-layout: auto;
-    max-width: 100%;
-  }
-  
-  /* Header cells - remove sticky positioning for print */
-  #rota thead th { 
-    position: static !important; 
-    background: #e8e8e8 !important; 
-    -webkit-print-color-adjust: exact; 
-    print-color-adjust: exact;
-    font-size: 5.5pt;
-    padding: 2px 1px;
-    font-weight: 700;
-    border: 0.5pt solid #666 !important;
-    line-height: 1.2;
-  }
-  
-  /* All borders */
-  #rota, 
-  #rota th, 
-  #rota td { 
-    border: 0.5pt solid #666 !important; 
-    -webkit-print-color-adjust: exact; 
-    print-color-adjust: exact; 
-  }
-  
-  /* Section headers - preserve role colors */
-  .section-row td { 
-    font-size: 5.5pt;
-    font-weight: 800;
-    padding: 2px 3px;
-    line-height: 1.2;
-  }
-  
-  .section-cn { 
-    background: #E3F2FD !important; 
-    -webkit-print-color-adjust: exact; 
-    print-color-adjust: exact;
-  }
-  
-  .section-sn { 
-    background: #F3E5F5 !important; 
-    -webkit-print-color-adjust: exact; 
-    print-color-adjust: exact;
-  }
-  
-  .section-na { 
-    background: #FFF3E0 !important; 
-    -webkit-print-color-adjust: exact; 
-    print-color-adjust: exact;
-  }
-  
-  /* Cell content */
-  .cell { 
-    min-height: 11px; 
-    font-size: 5.5pt;
-    padding: 2px 1px;
-    text-align: center;
-    line-height: 1.1;
-  }
-  
-  /* Name column */
-  #rota tbody th {
-    font-size: 5.5pt;
-    padding: 2px 4px;
-    text-align: left;
-    font-weight: 600;
-    white-space: normal;
-    line-height: 1.2;
-    min-width: 85px;
-  }
-  
-  .name-col {
-    font-size: 5.5pt;
-    white-space: normal;
-    min-width: 85px;
-  }
-  
-  /* Week labels */
-  .week-label {
-    font-size: 5pt;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-  
-  /* Day column headers */
-  .day-header {
-    font-size: 5pt;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-  
-  /* Print header that gets injected by JavaScript */
-  .print-header { 
-    display: block !important; 
-    margin: 0 0 2mm 0; 
-    padding: 0 0 1mm 0; 
-    border-bottom: 0.75pt solid #333; 
-  }
-  
-  .print-header h1 { 
-    font-size: 10pt; 
-    margin: 0 0 1mm 0; 
-    font-weight: 700;
-    color: #000;
-    line-height: 1.1;
-  }
-  
-  .print-header .print-meta { 
-    font-size: 6.5pt; 
-    color: #555; 
-    -webkit-print-color-adjust: exact; 
-    print-color-adjust: exact;
-    line-height: 1.1;
-  }
-  
-  /* Ensure proper spacing and no page breaks within table */
-  tr { 
-    page-break-inside: avoid; 
-  }
-  
-  /* Compact table cells for better fit */
-  #rota td {
-    padding: 2px 1px;
-  }
-  
-  /* Ensure table uses full page width */
-  #rota {
-    width: 100%;
-    max-width: 100%;
-  }
-}
-
-  </style>
-</head>
-
-<body>
-  <div class="wrap">
-    <!-- Page Navigation -->
-    <div id="pageNav" style="padding: 8px 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; gap: 12px; font-size: 14px;">
-      <a href="requests.html" style="color: #4F8DF7; text-decoration: none; font-weight: 600;">📋 Requests</a>
-      <a href="#" onclick="navigateToRota(); return false;" style="color: #4F8DF7; text-decoration: none;">📅 View Rota</a>
-      <a href="#" id="navAdminLink" onclick="goToFullAdmin(); return false;" style="color: #4F8DF7; text-decoration: none; display: none;">⚙️ Admin</a>
-      <button id="viewAsBtn" class="badge" type="button" style="display:none;">👁 View As</button>
-    </div>
-    
-    <div class="titlebar">
-     <div style="display:flex; gap:12px; align-items:center;">
-  <img
-    src="logo.png"
-    alt="Calpe Ward"
-    style="height:44px; width:auto;"
-  />
-
-<div>
-  <h1>Calpe Ward Requests</h1>
-
-  <div class="header-subrow">
-    <div class="subtitle" id="periodLabel"></div>
-    <div class="subtitle" id="closeLabel"></div>
-  </div>
-</div>
-</div>
-<div class="rightbits">
-  <select id="periodSelect"></select>
-  <!-- 👤 Account badge -->
-  <button class="badge account-badge" id="loginBadge" type="button">
-    <span class="acc-ic">👤</span>
-    <span class="acc-txt">Not logged in</span>
-  </button>
-
-  <!-- 🖨️ Print/Export button (only for Sean Ells) -->
-  <button class="badge" id="printBtn" type="button" title="Print & Export" style="display:none;">
-    🖨️
-  </button>
-
-  <!--  Bell is its own button -->
-  <button class="badge" id="noticeBell" type="button" title="Notices">
-    🔔 <span id="noticeBellDot" style="display:none;">•</span>
-  </button>
-
-  <div class="badge admin" id="adminBadge" style="display:none;">ADMIN</div>
-</div>
-    </div>
-
-   <div id="rotaScroll" class="rota-scroll">
-  <table id="rota"></table>
-</div>
-  </div>
-
-  <!-- =========================
-       SHIFT PICKER MODAL (Patch 2)
-       ========================= -->
-  <div class="modal-backdrop" id="shiftModal" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="shiftTitle">
-      
-<div class="shift-titlebar">
-  <h2 id="shiftTitle">Select shift</h2>
-
-  <div style="display:flex; gap:8px; align-items:center;">
-    <button
-      id="shiftLockBtn"
-      type="button"
-      class="badge help-badge"
-      aria-label="Lock"
-      title="Lock this cell"
-      style="display:none;"
-    >
-      🔒
-    </button>
-
-    <button
-      id="shiftHelpBtn"
-      type="button"
-      class="badge help-badge"
-      aria-label="Help"
-      title="Shift request guidelines"
-    >
-      ?
-    </button>
-  </div>
-</div>
-
-
-
-      <p id="shiftDesc">
-  Choose a <strong>preference</strong> for this day.
-</p>
-
-
-      <div class="shift-grid" id="shiftGridContainer">
-        <!-- Shifts populated dynamically by shift-functions.js -->
-      </div>
-
-      <div class="btns">
-        <button id="shiftCancel" type="button">Cancel</button>
-      </div>
-    </div>
-  </div>
- <!-- =========================
-      COMMENTS 
-       ========================= -->
-  
-  <div class="modal-backdrop" id="weekCommentModal" aria-hidden="true" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="weekCommentTitle">
-    <h2 id="weekCommentTitle">Week comments</h2>
-
-    <div id="weekCommentAdminList"
-         style="display:none; max-height:260px; overflow:auto; border:1px solid #ddd; border-radius:8px; padding:8px; margin-bottom:10px;">
-    </div>
-
-<label id="weekCommentYourLabel" style="display:block; font-weight:600; margin:8px 0 6px;">Your comment</label>
-    <textarea id="weekCommentInput" rows="4" style="width:100%;"></textarea>
-
-    <div class="btns" style="margin-top:10px;">
-      <button id="weekCommentCancel" type="button">Close</button>
-      <button id="weekCommentSave" class="primary" type="button">Save</button>
-    </div>
-  </div>
-</div>
-
-  <!-- =========================
-     ADMIN PANEL (v1)
-     ========================= -->
-<div class="modal-backdrop" id="adminModal" aria-hidden="true">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
-    <h2 id="adminTitle">Admin Console</h2>
-    <p class="subtitle">Manage rota periods and generate new weeks.</p>
-
-<div class="admin-tabs">
-  <button id="adminTabPeriods"  class="admin-tab is-active">Rota periods</button>
-  <button id="adminTabGenerate" class="admin-tab">Generate</button>
-  <button id="adminTabUsers"    class="admin-tab">Users</button>
-  <button id="adminTabNotices"  class="admin-tab">Notices</button>
-  <button class="admin-tab" onclick="goToFullAdmin()" style="cursor:pointer;">Full Admin</button>
-  <button class="admin-tab" onclick="goToDraftRota()" style="cursor:pointer;">Draft Rota</button>
-</div>
-
-
- <!-- TAB: PERIODS -->
-<div id="adminViewPeriods">
-
-  <!-- Period picker -->
-  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
-    <div style="font-weight:800;">Rota period</div>
-    <select id="adminPeriodSelect" style="padding:8px 10px; border-radius:999px; border:1px solid #ccc; font-size:12px; min-width:220px;"></select>
-    <div class="subtitle" id="adminPeriodMeta"></div>
-  </div>
-
-  <!-- Requests close time -->
-  <div style="border:1px solid #ddd; border-radius:10px; padding:10px; margin-bottom:10px;">
-    <div style="font-weight:800; margin-bottom:6px;">Requests closing time</div>
-
-    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-      <input id="adminClosesAtInput" type="datetime-local"
-        style="padding:8px 10px; border-radius:10px; border:1px solid #ccc; font-size:12px;" />
-
-      <button id="adminClosesAtSaveBtn" type="button"
-        style="min-width:auto; padding:8px 10px; border-radius:999px; font-size:12px;">
-        Save close time
-      </button>
-
-      <button id="adminClosesAtClearBtn" type="button"
-        style="min-width:auto; padding:8px 10px; border-radius:999px; font-size:12px;">
-        Clear
-      </button>
-    </div>
-
-    <div class="subtitle" id="adminClosesAtHelp" style="margin-top:8px;">
-      Set when requests will lock for this whole 5-week period.
-    </div>
-  </div>
-
-  <!-- Period controls -->
-  <div style="border:1px solid #ddd; border-radius:10px; padding:10px; margin-bottom:10px;">
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button id="adminSetActiveBtn" type="button" style="min-width:auto; padding:8px 10px; border-radius:999px; font-size:12px;">Set active</button>
-      <button id="adminToggleHiddenBtn" type="button" style="min-width:auto; padding:8px 10px; border-radius:999px; font-size:12px;">Toggle hidden</button>
-    </div>
-  </div>
-
-  <!-- Weeks list -->
-  <div style="border:1px solid #ddd; border-radius:10px; padding:10px;">
-    <div style="font-weight:800; margin-bottom:6px;">Weeks</div>
-    <div id="adminWeeksList" class="subtitle">Pick a period…</div>
-  </div>
-
-</div>
-
-    <!-- TAB: GENERATE -->
-    <div id="adminViewGenerate" style="display:none;">
-      <div style="border:1px solid #ddd; border-radius:10px; padding:10px;">
-        <div style="font-weight:700; margin-bottom:6px;">Generate next 5-week period</div>
-        <div class="subtitle" id="adminGeneratePreview">Preview will appear here.</div>
-
-        <div style="display:flex; gap:10px; margin-top:10px;">
-          <button id="adminGenerateBtn" class="primary" type="button">Generate</button>
-        </div>
-      </div>
-    </div>
-<!-- =========================
-     TAB: USERS
-     ========================= -->
-<div id="adminViewUsers" style="display:none;">
-
-  <div style="border:1px solid #ddd; border-radius:10px; padding:10px; margin-bottom:10px;">
-    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-      <div style="font-weight:800;">Users</div>
-
-      <label class="subtitle" style="display:flex; gap:6px; align-items:center;">
-        <input type="checkbox" id="adminShowInactiveUsers" />
-        Show inactive
-      </label>
-    </div>
-
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
-      <input id="adminUserSearch" placeholder="Search name…"
-        style="flex:1; min-width:180px; padding:8px 10px; border-radius:10px; border:1px solid #ccc; font-size:12px;" />
-
-      <button id="adminAddUserBtn" class="primary" type="button"
-        style="min-width:auto; padding:8px 12px; border-radius:999px; font-size:12px;">
-        + Add user
-      </button>
-    </div>
-
-    <div id="adminUsersList" style="margin-top:10px;"></div>
-  </div>
-
-  <div id="adminUserEditSection" style="border:1px solid #ddd; border-radius:10px; padding:10px;">
-    <div style="font-weight:800; margin-bottom:6px;">Add / Edit</div>
-
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input id="adminEditUserName" placeholder="Name"
-        style="flex:1; min-width:180px; padding:8px 10px; border-radius:10px; border:1px solid #ccc; font-size:12px;" />
-
-      <select id="adminEditUserRole"
-        style="min-width:160px; padding:8px 10px; border-radius:10px; border:1px solid #ccc; font-size:12px;">
-        <option value="1">Charge Nurse</option>
-        <option value="2">Staff Nurse</option>
-        <option value="3">Nursing Assistant</option>
-      </select>
-    </div>
-
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-      <input id="adminEditUserPin" placeholder="New PIN (4 digits)" inputmode="numeric" maxlength="4"
-        style="flex:1; min-width:180px; padding:8px 10px; border-radius:10px; border:1px solid #ccc; font-size:12px;" />
-
-      <button id="adminSaveUserBtn" class="primary" type="button"
-        style="min-width:auto; padding:8px 12px; border-radius:999px; font-size:12px;">
-        Save
-      </button>
-
-      <button id="adminCancelUserEditBtn" type="button"
-        style="min-width:auto; padding:8px 12px; border-radius:999px; font-size:12px;">
-        Cancel
-      </button>
-    </div>
-
-    <div class="subtitle" id="adminUserEditHelp" style="margin-top:8px;"></div>
-  </div>
-
-</div>
-
-<!-- =========================
-     TAB: NOTICES
-     ========================= -->
-<div id="adminViewNotices" style="display:none;">
-
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
-    <div style="font-weight:800;">Notices</div>
-
-    <button
-      id="adminAddNoticeBtn"
-      class="primary"
-      type="button"
-      style="min-width:auto; padding:8px 12px; border-radius:999px; font-size:12px;"
-    >
-      + New notice
-    </button>
-  </div>
-
-  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-    <input
-      id="adminNoticeSearch"
-      placeholder="Search title…"
-      style="flex:1; min-width:180px; padding:8px 10px; border-radius:10px; border:1px solid #ccc; font-size:12px;"
-    />
-
-    <label class="subtitle" style="display:flex; gap:6px; align-items:center;">
-      <input type="checkbox" id="adminShowInactiveNotices" />
-      Show inactive
-    </label>
-  </div>
-
-  <div
-    id="adminNoticesList"
-    style="border:1px solid #ddd; border-radius:10px; overflow:hidden;">
-    <!-- notices injected here -->
-  </div>
-
-</div>
-
-    <div class="btns" style="margin-top:12px;">
-      <button id="adminClose" type="button">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- =========================
-     NOTICES (Blocking + History)
-     ========================= -->
-
-<!-- Blocking unread notices modal -->
-<div class="modal-backdrop" id="noticeUnreadModal" aria-hidden="true" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="noticeUnreadTitle">
-    <h2 id="noticeUnreadTitle">Notices</h2>
-    <p class="subtitle" id="noticeUnreadSub">Please acknowledge all notices to continue.</p>
-
-    <div id="noticeUnreadList" style="margin-top:10px;"></div>
-
-    <div class="btns" style="margin-top:12px;">
-      <button id="noticeUnreadAcknowledge" class="primary" type="button">Acknowledge & continue</button>
-    </div>
-  </div>
-</div>
-
-<!-- Non-blocking all notices modal (bell icon) -->
-<div class="modal-backdrop" id="noticeAllModal" aria-hidden="true" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true">
-    <h2>Notices & Notifications</h2>
-    <div class="modal-bubble" style="max-height: 500px; overflow-y: auto;">
-      <div id="noticeAllList" style="display: flex; flex-direction: column; gap: 12px;"></div>
-    </div>
-    <div class="btns">
-      <button id="noticeAllClose" type="button">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- =========================
-     ADMIN NOTICE EDITOR
-     ========================= -->
-<div class="modal-backdrop" id="adminNoticeModal" aria-hidden="true" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true">
-    <h2 id="adminNoticeTitle">New notice</h2>
-    <p class="subtitle">Editing this notice will require staff to acknowledge it again.</p>
-
-    <div class="card" style="padding:10px; margin-top:10px;">
-      <div style="font-weight:800; margin-bottom:6px;">Title</div>
-      <input id="adminNoticeTitleInput"
-             style="width:100%; padding:8px 10px; border-radius:10px; border:1px solid #ccc;" />
-    </div>
-
-    <div class="card" style="padding:10px; margin-top:10px;">
-      <div style="font-weight:800; margin-bottom:6px;">Body (English)</div>
-      <div id="adminNoticeBodyEn" style="background:white; border-radius:10px; border:1px solid #ccc; min-height:200px;"></div>
-    </div>
-
-    <div class="card" style="padding:10px; margin-top:10px;">
-      <div style="font-weight:800; margin-bottom:6px;">Body (Spanish – optional)</div>
-      <div id="adminNoticeBodyEs" style="background:white; border-radius:10px; border:1px solid #ccc; min-height:200px;"></div>
-    </div>
-
-    <div class="card" style="padding:10px; margin-top:10px;">
-      <div style="font-weight:800; margin-bottom:6px;">Target audience</div>
-
-      <label><input type="checkbox" id="noticeTargetAll" /> All users</label><br>
-      <label><input type="checkbox" value="1" class="noticeRoleChk" /> Charge Nurses</label><br>
-      <label><input type="checkbox" value="2" class="noticeRoleChk" /> Staff Nurses</label><br>
-      <label><input type="checkbox" value="3" class="noticeRoleChk" /> Nursing Assistants</label>
-    </div>
-
-    <div class="btns" style="margin-top:12px;">
-      <button id="adminNoticeCancel" type="button">Cancel</button>
-      <button id="adminNoticeSave" class="primary" type="button">Save notice</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- =========================
-     SHIFT RULES / HELP MODAL
-     ========================= -->
-<div class="modal-backdrop" id="shiftHelpModal" aria-hidden="true" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="shiftHelpTitle">
-
-    <div style="margin-bottom:10px;">
-      <h2 id="shiftHelpTitle" style="margin:0 0 4px 0;">Shift request guidelines</h2>
-      <p class="subtitle" id="shiftHelpSubtitle" style="margin:0;">
-        How preferences are considered
-      </p>
-    </div>
-
-    <!-- EN -->
-    <div id="shiftHelpContentEn" class="card" style="padding:12px;">
-      <div style="font-weight:900; margin-bottom:8px;">Shift request guidelines</div>
-
-      <ul style="margin:0; padding-left:18px; line-height:1.45; font-size:13px; color:#334155;">
-        <li>You can enter <strong>up to 5</strong> request entries per week (you do not need to use all of these).</li>
-
-        <li>
-          <strong>O*</strong> is a <strong>strong preference</strong> and is prioritised as
-          <strong>O¹ first</strong> and then <strong>O²</strong>.
-        </li>
-
-        <li>
-          You can only have <strong>two strong preferences</strong>
-          (<strong>O¹</strong> and <strong>O²</strong>) per week.
-        </li>
-
-        <li>
-          <strong>Only O¹ is guaranteed</strong> at ward level.
-        </li>
-
-        <li>
-          All other requests are <strong>preferences only</strong>. They are considered at ward level
-          but are <strong>not guaranteed</strong>.
-          <br>
-          <strong>Choosing between days and nights (LD / 8–8 / N)</strong> is also a preference only.
-          Night shifts, in particular, are more difficult to allocate and cannot always be accommodated.
-        </li>
-
-        <li>
-          <strong>Use comments</strong> to explain your preferences more clearly
-          (for example: context, patterns, flexibility). This helps us understand
-          your requests and accommodate them where possible.
-        </li>
-
-        <li>
-          Guidelines may change, and <strong>all preferences may be overridden by management</strong>
-          when shifts are published.
-        </li>
-      </ul>
-
-      <div style="margin-top:12px; font-weight:900;">Shift key (preferences)</div>
-      <ul style="margin:6px 0 0; padding-left:18px; line-height:1.45; font-size:13px; color:#334155;">
-        <li><strong>LD</strong> – Long Day (08:00–20:30)</li>
-        <li><strong>8–8</strong> – Day shift (08:00–20:00)</li>
-        <li><strong>W</strong> – Happy to work days or nights</li>
-        <li><strong>N</strong> – Preference to work nights</li>
-      </ul>
-    </div>
-
-    <!-- ES -->
-    <div id="shiftHelpContentEs" class="card" style="padding:12px; display:none;">
-      <div style="font-weight:900; margin-bottom:8px;">Guía de solicitudes de turnos</div>
-
-      <ul style="margin:0; padding-left:18px; line-height:1.45; font-size:13px; color:#334155;">
-        <li>
-          Puedes introducir <strong>hasta 5</strong> solicitudes por semana
-          (no es necesario usarlas todas).
-        </li>
-
-        <li>
-          <strong>O*</strong> es una <strong>preferencia fuerte</strong> y se prioriza como
-          <strong>O¹ primero</strong> y después <strong>O²</strong>.
-        </li>
-
-        <li>
-          Solo puedes tener <strong>dos preferencias fuertes</strong>
-          (<strong>O¹</strong> y <strong>O²</strong>) por semana.
-        </li>
-
-        <li>
-          <strong>Solo O¹ está garantizado</strong> a nivel de la unidad.
-        </li>
-
-        <li>
-          El resto de solicitudes son <strong>preferencias</strong>. Se tendrán en cuenta,
-          pero <strong>no están garantizadas</strong>.
-          <br>
-          <strong>Elegir entre turnos de día y noche (LD / 8–8 / N)</strong> también es solo
-          una preferencia. Los turnos de noche, en particular, son más difíciles de asignar
-          y no siempre pueden acomodarse.
-        </li>
-
-        <li>
-          <strong>Usa los comentarios</strong> para explicar mejor tus preferencias
-          (por ejemplo: contexto, patrones o flexibilidad). Esto nos ayuda a entender
-          tus solicitudes y tenerlas en cuenta cuando sea posible.
-        </li>
-
-        <li>
-          Las guías pueden cambiar y <strong>todas las preferencias pueden ser modificadas
-          por la dirección</strong> cuando se publiquen los turnos.
-        </li>
-      </ul>
-
-      <div style="margin-top:12px; font-weight:900;">Leyenda (preferencias)</div>
-      <ul style="margin:6px 0 0; padding-left:18px; line-height:1.45; font-size:13px; color:#334155;">
-        <li><strong>LD</strong> – Turno largo (08:00–20:30)</li>
-        <li><strong>8–8</strong> – Turno de día (08:00–20:00)</li>
-        <li><strong>W</strong> – Disponible para días o noches</li>
-        <li><strong>N</strong> – Preferencia por noches</li>
-      </ul>
-    </div>
-
-    <div class="user-footer" style="margin-top:12px;">
-      <button id="shiftHelpClose" type="button">Close</button>
-      <button id="shiftHelpClose2" class="primary" type="button">OK</button>
-    </div>
-
-  </div>
-</div>
-
-
-   <!-- =========================
-     USER MENU MODAL (Account)
-     ========================= -->
-  <div class="modal-backdrop" id="userModal" aria-hidden="true" style="display:none;">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="userTitle">
-
-      <!-- HEADER: title left, language right -->
-      <div class="user-head">
-        <div class="user-head-left">
-          <h2 id="userTitle">Edit your account</h2>
-          <p class="subtitle" id="userMeta">—</p>
-        </div>
-
-        <div class="user-flags" aria-label="Language">
-          <div class="flags-label">Language</div>
-          <div class="flags-buttons">
-<button id="userLangEn" type="button" class="flag-btn" title="English" aria-label="English">
-  <img class="flag-img" src="icons/gb.svg" alt="">
-</button>
-<button id="userLangEs" type="button" class="flag-btn" title="Español" aria-label="Español">
-  <img class="flag-img" src="icons/es.svg" alt="">
-</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- CHANGE PIN CARD -->
-     <div class="card" style="padding:10px; margin:10px 0;">
-        <div style="font-weight:800; margin-bottom:6px;">Change PIN</div>
-
-        <div class="row" style="gap:8px;">
-          <input id="userOldPin" class="user-pin" inputmode="numeric" maxlength="4" placeholder="Current PIN" />
-          <input id="userNewPin" class="user-pin" inputmode="numeric" maxlength="4" placeholder="New PIN" />
-          <input id="userNewPin2" class="user-pin" inputmode="numeric" maxlength="4" placeholder="Repeat new PIN" />
-        </div>
-
-        <div class="btns" style="margin-top:10px; justify-content:flex-end;">
-          <button id="userSavePin" class="primary" type="button">Save new PIN</button>
-        </div>
-
-        <div class="err" id="userPinErr">Error.</div>
-        <div class="subtitle" id="userPinOk" style="display:none; margin-top:8px; color:#0b6b2b; font-weight:700;">
-          PIN updated.
-        </div>
-      </div>
-
-      <!-- BOTTOM BUTTONS -->
-      <div class="user-footer">
-        <button id="userLogout" type="button">Log out</button>
-        <button id="userClose" type="button">Close</button>
-      </div>
-
-    </div>
-  </div>
-
-
-  <!-- =========================
-       PRINT & EXPORT MODAL
-       ========================= -->
-  <div class="modal-backdrop" id="printModal" aria-hidden="true" style="display:none;">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="printTitle">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 id="printTitle" style="margin:0;">Print & Export</h2>
-        <button id="printCloseX" type="button" style="background:none; border:none; font-size:24px; cursor:pointer; color:#666;">&times;</button>
-      </div>
-      <p class="subtitle">Generate printouts and reports</p>
-
-      <!-- STAFF OPTIONS -->
-      <div id="printStaffOptions" style="display:none;">
-        <div class="card" style="padding:12px; margin-top:12px;">
-          <div style="font-weight:800; margin-bottom:8px;">Print options</div>
-          
-          <button id="printAllRequests" class="primary" type="button" style="width:100%; margin-bottom:8px;">
-            Print all requests
-          </button>
-          
-          <div style="font-weight:600; margin:12px 0 6px;">Print by group:</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="printGroupCN" type="button" style="flex:1;">Charge Nurses</button>
-            <button id="printGroupSN" type="button" style="flex:1;">Staff Nurses</button>
-            <button id="printGroupNA" type="button" style="flex:1;">Nursing Assistants</button>
-          </div>
-          
-          <button id="printOwnRow" type="button" style="width:100%; margin-top:8px;">
-            Print my requests only
-          </button>
-        </div>
-      </div>
-
-      <!-- ADMIN OPTIONS -->
-      <div id="printAdminOptions" style="display:none;">
-        <div class="card" style="padding:12px; margin-top:12px;">
-          <div style="font-weight:800; margin-bottom:12px;">Admin: Advanced Print Configuration</div>
-          <p style="font-size:13px; color:#666; margin:0 0 12px;">Click below to open the advanced admin print dialog where you can select roles, users, and configure what to print (requests, comments, or both).</p>
-          
-          <button type="button" onclick="openAdminPrintConfig()" style="width:100%; padding:12px; background:#1976d2; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:600; font-size:14px;">
-            Open Advanced Print Configuration
-          </button>
-          
-          <button id="exportExcel" class="primary" type="button" style="width:100%; margin-top:12px;">
-            Export all to Excel (CSV)
-          </button>
-        </div>
-      </div>
-
-      <div class="btns" style="margin-top:12px;">
-        <button id="printClose" type="button">Close</button>
-      </div>
-    </div>
-  </div>
-
-
-  <script>
-    /* =========================================================
-       1) CONFIG - Cache Bust Version 2026-01-19-22-31
+﻿/* =========================================================
+       1) CONFIG
        ========================================================= */
-    // Config loaded from config.js - use window.supabaseClient
-    const supaClient = window.supabaseClient || window.supabase;
+    const SUPABASE_URL = "https://pxpjxyfcydiasrycpbfp.supabase.co";
+    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cGp4eWZjeWRpYXNyeWNwYmZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE3OTAsImV4cCI6MjA4NDEzNzc5MH0.TEmgJEJGNFtBYyNWBnMiHycGv9jT5Gt_ImnH9zHXo88";
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
     const STORAGE_KEY = "calpeward.loggedInUserId";
     const MAX_REQUESTS_PER_WEEK = 5;
 
@@ -2661,7 +22,7 @@ const I18N = {
     cancel: "Cancel",
     ok: "OK",
     save: "Save",
-    loadingUsers: "Loading users…",
+    loadingUsers: "Loading usersâ€¦",
     failedLoadUsers: "Failed to load users.",
     notLoggedIn: "Not logged in",
     loginFirst: "Log in first to add comments.",
@@ -2708,28 +69,27 @@ failedLoadWeekComments: "Failed to load week comments. Check console.",
 failedSaveWeekComment: "Failed to save comment. Check console.",
 
     
-  },
 
-  es: {
-    close: "Cerrar",
-    cancel: "Cancelar",
-    ok: "Vale",
-    save: "Guardar",
-    loadingUsers: "Cargando usuarios…",
+    currentUser = selectedUser;
+    window.currentUser = currentUser; // Expose to window for other scripts
+    localStorage.setItem(STORAGE_KEY, currentUser.id);
+
+  closePinModal();
+    loadingUsers: "Cargando usuariosâ€¦",
     failedLoadUsers: "No se pudieron cargar los usuarios.",
-    notLoggedIn: "Sin sesión",
-    loginFirst: "Inicia sesión para añadir comentarios.",
+    notLoggedIn: "Sin sesiÃ³n",
+    loginFirst: "Inicia sesiÃ³n para aÃ±adir comentarios.",
 
     pinTitle: (name) => `PIN de ${name}`,
-    pinDesc: "Introduce tu PIN de 4 dígitos para desbloquear la edición.",
+    pinDesc: "Introduce tu PIN de 4 dÃ­gitos para desbloquear la ediciÃ³n.",
     pinErrWrong: "PIN incorrecto.",
-    pinErrFormat: "El PIN debe tener 4 dígitos.",
+    pinErrFormat: "El PIN debe tener 4 dÃ­gitos.",
     unlock: "Desbloquear",
 
     shiftTitle: "Selecciona turno",
-    shiftDesc: "Elige una preferencia para este día.",
-    shiftHelpTitle: "Guía de solicitudes de turnos",
-    shiftHelpSub: "Cómo se consideran las preferencias",
+    shiftDesc: "Elige una preferencia para este dÃ­a.",
+    shiftHelpTitle: "GuÃ­a de solicitudes de turnos",
+    shiftHelpSub: "CÃ³mo se consideran las preferencias",
 
     accountEditTitle: "Editar tu cuenta",
     changePin: "Cambiar PIN",
@@ -2737,7 +97,7 @@ failedSaveWeekComment: "Failed to save comment. Check console.",
     newPin: "Nuevo PIN",
     repeatNewPin: "Repite el nuevo PIN",
     saveNewPin: "Guardar nuevo PIN",
-    logout: "Cerrar sesión",
+    logout: "Cerrar sesiÃ³n",
     language: "Idioma",
     pinUpdated: "PIN actualizado.",
 
@@ -2751,7 +111,7 @@ failedSaveWeekComment: "Failed to save comment. Check console.",
     // Week comments
 weekCommentsTitle: "Comentarios de la semana",
 yourCommentLabel: "Tu comentario",
-noCommentsYet: "Aún no hay comentarios.",
+noCommentsYet: "AÃºn no hay comentarios.",
 saveComment: "Guardar",
 closeComment: "Cerrar",
 failedLoadWeekComments: "No se pudieron cargar los comentarios. Revisa la consola.",
@@ -2781,7 +141,7 @@ function isOpenBackdrop(el){
 function updateBodyModalOpen(){
   const anyOpen =
     isOpenBackdrop(shiftModal) ||
-    isOpenBackdrop(adminModal) ||
+    isOpenBackdrop(modal) ||
     isOpenBackdrop(weekCommentModal) ||
     isOpenBackdrop(adminModal) ||
     isOpenBackdrop(userModal) ||
@@ -2825,7 +185,7 @@ function applyLanguage(){
 if (shiftDesc) shiftDesc.innerHTML =
   currentLang === "en"
     ? 'Choose a <strong>preference</strong> for this day.'
-    : 'Elige una <strong>preferencia</strong> para este día.';
+    : 'Elige una <strong>preferencia</strong> para este dÃ­a.';
 
   // ^ if you want markup, handle it intentionally like this, or just use textContent.
 
@@ -3005,19 +365,8 @@ function countUserRequestsThisWeek(userId, dateStr){
   return count;
 }
 
-// Token-based auth helper (replaces getSessionPinOrThrow)
-function getTokenOrThrow(){
-  // Prefer the in-memory token (updated during impersonation), fall back to storage
-  const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
-  if (!token) throw new Error("No session token. Please log in again.");
-  // Keep both in sync so subsequent RPCs stay consistent across reloads
-  window.currentToken = token;
-  sessionStorage.setItem('calpe_ward_token', token);
-  return token;
-}
-    
 function nextOffPrioritySmart(currentRank, taken){
-  // Cycle intent: null → 1 → 2 → BLOCK
+  // Cycle intent: null â†’ 1 â†’ 2 â†’ BLOCK
   let desired =
     (currentRank == null) ? 1 :
     (currentRank === 1) ? 2 :
@@ -3027,7 +376,7 @@ function nextOffPrioritySmart(currentRank, taken){
   if (desired != null && taken.has(desired)) {
     if (!taken.has(1)) desired = 1;
     else if (!taken.has(2)) desired = 2;
-    else desired = null; // both O1 and O2 used → block
+    else desired = null; // both O1 and O2 used â†’ block
   }
 
   return desired;
@@ -3062,11 +411,9 @@ function getTakenOffRanksThisWeek(userId, dateStr, excludeKey){
   return taken;
 }
 async function fetchWeekComments(weekId){
-  const token = getTokenOrThrow();
-
-  const { data, error } = await supaClient.rpc("get_week_comments", {
-    p_week_id: weekId,
-    p_token: token
+  const { data, error } = await supabaseClient.rpc("get_week_comments", {
+    p_token: currentToken,
+    p_week_id: weekId
   });
 
   if (error) throw error;
@@ -3077,12 +424,9 @@ async function fetchWeekComments(weekId){
 async function upsertWeekComment(weekId, userId, comment){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const token = getTokenOrThrow();
-
-  const { data, error } = await supaClient.rpc("upsert_week_comment", {
+  const { data, error } = await supabaseClient.rpc("upsert_week_comment", {
+    p_token: currentToken,
     p_week_id: weekId,
-    p_user_id: userId,
-    p_token: token,
     p_comment: comment ?? ""
   });
 
@@ -3097,7 +441,7 @@ async function upsertWeekComment(weekId, userId, comment){
 async function resetWeeksFullyOpen(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
 
-  const { data: wkRows, error: wkErr } = await supaClient
+  const { data: wkRows, error: wkErr } = await supabaseClient
     .from("rota_dates")
     .select("week_id")
     .eq("period_id", periodId);
@@ -3107,7 +451,7 @@ async function resetWeeksFullyOpen(periodId){
   const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
   if (!weekIds.length) return;
 
-  const { error: resetErr } = await supaClient
+  const { error: resetErr } = await supabaseClient
     .from("rota_weeks")
     .update({ open: true, open_after_close: true })
     .in("id", weekIds);
@@ -3118,7 +462,7 @@ async function resetWeeksFullyOpen(periodId){
 async function resetWeeksFullyClosed(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
 
-  const { data: wkRows, error: wkErr } = await supaClient
+  const { data: wkRows, error: wkErr } = await supabaseClient
     .from("rota_dates")
     .select("week_id")
     .eq("period_id", periodId);
@@ -3128,7 +472,7 @@ async function resetWeeksFullyClosed(periodId){
   const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
   if (!weekIds.length) return;
 
-  const { error: resetErr } = await supaClient
+  const { error: resetErr } = await supabaseClient
     .from("rota_weeks")
     .update({ open: false, open_after_close: false })
     .in("id", weekIds);
@@ -3138,7 +482,7 @@ async function resetWeeksFullyClosed(periodId){
 
     
   async function fetchRotaPeriods(){
-  let q = supaClient
+  let q = supabaseClient
     .from("rota_periods")
     .select("id, name, start_date, end_date, is_hidden, is_active, closes_at")
     .order("start_date", { ascending: true });
@@ -3172,13 +516,13 @@ function populatePeriodDropdown(periods){
     const e = new Date(p.end_date);
 
     const hiddenTag = (currentUser?.is_admin && p.is_hidden) ? " (hidden)" : "";
-    const activeTag = p.is_active ? " ★" : "";
+    const activeTag = p.is_active ? " â˜…" : "";
 
-    opt.textContent = `${fmt(s)} – ${fmt(e)}${activeTag}${hiddenTag}`;
+    opt.textContent = `${fmt(s)} â€“ ${fmt(e)}${activeTag}${hiddenTag}`;
     periodSelect.appendChild(opt);
   }
 
-  // ✅ ensure dropdown always reflects activePeriodId
+  // âœ… ensure dropdown always reflects activePeriodId
   if (activePeriodId != null) {
     periodSelect.value = String(activePeriodId);
   }
@@ -3201,17 +545,10 @@ function isPeriodClosed(period){
 /* =========================================================
    3) STATE (who is logged in / what is unlocked)
    ========================================================= */
-let currentUser = null;      // user object when logged in (from token)
+let currentUser = null;      // user object when logged in
+let selectedUser = null;     // user you clicked before PIN entry
     let usersById = new Map();
     let allUsers = [];           // all users array (for print/export features)
-
-
-
-
-/* =========================================================
-   3a) PERMISSIONS
-   ========================================================= */
-let userPermissions = new Set();
 
 async function loadUserPermissions(){
   userPermissions = new Set();
@@ -3219,7 +556,7 @@ async function loadUserPermissions(){
   if (currentUser.is_admin) return;
 
   try {
-    const { data: groups, error: gErr } = await supaClient
+    const { data: groups, error: gErr } = await supabaseClient
       .from("user_permission_groups")
       .select("group_id")
       .eq("user_id", currentUser.id);
@@ -3227,7 +564,7 @@ async function loadUserPermissions(){
     const groupIds = (groups || []).map(g => g.group_id).filter(Boolean);
     if (!groupIds.length) return;
 
-    const { data: perms, error: pErr } = await supaClient
+    const { data: perms, error: pErr } = await supabaseClient
       .from("permission_group_permissions")
       .select("permission_key")
       .in("group_id", groupIds);
@@ -3243,6 +580,12 @@ function hasPermission(key){
   if (currentUser.is_admin) return true;
   return userPermissions.has(key);
 }
+
+function requirePermission(key, msg){
+  if (hasPermission(key)) return true;
+  alert(msg || "Permission required.");
+  return false;
+}
     
 /* =========================================================
    3b) STATE (editing + requests)
@@ -3253,7 +596,7 @@ const requestsCache = new Map(); // key -> { id, user_id, date, value, important
  let periodsCache = [];
  const locksCache = new Map(); // key -> { user_id, date, reason_en, reason_es, locked_by, locked_at }
 let activePeriodId = null;
-    let activePeriodObj = null; // ← the actual period object
+    let activePeriodObj = null; // â† the actual period object
     let closeTriggeredReload = false;
     
 // ===== 5-week window navigation =====
@@ -3268,6 +611,13 @@ let weekWindowStart = 0; // index into allWeeks
     /* =========================================================
        4) DOM REFERENCES
        ========================================================= */
+    const modal = document.getElementById("pinModal");
+    const pinInput = document.getElementById("pinInput");
+    const pinErr = document.getElementById("pinErr");
+    const pinTitle = document.getElementById("pinTitle");
+    const pinDesc = document.getElementById("pinDesc");
+    const pinConfirmBtn = document.getElementById("pinConfirm");
+    const pinCancelBtn = document.getElementById("pinCancel");
     const loginBadge = document.getElementById("loginBadge");
     const adminBadge = document.getElementById("adminBadge");
     
@@ -3461,10 +811,10 @@ function setShiftHelpLanguage(lang){
 
   const title = document.getElementById("shiftHelpTitle");
   const sub = document.getElementById("shiftHelpSubtitle");
-  if (title) title.textContent = isEn ? "Shift request guidelines" : "Guía de solicitudes de turnos";
+  if (title) title.textContent = isEn ? "Shift request guidelines" : "GuÃ­a de solicitudes de turnos";
   if (sub) sub.textContent = isEn
   ? "How preferences are considered"
-  : "Cómo se consideran las preferencias";
+  : "CÃ³mo se consideran las preferencias";
 
   if (shiftHelpClose) shiftHelpClose.textContent = isEn ? "Close" : "Cerrar";
   if (shiftHelpClose2) shiftHelpClose2.textContent = isEn ? "OK" : "Vale";
@@ -3503,8 +853,6 @@ shiftLockBtn?.addEventListener("click", async (e) => {
 
   if (!currentUser?.is_admin) return;
   if (!activeCell) return;
-
-  const token = getTokenOrThrow();
   const targetUserId = activeCell.userId;
   const date = activeCell.date;
   const key = `${targetUserId}_${date}`;
@@ -3513,11 +861,11 @@ shiftLockBtn?.addEventListener("click", async (e) => {
 
   try {
     if (existing) {
-      // 🔓 UNLOCK
-      const { error } = await supaClient.rpc(
+      // ðŸ”“ UNLOCK
+      const { error } = await supabaseClient.rpc(
         "admin_unlock_request_cell",
         {
-          p_token: token,
+          p_token: currentToken,
           p_target_user_id: targetUserId,
           p_date: date
         }
@@ -3525,24 +873,22 @@ shiftLockBtn?.addEventListener("click", async (e) => {
       if (error) throw error;
 
       locksCache.delete(key);
-      shiftLockBtn.textContent = "🔓";
+      shiftLockBtn.textContent = "ðŸ”“";
 
     } else {
-      // 🔒 LOCK (optional reason)
+      // ðŸ”’ LOCK (optional reason)
       const reason = prompt(
         currentLang === "es"
-          ? "Motivo (opcional). El usuario lo verá al pulsar este día:"
+          ? "Motivo (opcional). El usuario lo verÃ¡ al pulsar este dÃ­a:"
           : "Reason (optional). Staff will see this if they click this day:"
       );
 
       if (reason === null) return;
 
-      const token = getTokenOrThrow();
-      const { data, error } = await supaClient.rpc(
+      const { data, error } = await supabaseClient.rpc(
         "admin_lock_request_cell",
         {
-          p_admin_id: currentUser.id,
-          p_token: token,
+          p_token: currentToken,
           p_target_user_id: targetUserId,
           p_date: date,
           p_reason_en: currentLang === "es" ? null : reason,
@@ -3552,7 +898,7 @@ shiftLockBtn?.addEventListener("click", async (e) => {
       if (error) throw error;
 
       locksCache.set(key, data);
-      shiftLockBtn.textContent = "🔒";
+      shiftLockBtn.textContent = "ðŸ”’";
     }
 
     await loadRota(); // keep UI honest
@@ -3632,7 +978,7 @@ closeLabel.innerHTML = `
   clearInterval(closeCountdownTimer);
   closeCountdownTimer = null;
 
-  // ✅ FIX 3: force UI to re-render locked state once
+  // âœ… FIX 3: force UI to re-render locked state once
   if (!closeTriggeredReload) {
     closeTriggeredReload = true;
     loadRota(); // re-fetch + redraw so cells become locked
@@ -3690,24 +1036,25 @@ function closeUserModal(){
 function logout(){
   if (!currentUser) return;
 
-  // clear stored login + token
+  // clear stored login
   localStorage.removeItem(STORAGE_KEY);
-  sessionStorage.removeItem('calpe_ward_token');
+  sessionStorage.removeItem(STORAGE_KEY);
 
   // clear state
   currentUser = null;
+  selectedUser = null;
 
   closeUserModal();
   updateBadges();
   applyUnlockState();
 
-  // redirect to login
-  window.location.href = 'index.html';
+  // refresh UI (so any "editable" disappears + dropdown filtering updates)
+  loadRota();
 }
 
 // Wire badge click
 loginBadge.addEventListener("click", () => {
-  if (!currentUser) return;        // don’t open it when not logged in
+  if (!currentUser) return;        // donâ€™t open it when not logged in
   openUserModal();
 });
 
@@ -3722,10 +1069,8 @@ async function setMyLanguage(lang){
   if (!currentUser) return;
 
   try {
-    const token = getTokenOrThrow();
-
-    const { data, error } = await supaClient.rpc("set_user_language", {
-      p_token: token,
+    const { data, error } = await supabaseClient.rpc("set_user_language", {
+      p_token: currentToken,
       p_lang: lang
     });
 
@@ -3744,6 +1089,46 @@ userLangEn?.addEventListener("click", () => setMyLanguage("en"));
 userLangEs?.addEventListener("click", () => setMyLanguage("es"));
 
 
+// Save PIN
+userSavePin?.addEventListener("click", async () => {
+  if (!currentUser) return;
+
+  userPinErr.style.display = "none";
+  userPinOk.style.display = "none";
+
+  const oldPin = userOldPin.value.trim();
+  const newPin = userNewPin.value.trim();
+  const newPin2 = userNewPin2.value.trim();
+
+  if (!/^\d{4}$/.test(oldPin)) return showUserPinErr("Current PIN must be 4 digits.");
+  if (!/^\d{4}$/.test(newPin)) return showUserPinErr("New PIN must be 4 digits.");
+  if (newPin !== newPin2) return showUserPinErr("New PINs do not match.");
+  if (oldPin === newPin) return showUserPinErr("New PIN must be different.");
+
+  userSavePin.disabled = true;
+
+  try {
+    // Change pin (server validates old pin)
+    const { error: cErr } = await supabaseClient.rpc("change_user_pin", {
+      p_token: currentToken,
+      p_old_pin: oldPin,
+      p_new_pin: newPin
+    });
+    if (cErr) throw cErr;
+
+    userPinOk.style.display = "block";
+    userOldPin.value = "";
+    userNewPin.value = "";
+    userNewPin2.value = "";
+
+  } catch (e) {
+    console.error(e);
+    showUserPinErr("Failed to update PIN. Check console.");
+  } finally {
+    userSavePin.disabled = false;
+  }
+});
+
 function paintLangButtons(){
   const lang = (currentUser?.preferred_lang || "en");
 
@@ -3759,7 +1144,7 @@ function showUserPinErr(msg){
     
 function openWeekCommentModal(){
   if (!activeWeekIdForComment) return;
-  document.body.classList.add("modal-open");  // ✅
+  document.body.classList.add("modal-open");  // âœ…
   weekCommentModal.style.display = "flex";
   weekCommentModal.setAttribute("aria-hidden","false");
 }
@@ -3788,7 +1173,7 @@ if (adminBadge) {
 }
  
 
-// Click handler for 💬 buttons (event delegation)
+// Click handler for ðŸ’¬ buttons (event delegation)
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".week-comment-btn");
   if (!btn) return;
@@ -3917,7 +1302,7 @@ weekCommentSave.addEventListener("click", async () => {
    ========================================================= */
 if (periodSelect) {
   periodSelect.addEventListener("change", async () => {
-    closeTriggeredReload = false; // ✅ reset for new period
+    closeTriggeredReload = false; // âœ… reset for new period
     activePeriodId = periodSelect.value;
 
     const selected = periodsCache.find(p => String(p.id) === String(activePeriodId));
@@ -3956,11 +1341,6 @@ function closeAdminConsole(){
   adminModal.style.display = "none";
   adminModal.setAttribute("aria-hidden","true");
   updateBodyModalOpen();
-}
-
-// Alias for backward compatibility
-function goToDraftRota() {
-  navigateToRota();
 }
 
 
@@ -4015,7 +1395,7 @@ if (adminTabNotices) {
 let noticesCache = [];       // latest first
 let blockingNoticeIds = [];  // ids of notices not acknowledged at current version
 let unreadCount = 0;
-let notificationsCache = [];  // notifications from notifications table
+let notificationsCache = [];
 let notificationsUnreadCount = 0;
 
 function getNoticeBody(n){
@@ -4040,8 +1420,8 @@ function isNoticeAcked(n){
 }
 
 async function fetchNoticeAcksForAdmin(noticeId){
-  const { data, error } = await supaClient
-    .rpc("admin_get_notice_acks", { p_notice_id: noticeId });
+  const { data, error } = await supabaseClient
+    .rpc("admin_get_notice_acks", { p_token: currentToken, p_notice_id: noticeId });
 
   if (error) throw error;
 
@@ -4057,33 +1437,91 @@ async function fetchNoticeAcksForAdmin(noticeId){
 async function fetchNoticesForMe(){
   if (!currentUser) return [];
 
-const { data, error } = await supaClient.rpc(
-  "get_notices_for_user",
-  {
-    p_token: window.currentToken
-  }
-);
+  const { data, error } = await supabaseClient.rpc(
+    "get_notices_for_user",
+    {
+      p_token: currentToken
+    }
+  );
   if (error) throw error;
 
   // De-dupe by notice id
-const map = new Map();
-for (const row of (data || [])){
-  const key = String(row.id);
-  const prev = map.get(key);
-  if (!prev) {
-    map.set(key, row);
-    continue;
+  const map = new Map();
+  for (const row of (data || [])){
+    const key = String(row.id);
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, row);
+      continue;
+    }
+
+    // Prefer the row with the newest updated_at
+    const prevT = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
+    const rowT  = row.updated_at  ? new Date(row.updated_at).getTime()  : 0;
+
+    if (rowT > prevT) map.set(key, row);
   }
 
-  // Prefer the row with the newest updated_at
-  const prevT = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
-  const rowT  = row.updated_at  ? new Date(row.updated_at).getTime()  : 0;
-
-  if (rowT > prevT) map.set(key, row);
+  return [...map.values()].sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
 }
 
+async function fetchNotificationsForMe(){
+  if (!currentUser) return [];
 
-return [...map.values()].sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+  const roleId = Number(currentUser.role_id);
+  const clauses = [];
+
+  // Match all_staff scope
+  clauses.push("target_scope.eq.all_staff");
+
+  // Match user-specific scope
+  if (currentUser.id) {
+    clauses.push(`(target_scope.eq.user,target_user_id.eq.${currentUser.id})`);
+  }
+
+  // Match role-specific scope
+  if (!Number.isNaN(roleId)) {
+    clauses.push(`(target_scope.eq.role,target_role_ids.cs.{${roleId}})`);
+  }
+
+  const { data, error } = await supabaseClient
+    .from("notifications")
+    .select(`
+      id,
+      type,
+      payload,
+      target_scope,
+      target_role_ids,
+      target_user_id,
+      requires_action,
+      status,
+      created_by,
+      created_at,
+      updated_by,
+      updated_at,
+      acted_by,
+      acted_at
+    `)
+    .or(clauses.join(","))
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  
+  // Deduplicate by ID in case OR causes duplicates
+  const seen = new Set();
+  const deduped = [];
+  for (const item of (data || [])) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      deduped.push(item);
+    }
+  }
+  return deduped;
+}
+
+function computeNotificationState(list){
+  notificationsCache = Array.isArray(list) ? list : [];
+  notificationsUnreadCount = (notificationsCache || []).filter(n => (n.status || "pending") === "pending").length;
 }
 
 function computeNoticeState(list){
@@ -4117,114 +1555,6 @@ console.table(noticesCache.map(n => ({
   acked_at: n.acknowledged_at,
   acked: isNoticeAcked(n)
 })));
-
-// =========================================================
-// NOTIFICATIONS FUNCTIONS (loaded from notifications table)
-// =========================================================
-
-async function fetchNotificationsForMe(){
-  if (!currentUser) return [];
-
-  const roleId = Number(currentUser.role_id);
-  const isAdmin = !!currentUser.is_admin;
-  
-  // Check if user is in Admin permission group
-  let isAdminGroup = false;
-  if (!isAdmin) {
-    try {
-      const { data: groups } = await supaClient
-        .from("user_permission_groups")
-        .select("permission_groups(name)")
-        .eq("user_id", currentUser.id);
-      if (groups && groups.some(g => g.permission_groups?.name === "Admin")) {
-        isAdminGroup = true;
-      }
-    } catch (e) {
-      console.warn("Failed to check admin group", e);
-    }
-  }
-  
-  const clauses = [];
-
-  // Match all_staff scope
-  clauses.push("target_scope.eq.all_staff");
-
-  // Match user-specific scope - use and() to ensure BOTH conditions match
-  if (currentUser.id) {
-    clauses.push(`and(target_scope.eq.user,target_user_id.eq.${currentUser.id})`);
-  }
-
-  // Match admin scope - for notifications sent to all admins
-  if (isAdmin || isAdminGroup) {
-    clauses.push("target_scope.eq.admin");
-  }
-
-  // Match role-specific scope
-  if (!Number.isNaN(roleId)) {
-    clauses.push(`and(target_scope.eq.role,target_role_ids.cs.{${roleId}})`);
-  }
-
-  const { data, error } = await supaClient
-    .from("notifications")
-    .select(`
-      id,
-      type,
-      payload,
-      target_scope,
-      target_role_ids,
-      target_user_id,
-      requires_action,
-      status,
-      created_by,
-      created_at,
-      updated_by,
-      updated_at,
-      acted_by,
-      acted_at
-    `)
-    .or(clauses.join(","))
-    .order("updated_at", { ascending: false });
-
-  if (error) throw error;
-  
-  // Client-side filtering to ensure notifications are properly targeted
-  const filtered = (data || []).filter(item => {
-    // Only show pending notifications
-    if ((item.status || 'pending') !== 'pending') return false;
-    
-    // all_staff scope matches everyone
-    if (item.target_scope === 'all_staff') return true;
-    
-    // user scope must match current user ID
-    if (item.target_scope === 'user') {
-      return item.target_user_id === currentUser.id;
-    }
-    
-    // role scope must include current user's role
-    if (item.target_scope === 'role') {
-      const targetRoles = item.target_role_ids || [];
-      return targetRoles.includes(roleId);
-    }
-    
-    return false;
-  });
-  
-  // Deduplicate by ID in case OR causes duplicates
-  const seen = new Set();
-  const deduped = [];
-  for (const item of filtered) {
-    if (!seen.has(item.id)) {
-      seen.add(item.id);
-      deduped.push(item);
-    }
-  }
-  return deduped;
-}
-
-function computeNotificationState(list){
-  notificationsCache = Array.isArray(list) ? list : [];
-  notificationsUnreadCount = (notificationsCache || []).filter(n => (n.status || "pending") === "pending").length;
-}
 
 function updateNoticeBell(){
   if (!noticeBell || !noticeBellDot) return;
@@ -4289,12 +1619,12 @@ const unread = (noticesCache || []).filter(n => n.is_active !== false && !isNoti
   noticeUnreadList.innerHTML = unread.map(n => {
     const body = getNoticeBody(n); // Already formatted as HTML from Quill
     const when = n.updated_at ? new Date(n.updated_at).toLocaleString("en-GB") : "";
-    const who = escapeHtml(n.created_by_name || "—");
+    const who = escapeHtml(n.created_by_name || "â€”");
 
     return `
       <div class="notice-card">
         <div class="notice-title">${escapeHtml(n.title || "Notice")}</div>
-        <div class="notice-meta">By ${who} · ${when} <span class="notice-pill unread" style="margin-left:6px;">NEW</span></div>
+        <div class="notice-meta">By ${who} Â· ${when} <span class="notice-pill unread" style="margin-left:6px;">NEW</span></div>
         <div class="notice-body" style="line-height: 1.6;">${body}</div>
       </div>
     `;
@@ -4362,47 +1692,142 @@ function renderAllNoticesList(){
     console.table((visible || []).map(n => ({ id: n.id, title: n.title, target_all: n.target_all, target_roles: n.target_roles })));
   } catch (err) { /* ignore */ }
 
-  // Build notices array
-  const noticesForDisplay = visible.map(n => {
-    const bodyText = getNoticeBody(n);
-    return {
+  // MERGE: combine visible notices + notifications
+  const combined = [];
+
+  // Add notices as "notice" items
+  visible.forEach(n => {
+    combined.push({
       _type: "notice",
       id: String(n.id),
       title: n.title || "Notice",
-      body: bodyText || '',
+      body: getNoticeBody(n),
       when: n.updated_at ? new Date(n.updated_at).toLocaleString("en-GB") : "",
       who: n.created_by_name || "Unknown",
       acked: isNoticeAcked(n),
       data: n
-    };
+    });
   });
 
-  // Build notifications array using shared formatting functions
-  const notificationsForDisplay = (notificationsCache || []).map(n => ({
-    _type: "notification",
-    id: String(n.id),
-    title: getNotificationTitle(n),
-    body: getNotificationBody(n),
-    when: n.updated_at ? new Date(n.updated_at).toLocaleString("en-GB") : "",
-    status: n.status || "pending",
-    requiresAction: !!n.requires_action,
-    data: n
-  }));
+  // Add notifications as "notification" items
+  (notificationsCache || []).forEach(n => {
+    const title = getNotificationTitle(n);
+    const body = getNotificationBody(n);
+    console.log("[NOTIFICATION ITEM]", {type: n.type, payload: n.payload, title, body});
+    combined.push({
+      _type: "notification",
+      id: String(n.id),
+      title: title,
+      body: body,
+      when: n.updated_at ? new Date(n.updated_at).toLocaleString("en-GB") : "",
+      who: "", // optional: could map created_by to user name
+      status: n.status || "pending",
+      requiresAction: !!n.requires_action,
+      data: n
+    });
+  });
 
-  // Render using shared function
-  if (noticesForDisplay.length === 0 && notificationsForDisplay.length === 0){
-    noticeAllList.innerHTML = `<div class="subtitle" style="text-align:center; padding:20px; color:#999;">No notices or notifications</div>`;
+  // Sort combined by updated_at descending
+  combined.sort((a,b) => {
+    const aTime = a.data.updated_at ? new Date(a.data.updated_at).getTime() : 0;
+    const bTime = b.data.updated_at ? new Date(b.data.updated_at).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  if (!combined.length){
+    noticeAllList.innerHTML = `<div class="subtitle">No items.</div>`;
     return;
   }
 
-  noticeAllList.innerHTML = renderAllNoticesAndNotifications(noticesForDisplay, notificationsForDisplay);
+  noticeAllList.innerHTML = combined.map(item => {
+    if (item._type === "notice"){
+      const pill = item.acked
+        ? `<span class="notice-pill">Acknowledged</span>`
+        : `<span class="notice-pill unread">New</span>`;
+
+      return `
+        <div class="notice-card">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div style="min-width:0;">
+              <div class="notice-title">${escapeHtml(item.title)}</div>
+              <div class="notice-meta">By ${escapeHtml(item.who)}${item.when ? " · " + item.when : ""}</div>
+            </div>
+            <div>${pill}</div>
+          </div>
+
+          <div class="notice-body" style="margin-top:8px; line-height: 1.6;">${item.body}</div>
+
+          ${item.acked ? "" : `
+            <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+              <button type="button" class="primary" data-ack="${item.id}" style="min-width:auto;">
+                Acknowledge
+              </button>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    if (item._type === "notification"){
+      const pill = item.status === "pending"
+        ? `<span class="notice-pill unread">New</span>`
+        : `<span class="notice-pill">${item.status}</span>`;
+
+      // Different buttons for different notification types
+      let actionButtons = "";
+      
+      if (item.status === "pending" && item.requiresAction) {
+        // Check if this is a swap_pending notification (for admins)
+        if (item.data.type === "swap_pending") {
+          actionButtons = `
+            <div style="display:flex; gap:6px; justify-content:flex-end; margin-top:10px;">
+              <button type="button" class="primary" data-admin-approve-swap="${item.id}">Approve</button>
+              <button type="button" data-admin-decline-swap="${item.id}">Decline</button>
+            </div>
+          `;
+        } else {
+          // swap_request or other actionable notifications
+          actionButtons = `
+            <div style="display:flex; gap:6px; justify-content:flex-end; margin-top:10px;">
+              <button type="button" class="primary" data-notif-accept="${item.id}">Accept</button>
+              <button type="button" data-notif-decline="${item.id}">Decline</button>
+              <button type="button" data-notif-ignore="${item.id}">Ignore</button>
+            </div>
+          `;
+        }
+      } else if (item.status === "pending" && !item.requiresAction) {
+        actionButtons = `
+          <div style="display:flex; gap:6px; justify-content:flex-end; margin-top:10px;">
+            <button type="button" class="primary" data-notif-ack="${item.id}">Acknowledge</button>
+            <button type="button" data-notif-ignore="${item.id}">Ignore</button>
+          </div>
+        `;
+      }
+
+      return `
+        <details class="notification-card" style="border: 2px solid #4CAF50; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: #f0f8f0;">
+          <summary style="cursor: pointer; font-weight: bold; color: #2c5f2d; padding: 8px; user-select: none;">
+            <span style="color: #2c5f2d; font-size: 16px;">${escapeHtml(item.title)}</span>
+            ${pill}
+          </summary>
+          <div style="padding-top: 12px; border-top: 1px solid #ddd; margin-top: 8px;">
+            <div class="notice-body" style="line-height: 1.6; color: #333; margin-bottom: 12px;">${escapeHtml(item.body)}</div>
+            <div class="notice-meta" style="font-size: 12px; color: #666;">${item.when ? item.when : ""}</div>
+            ${actionButtons}
+          </div>
+        </details>
+      `;
+    }
+
+    return "";
+  }).join("");
 }
 
 
 
 async function adminFetchNoticeAcks(noticeId){
-  const { data, error } = await supaClient.rpc("admin_get_notice_acks", {
-    p_token: window.currentToken,
+  const { data, error } = await supabaseClient.rpc("admin_get_notice_acks", {
+    p_token: currentToken,
     p_notice_id: noticeId
   });
 
@@ -4417,7 +1842,8 @@ async function adminFetchNoticeAcks(noticeId){
 async function adminFetchNoticeAckCounts(noticeIds){
   if (!Array.isArray(noticeIds) || noticeIds.length === 0) return [];
 
-  const { data, error } = await supaClient.rpc("admin_notice_ack_counts", {
+  const { data, error } = await supabaseClient.rpc("admin_notice_ack_counts", {
+    p_token: currentToken,
     p_notice_ids: noticeIds
   });
 
@@ -4481,9 +1907,9 @@ function renderAckList(container, list){
 
 
 async function refreshNotices(){
-const list = await fetchNoticesForMe();
-const visible = filterNoticesForUser(list);
-computeNoticeState(visible);
+  const list = await fetchNoticesForMe();
+  const visible = filterNoticesForUser(list);
+  computeNoticeState(visible);
   updateNoticeBell();
 }
 
@@ -4500,8 +1926,8 @@ async function refreshNoticesAndNotifications(){
 async function ackOneNotice(noticeId, noticeVersion){
   if (!currentUser) return;
 
-  const { error } = await supaClient.rpc("ack_notice", {
-    p_token: window.currentToken,
+  const { error } = await supabaseClient.rpc("ack_notice", {
+    p_token: currentToken,
     p_notice_id: noticeId,
     p_version: noticeVersion
   });
@@ -4543,7 +1969,7 @@ async function refreshNoticesAndMaybeBlock(){
   try {
     await refreshNoticesAndNotifications();
 
-    // Block editing until unread are acknowledged
+    // Block editing until unread notices are acknowledged
     if (blockingNoticeIds.length > 0){
       openUnreadModal();
     }
@@ -4562,6 +1988,240 @@ noticeBell?.addEventListener("click", (e) => {
   if (!currentUser) return;
   openAllNoticesModal();
 });
+
+// Acknowledge notice (event delegation)
+noticeAllList?.addEventListener("click", async (e) => {
+  const ackBtn = e.target.closest("button[data-ack]");
+  if (ackBtn) {
+    const id = String(ackBtn.dataset.ack);
+
+    // Find the notice so we know the current version
+    const n = (noticesCache || []).find(x => String(x.id) === id);
+    if (!n) {
+      alert("Notice not found in cache. Reload and try again.");
+      return;
+    }
+
+    try {
+      ackBtn.disabled = true;
+
+      // Pass id + version
+      await ackOneNotice(n.id, n.version);
+
+      // Refresh local state + UI
+      await refreshNoticesAndNotifications();
+      renderAllNoticesList();
+
+      // If that cleared blocking notices, close the blocking modal
+      if (blockingNoticeIds.length === 0 && noticeUnreadModal?.style.display === "flex") {
+        closeUnreadModal();
+      }
+
+      applyUnlockState();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to acknowledge notice.");
+    } finally {
+      ackBtn.disabled = false;
+    }
+    return;
+  }
+
+  // Notification actions
+  const acceptBtn = e.target.closest("button[data-notif-accept]");
+  if (acceptBtn) {
+    const id = String(acceptBtn.dataset.notifAccept);
+    try {
+      acceptBtn.disabled = true;
+      await updateNotificationStatus(id, "accepted");
+      await refreshNotifications();
+      renderAllNoticesList();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to accept notification.");
+    } finally {
+      acceptBtn.disabled = false;
+    }
+    return;
+  }
+
+  const declineBtn = e.target.closest("button[data-notif-decline]");
+  if (declineBtn) {
+    const id = String(declineBtn.dataset.notifDecline);
+    try {
+      declineBtn.disabled = true;
+      await updateNotificationStatus(id, "declined");
+      await refreshNotifications();
+      renderAllNoticesList();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to decline notification.");
+    } finally {
+      declineBtn.disabled = false;
+    }
+    return;
+  }
+
+  const ignoreBtn = e.target.closest("button[data-notif-ignore]");
+  if (ignoreBtn) {
+    const id = String(ignoreBtn.dataset.notifIgnore);
+    try {
+      ignoreBtn.disabled = true;
+      await updateNotificationStatus(id, "ignored");
+      await refreshNotifications();
+      renderAllNoticesList();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to ignore notification.");
+    } finally {
+      ignoreBtn.disabled = false;
+    }
+    return;
+  }
+
+  const ackNotifBtn = e.target.closest("button[data-notif-ack]");
+  if (ackNotifBtn) {
+    const id = String(ackNotifBtn.dataset.notifAck);
+    try {
+      ackNotifBtn.disabled = true;
+      await updateNotificationStatus(id, "ack");
+      await refreshNotifications();
+      renderAllNoticesList();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to acknowledge notification.");
+    } finally {
+      ackNotifBtn.disabled = false;
+    }
+    return;
+  }
+
+  // Admin approve swap (from swap_pending notification)
+  const adminApproveBtn = e.target.closest("button[data-admin-approve-swap]");
+  if (adminApproveBtn) {
+    const notifId = String(adminApproveBtn.dataset.adminApproveSwap);
+    try {
+      adminApproveBtn.disabled = true;
+      
+      // Find the notification to get swap_request_id
+      const notification = notificationsCache.find(n => String(n.id) === notifId);
+      if (!notification || !notification.payload?.swap_request_id) {
+        throw new Error("Swap request ID not found in notification");
+      }
+      
+      const swapRequestId = notification.payload.swap_request_id;
+      
+      // Call admin approval RPC
+      const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
+        p_token: currentToken,
+        p_swap_request_id: swapRequestId
+      });
+      
+      if (error) throw error;
+      if (data && data.length > 0 && !data[0].success) {
+        throw new Error(data[0].error_message || "Failed to approve swap");
+      }
+      
+      alert("Swap approved successfully!");
+      await refreshNotifications();
+      renderAllNoticesList();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to approve swap: " + err.message);
+    } finally {
+      adminApproveBtn.disabled = false;
+    }
+    return;
+  }
+
+  // Admin decline swap (from swap_pending notification)
+  const adminDeclineBtn = e.target.closest("button[data-admin-decline-swap]");
+  if (adminDeclineBtn) {
+    const notifId = String(adminDeclineBtn.dataset.adminDeclineSwap);
+    try {
+      adminDeclineBtn.disabled = true;
+      
+      // Find the notification to get swap_request_id
+      const notification = notificationsCache.find(n => String(n.id) === notifId);
+      if (!notification || !notification.payload?.swap_request_id) {
+        throw new Error("Swap request ID not found in notification");
+      }
+      
+      const swapRequestId = notification.payload.swap_request_id;
+      
+      // Call admin decline RPC
+      const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
+        p_token: currentToken,
+        p_swap_request_id: swapRequestId
+      });
+      
+      if (error) throw error;
+      if (data && data.length > 0 && !data[0].success) {
+        throw new Error(data[0].error_message || "Failed to decline swap");
+      }
+      
+      alert("Swap declined successfully!");
+      await refreshNotifications();
+      renderAllNoticesList();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to decline swap: " + err.message);
+    } finally {
+      adminDeclineBtn.disabled = false;
+    }
+    return;
+  }
+});
+
+async function updateNotificationStatus(notifId, status){
+  if (!currentUser) throw new Error("Not logged in.");
+  
+  // Find the notification in cache to check type and payload
+  const notif = (notificationsCache || []).find(n => String(n.id) === String(notifId));
+  
+  // For swap_request notifications, also update the swap_request record
+  if (notif && notif.type === "swap_request") {
+    let payload = notif.payload || {};
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload);
+      } catch(e) {
+        console.error('Failed to parse notification payload:', e);
+        throw new Error("Invalid notification payload");
+      }
+    }
+    
+    const swapRequestId = payload.swap_request_id;
+    if (!swapRequestId) throw new Error("Swap request ID not found in notification payload");
+    
+    // Map notification status to swap response
+    let swapResponse = "ignored";
+    if (status === "accepted") swapResponse = "accepted";
+    else if (status === "declined") swapResponse = "declined";
+    
+    // Call the RPC to record the response
+    const { error: rpcError } = await supabaseClient.rpc("staff_respond_to_swap_request", {
+      p_token: currentToken,
+      p_swap_request_id: swapRequestId,
+      p_response: swapResponse
+    });
+    
+    if (rpcError) throw rpcError;
+  }
+  
+  // Update the notification record
+  const { error } = await supabaseClient
+    .from("notifications")
+    .update({
+      status: status,
+      acted_by: currentUser.id,
+      acted_at: new Date().toISOString(),
+      updated_by: currentUser.id
+    })
+    .eq("id", notifId);
+
+  if (error) throw error;
+}
 
 // Admin-only: load ack lists when the "Acknowledged by" row is clicked.
 // (toggle event doesn't bubble, so we use click delegation)
@@ -4610,254 +2270,6 @@ noticeAllModal?.addEventListener("click", (e) => {
   if (e.target === noticeAllModal) closeAllNoticesModal();
 });
 
-// Acknowledge single from ALL modal (event delegation)
-noticeAllList?.addEventListener("click", async (e) => {
-  const btn = e.target.closest("button[data-ack]");
-  if (!btn) return;
-
-  const id = String(btn.dataset.ack);
-
-  // Find the notice so we know the current version
-  const n = (noticesCache || []).find(x => String(x.id) === id);
-  if (!n) {
-    alert("Notice not found in cache. Reload and try again.");
-    return;
-  }
-
-  try {
-    btn.disabled = true;
-
-    // Pass id + version
-    await ackOneNotice(n.id, n.version);
-
-    // Refresh local state + UI
-await refreshNotices();
-    renderAllNoticesList();
-
-    // If that cleared blocking notices, close the blocking modal
-    if (blockingNoticeIds.length === 0 && noticeUnreadModal?.style.display === "flex") {
-      closeUnreadModal();
-    }
-
-    applyUnlockState();
-  } catch (err) {
-    console.error(err);
-    alert("Failed to acknowledge notice.");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// Notification action buttons (Accept, Decline, Ignore, Acknowledge)
-noticeAllList?.addEventListener("click", async (e) => {
-  // Handle Accept button
-  const acceptBtn = e.target.closest("button[data-notif-accept]");
-  if (acceptBtn) {
-    const id = String(acceptBtn.dataset.notifAccept);
-    try {
-      acceptBtn.disabled = true;
-      
-      const notification = notificationsCache.find(n => String(n.id) === id);
-      if (notification && notification.type === "swap_request") {
-        console.log("[DEBUG] Accepting swap request:", {
-          user_id: currentUser.id,
-          swap_request_id: notification.payload?.swap_request_id,
-          notification: notification
-        });
-        const { data, error } = await supaClient.rpc(
-          "staff_respond_to_swap_request",
-          {
-            p_user_id: currentUser.id,
-            p_swap_request_id: notification.payload?.swap_request_id || id,
-            p_response: "accepted"
-          }
-        );
-        console.log("[DEBUG] RPC response:", { data, error });
-        if (error) throw error;
-        if (data && data.length > 0 && !data[0].success) {
-          throw new Error(data[0].error_message || "Unknown error");
-        }
-        alert("Swap request accepted!");
-      } else {
-        await updateNotificationStatus(id, "accepted");
-      }
-      
-      await refreshNoticesAndNotifications();
-      renderAllNoticesList();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to accept notification.");
-    } finally {
-      acceptBtn.disabled = false;
-    }
-    return;
-  }
-
-  // Handle Decline button
-  const declineBtn = e.target.closest("button[data-notif-decline]");
-  if (declineBtn) {
-    const id = String(declineBtn.dataset.notifDecline);
-    try {
-      declineBtn.disabled = true;
-      
-      const notification = notificationsCache.find(n => String(n.id) === id);
-      if (notification && notification.type === "swap_request") {
-        const { data, error } = await supaClient.rpc(
-          "staff_respond_to_swap_request",
-          {
-            p_user_id: currentUser.id,
-            p_swap_request_id: notification.payload?.swap_request_id || id,
-            p_response: "declined"
-          }
-        );
-        if (error) throw error;
-        alert("Swap request declined!");
-      } else {
-        await updateNotificationStatus(id, "declined");
-      }
-      
-      await refreshNoticesAndNotifications();
-      renderAllNoticesList();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to decline notification.");
-    } finally {
-      declineBtn.disabled = false;
-    }
-    return;
-  }
-
-  // Handle Ignore button
-  const ignoreBtn = e.target.closest("button[data-notif-ignore]");
-  if (ignoreBtn) {
-    const id = String(ignoreBtn.dataset.notifIgnore);
-    try {
-      ignoreBtn.disabled = true;
-      await updateNotificationStatus(id, "ignored");
-      await refreshNoticesAndNotifications();
-      renderAllNoticesList();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to ignore notification.");
-    } finally {
-      ignoreBtn.disabled = false;
-    }
-    return;
-  }
-
-  // Handle Acknowledge button (for non-action notifications)
-  const ackNotifBtn = e.target.closest("button[data-notif-ack]");
-  if (ackNotifBtn) {
-    const id = String(ackNotifBtn.dataset.notifAck);
-    try {
-      ackNotifBtn.disabled = true;
-      await updateNotificationStatus(id, "acknowledged");
-      await refreshNoticesAndNotifications();
-      renderAllNoticesList();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to acknowledge notification.");
-    } finally {
-      ackNotifBtn.disabled = false;
-    }
-    return;
-  }
-
-  // Admin approve swap (from swap_pending notification)
-  const adminApproveBtn = e.target.closest("button[data-admin-approve-swap]");
-  if (adminApproveBtn) {
-    const notifId = String(adminApproveBtn.dataset.adminApproveSwap);
-    try {
-      adminApproveBtn.disabled = true;
-      
-      // Find the notification to get swap_request_id
-      const notification = notificationsCache.find(n => String(n.id) === notifId);
-      if (!notification || !notification.payload?.swap_request_id) {
-        throw new Error("Swap request ID not found in notification");
-      }
-      
-      const swapRequestId = notification.payload.swap_request_id;
-      const token = getTokenOrThrow();
-      
-      // Call admin approval RPC
-      const { data, error } = await supaClient.rpc("admin_approve_swap_request", {
-        p_token: token,
-        p_swap_request_id: swapRequestId
-      });
-      
-      if (error) throw error;
-      if (data && data.length > 0 && !data[0].success) {
-        throw new Error(data[0].error_message || "Failed to approve swap");
-      }
-      
-      alert("Swap approved successfully!");
-      await refreshNotifications();
-      renderAllNoticesList();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to approve swap: " + err.message);
-    } finally {
-      adminApproveBtn.disabled = false;
-    }
-    return;
-  }
-
-  // Admin decline swap (from swap_pending notification)
-  const adminDeclineBtn = e.target.closest("button[data-admin-decline-swap]");
-  if (adminDeclineBtn) {
-    const notifId = String(adminDeclineBtn.dataset.adminDeclineSwap);
-    try {
-      adminDeclineBtn.disabled = true;
-      
-      // Find the notification to get swap_request_id
-      const notification = notificationsCache.find(n => String(n.id) === notifId);
-      if (!notification || !notification.payload?.swap_request_id) {
-        throw new Error("Swap request ID not found in notification");
-      }
-      
-      const swapRequestId = notification.payload.swap_request_id;
-      const token = getTokenOrThrow();
-      
-      // Call admin decline RPC
-      const { data, error } = await supaClient.rpc("admin_decline_swap_request", {
-        p_token: token,
-        p_swap_request_id: swapRequestId
-      });
-      
-      if (error) throw error;
-      if (data && data.length > 0 && !data[0].success) {
-        throw new Error(data[0].error_message || "Failed to decline swap");
-      }
-      
-      alert("Swap declined successfully!");
-      await refreshNotifications();
-      renderAllNoticesList();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to decline swap: " + err.message);
-    } finally {
-      adminDeclineBtn.disabled = false;
-    }
-    return;
-  }
-});
-
-async function updateNotificationStatus(notifId, status) {
-  if (!currentUser) throw new Error("Not logged in.");
-  const { error } = await supaClient
-    .from("notifications")
-    .update({
-      status: status,
-      acted_by: currentUser.id,
-      acted_at: new Date().toISOString(),
-      updated_by: currentUser.id
-    })
-    .eq("id", notifId);
-
-  if (error) throw error;
-}
-
-
 // Blocking modal: acknowledge ALL
 noticeUnreadAcknowledge?.addEventListener("click", async () => {
   if (!blockingNoticeIds.length) return;
@@ -4902,7 +2314,7 @@ let adminEditingUserId = null;
 async function loadAdminNotices(){
   if (!currentUser?.is_admin) return;
 
-const { data, error } = await supaClient
+const { data, error } = await supabaseClient
   .from("notices")
   .select(`
     id,
@@ -5080,8 +2492,8 @@ function renderAdminNotices(){
 
             <div style="font-size:11px; color:#667085; margin-top:4px;">
               v${n.version}
-              · ${createdBy}
-              · ${when}
+              Â· ${createdBy}
+              Â· ${when}
               ${!n.is_active
                 ? `<span class="notice-pill" style="margin-left:6px;">Inactive</span>`
                 : ``}
@@ -5102,16 +2514,16 @@ function renderAdminNotices(){
                   data-ack-toggle="${n.id}"
                   style="padding:6px 10px; border-radius:999px; font-size:12px;">
             Acknowledged:
-            <span data-ack-count="${n.id}">${ackCount ?? "—"}</span>
+            <span data-ack-count="${n.id}">${ackCount ?? "â€”"}</span>
             <span class="muted"> / </span>
-            <span data-ack-total="${n.id}">${ackTotal ?? "—"}</span>
-            <span class="muted"> · View</span>
+            <span data-ack-total="${n.id}">${ackTotal ?? "â€”"}</span>
+            <span class="muted"> Â· View</span>
           </button>
 
           <div id="ack-list-${n.id}"
                class="ack-list"
                style="display:none; margin-top:8px; padding:10px; border:1px solid #e5e7eb; border-radius:12px;">
-            <div class="subtitle">Loading…</div>
+            <div class="subtitle">Loadingâ€¦</div>
           </div>
         </div>
 
@@ -5127,8 +2539,8 @@ async function adminUpsertNotice(payload){
   const targetRoles = Array.isArray(payload.target_roles) ? payload.target_roles : [];
   const targetAll = !!payload.target_all && targetRoles.length === 0;
 
-  const { data, error } = await supaClient.rpc("admin_upsert_notice", {
-    p_token: window.currentToken,
+  const { data, error } = await supabaseClient.rpc("admin_upsert_notice", {
+    p_token: currentToken,
     p_notice_id: payload.id || null,
     p_title: payload.title,
     p_body_en: payload.body_en,
@@ -5146,8 +2558,8 @@ async function toggleAdminNoticeActive(notice){
   const ok = confirm(`${next ? "Unhide" : "Hide"} "${notice.title}"?`);
   if (!ok) return;
 
-  const { error } = await supaClient.rpc("admin_set_notice_active", {
-    p_token: window.currentToken,
+  const { error } = await supabaseClient.rpc("admin_set_notice_active", {
+    p_token: currentToken,
     p_notice_id: notice.id,
     p_active: next
   });
@@ -5161,8 +2573,8 @@ async function deleteAdminNotice(notice){
   const ok = confirm(`Delete "${notice.title}"?\n\nThis cannot be undone.`);
   if (!ok) return;
 
-  const { error } = await supaClient.rpc("admin_delete_notice", {
-    p_token: window.currentToken,
+  const { error } = await supabaseClient.rpc("admin_delete_notice", {
+    p_token: currentToken,
     p_notice_id: notice.id
   });
 
@@ -5175,9 +2587,9 @@ async function deleteAdminNotice(notice){
 async function loadAdminUsers(){
   if (!adminUsersList) return;
 
-  adminUsersList.textContent = "Loading users…";
+  adminUsersList.textContent = "Loading usersâ€¦";
 
-  const { data, error } = await supaClient
+  const { data, error } = await supabaseClient
     .from("users")
     .select("id, name, role_id, is_admin, is_active, display_order, roles(name)")
     .order("role_id", { ascending: true })
@@ -5226,7 +2638,7 @@ function renderAdminUsers(){
     html.push(members.map(u => {
       return `
         <div class="user-row" draggable="true" data-user-id="${u.id}" data-role-id="${g.role_id}">
-          <div class="drag-handle" title="Drag to reorder">↕</div>
+          <div class="drag-handle" title="Drag to reorder">â†•</div>
           <div class="user-meta">
             <div class="user-name">
               ${escapeHtml(u.name || "")}
@@ -5281,18 +2693,11 @@ async function toggleUserActive(userId){
   const ok = confirm(`${next ? "Reactivate" : "Deactivate"} ${u.name}?`);
   if (!ok) return;
 
-  const { error } = await supaClient.rpc("set_user_active", {
-    p_token: window.currentToken,
-    p_user_id: userId,
+  const { error } = await supabaseClient.rpc("admin_set_user_active", {
+    p_token: currentToken,
+    p_target_user_id: userId,
     p_active: next
   });
-
-  if (error){
-    console.error(error);
-    alert("Update failed.");
-    return;
-  }
-
   await loadRota();
   await loadAdminUsers();
 }
@@ -5379,7 +2784,7 @@ async function updateUserDisplayOrder(roleId) {
       const userId = rows[i].dataset.userId;
       console.log(`Updating user ${userId} to display_order ${i + 1}`);
       
-      const { data, error } = await supaClient
+      const { data, error } = await supabaseClient
         .from('users')
         .update({ display_order: i + 1 })
         .eq('id', userId)
@@ -5447,7 +2852,7 @@ adminNoticesList?.addEventListener("click", async (e) => {
     // already loaded once
     if (box.dataset.loaded === "1") return;
 
-    box.innerHTML = `<div class="subtitle">Loading…</div>`;
+    box.innerHTML = `<div class="subtitle">Loadingâ€¦</div>`;
 
     try {
       const rows = await fetchNoticeAcksForAdmin(noticeId);
@@ -5596,18 +3001,22 @@ noticeRoleChks.forEach(chk => {
 adminSaveUserBtn?.addEventListener("click", async () => {
   const name = adminEditUserName.value.trim();
   const role_id = Number(adminEditUserRole.value);
+  const pin = (adminEditUserPin.value || "").trim();
 
   if (!name) return alert("Name is required.");
   if (![1,2,3].includes(role_id)) return alert("Role invalid.");
+  if (pin && !/^\d{4}$/.test(pin)) return alert("PIN must be 4 digits.");
 
   try {
-    const { data: userId, error } = await supaClient.rpc("admin_upsert_user", {
-      p_token: window.currentToken,
+    const { data: userId, error } = await supabaseClient.rpc("admin_upsert_user", {
+      p_token: currentToken,
       p_user_id: adminEditingUserId, // null = add
       p_name: name,
       p_role_id: role_id
     });
     if (error) throw error;
+
+    if (pin) await adminSetUserPin(userId, pin);
 
     await loadRota();
     await loadAdminUsers();
@@ -5619,6 +3028,17 @@ adminSaveUserBtn?.addEventListener("click", async () => {
   }
 });
 
+/* =========================================================
+   [ADMIN-USERS-4] PIN setter via RPC (recommended)
+   ========================================================= */
+async function adminSetUserPin(userId, pin){
+  const { error } = await supabaseClient.rpc("admin_set_user_pin", {
+    p_token: currentToken,
+    p_target_user_id: userId,
+    p_new_pin: pin
+  });
+  if (error) throw error;
+}
 
 /* =========================
    ADMIN PERIODS (v2 dropdown)
@@ -5665,8 +3085,8 @@ if (adminToggleHiddenBtn) {
 async function loadAdminPeriodsForDropdown(){
   if (!adminPeriodSelect) return;
 
-  adminPeriodMeta.textContent = "Loading…";
-  adminWeeksList.textContent = "Loading…";
+  adminPeriodMeta.textContent = "Loadingâ€¦";
+  adminWeeksList.textContent = "Loadingâ€¦";
 
   let periods;
   try {
@@ -5687,7 +3107,7 @@ async function loadAdminPeriodsForDropdown(){
     opt.value = p.id;
     const s = fmt(new Date(p.start_date));
     const e = fmt(new Date(p.end_date));
-    opt.textContent = `${s} – ${e}${p.is_active ? " ★" : ""}${p.is_hidden ? " (hidden)" : ""}`;
+    opt.textContent = `${s} â€“ ${e}${p.is_active ? " â˜…" : ""}${p.is_hidden ? " (hidden)" : ""}`;
     adminPeriodSelect.appendChild(opt);
   }
 
@@ -5712,16 +3132,16 @@ function renderAdminPeriodMeta(periodId){
   }
 
   const bits = [];
-  if (p.is_active) bits.push("✅ Active");
-  if (p.is_hidden) bits.push("🙈 Hidden");
-  adminPeriodMeta.textContent = bits.join(" · ") || "—";
+  if (p.is_active) bits.push("âœ… Active");
+  if (p.is_hidden) bits.push("ðŸ™ˆ Hidden");
+  adminPeriodMeta.textContent = bits.join(" Â· ") || "â€”";
 }
 
 async function loadAdminWeeks(periodId){
-  adminWeeksList.textContent = "Loading weeks…";
+  adminWeeksList.textContent = "Loading weeksâ€¦";
 
   // Pull all dates for the period, but we only need them to discover the weeks + open state
-  const { data, error } = await supaClient
+  const { data, error } = await supabaseClient
     .from("rota_dates")
 .select("date, week_id, period_id, rota_weeks(id, open, open_after_close)")
     .eq("period_id", periodId)
@@ -5800,7 +3220,7 @@ ${periodClosed ? "(after close time)" : "(before close time)"}
     return `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #eee;">
         <div>
-          <div style="font-weight:800;">${s} – ${e}</div>
+          <div style="font-weight:800;">${s} â€“ ${e}</div>
           <div style="margin-top:4px;">${pill}</div>
           ${lockNote}
         </div>
@@ -5822,15 +3242,13 @@ ${periodClosed ? "(after close time)" : "(before close time)"}
 adminWeeksList.querySelectorAll("button[data-week-id]").forEach(btn => {
   btn.addEventListener("click", async () => {
     if (!currentUser?.is_admin) return;
-
-    const token = getTokenOrThrow();
     const weekId = btn.dataset.weekId;
 
     const open = btn.dataset.open === "1";
     const openAfterClose = btn.dataset.openAfterClose === "1";
     const periodClosed = btn.dataset.periodClosed === "1";
 
-// ✅ Toggle the correct flag depending on whether period is closed
+// âœ… Toggle the correct flag depending on whether period is closed
 let nextOpen = open;
 let nextOpenAfterClose = openAfterClose;
 
@@ -5840,10 +3258,8 @@ if (periodClosed) {
   nextOpen = !open;                      // normal behavior
 }
     try {
-      const token = getTokenOrThrow();
-      const { error } = await supaClient.rpc("admin_set_week_open_flags", {
-        p_admin_id: currentUser.id,
-        p_token: token,
+      const { error } = await supabaseClient.rpc("admin_set_week_open_flags", {
+        p_token: currentToken,
         p_week_id: weekId,
         p_open: nextOpen,
         p_open_after_close: nextOpenAfterClose
@@ -5864,10 +3280,8 @@ if (periodClosed) {
    ========================= */
   
 async function setActivePeriod(periodId){
-  const token = getTokenOrThrow();
-
-  const { error } = await supaClient.rpc("admin_set_active_period", {
-    p_token: token,
+  const { error } = await supabaseClient.rpc("admin_set_active_period", {
+    p_token: currentToken,
     p_period_id: periodId
   });
 
@@ -5877,10 +3291,9 @@ async function setActivePeriod(periodId){
     
 async function toggleHiddenPeriod(periodId){
   if (!currentUser?.is_admin) throw new Error("Admin only.");
-  const token = getTokenOrThrow();
 
-  const { error } = await supaClient.rpc("admin_toggle_hidden_period", {
-    p_token: token,
+  const { error } = await supabaseClient.rpc("admin_toggle_hidden_period", {
+    p_token: currentToken,
     p_period_id: periodId
   });
 
@@ -5890,20 +3303,18 @@ async function toggleHiddenPeriod(periodId){
 
 async function generateNextFiveWeekPeriod(){
   if (!currentUser?.is_admin) throw new Error("Admin only.");
-
-  const token = getTokenOrThrow();
   const r = computeNextPeriodRange();
   if (!r) throw new Error("No existing periods.");
 
   const startStr = isoDate(r.start);
   const endStr   = isoDate(r.end);
-  const periodName = `${fmt(r.start)} – ${fmt(r.end)}`;
+  const periodName = `${fmt(r.start)} â€“ ${fmt(r.end)}`;
 
-  // 1️⃣ create period + weeks + dates server-side
-  const { data: periodId, error } = await supaClient.rpc(
+  // 1ï¸âƒ£ create period + weeks + dates server-side
+  const { data: periodId, error } = await supabaseClient.rpc(
     "admin_create_five_week_period",
     {
-      p_token: token,
+      p_token: currentToken,
       p_name: periodName,
       p_start_date: startStr,
       p_end_date: endStr
@@ -5912,7 +3323,7 @@ async function generateNextFiveWeekPeriod(){
 
   if (error) throw error;
 
-  // ✅ return UUID only
+  // âœ… return UUID only
   return periodId;
 }
 
@@ -5947,7 +3358,7 @@ function refreshGeneratePreview(){
   }
 
   adminGeneratePreview.textContent =
-    `Next period: ${fmt(r.start)} – ${fmt(r.end)} (5 weeks, Sun–Sat).`;
+    `Next period: ${fmt(r.start)} â€“ ${fmt(r.end)} (5 weeks, Sunâ€“Sat).`;
 }
 
 if (adminGenerateBtn) {
@@ -5959,13 +3370,13 @@ if (adminGenerateBtn) {
         return;
       }
 
-      const ok = confirm(`Generate new 5-week period:\n${fmt(r.start)} – ${fmt(r.end)} ?`);
+      const ok = confirm(`Generate new 5-week period:\n${fmt(r.start)} â€“ ${fmt(r.end)} ?`);
       if (!ok) return;
 
       adminGenerateBtn.disabled = true;
-      adminGeneratePreview.textContent = "Generating…";
+      adminGeneratePreview.textContent = "Generatingâ€¦";
 
-      // ✅ RPC returns a UUID (string), not a period object
+      // âœ… RPC returns a UUID (string), not a period object
       const newPeriodId = await generateNextFiveWeekPeriod();
 
       // Refresh caches + UI
@@ -5980,7 +3391,7 @@ if (adminGenerateBtn) {
       // Optional: auto-set active so staff see it immediately
   // await setActivePeriod(newPeriodId); // only activate when ready
 
-      // Refresh again so ★ active + dropdown state update
+      // Refresh again so â˜… active + dropdown state update
       await loadRota();
       await loadAdminPeriodsForDropdown();
 
@@ -6006,10 +3417,8 @@ if (adminGenerateBtn) {
 
 
 async function setPeriodCloseTime(periodId, closesAtIsoOrNull){
-  const token = getTokenOrThrow();
-
-  const { error } = await supaClient.rpc("admin_set_period_closes_at", {
-    p_token: token,
+  const { error } = await supabaseClient.rpc("admin_set_period_closes_at", {
+    p_token: currentToken,
     p_period_id: periodId,
     p_closes_at: closesAtIsoOrNull
   });
@@ -6021,7 +3430,7 @@ async function setPeriodCloseTime(periodId, closesAtIsoOrNull){
 
 async function resetWeeksAfterClose(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
-  const { data: wkRows, error: wkErr } = await supaClient
+  const { data: wkRows, error: wkErr } = await supabaseClient
     .from("rota_dates")
     .select("week_id")
     .eq("period_id", periodId);
@@ -6031,7 +3440,7 @@ async function resetWeeksAfterClose(periodId){
   const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
   if (!weekIds.length) return;
 
-  const { error: resetErr } = await supaClient
+  const { error: resetErr } = await supabaseClient
     .from("rota_weeks")
     .update({ open_after_close: false })
     .in("id", weekIds);
@@ -6041,7 +3450,7 @@ async function resetWeeksAfterClose(periodId){
     async function resetWeeksOpen(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
 
-  const { data: wkRows, error: wkErr } = await supaClient
+  const { data: wkRows, error: wkErr } = await supabaseClient
     .from("rota_dates")
     .select("week_id")
     .eq("period_id", periodId);
@@ -6051,7 +3460,7 @@ async function resetWeeksAfterClose(periodId){
   const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
   if (!weekIds.length) return;
 
-  const { error: resetErr } = await supaClient
+  const { error: resetErr } = await supabaseClient
     .from("rota_weeks")
     .update({ open: true })
     .in("id", weekIds);
@@ -6061,7 +3470,7 @@ async function resetWeeksAfterClose(periodId){
 
 async function resetWeeksDefaultForPeriod(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
-  const { data: wkRows, error: wkErr } = await supaClient
+  const { data: wkRows, error: wkErr } = await supabaseClient
     .from("rota_dates")
     .select("week_id")
     .eq("period_id", periodId);
@@ -6071,7 +3480,7 @@ async function resetWeeksDefaultForPeriod(periodId){
   const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
   if (!weekIds.length) return;
 
-  const { error: resetErr } = await supaClient
+  const { error: resetErr } = await supabaseClient
     .from("rota_weeks")
     .update({ open: true, open_after_close: false })
     .in("id", weekIds);
@@ -6089,7 +3498,7 @@ if (adminClosesAtSaveBtn) {
 
       await setPeriodCloseTime(adminSelectedPeriodId, iso);
 
-      // ✅ close time should slam all 5 weeks shut by default
+      // âœ… close time should slam all 5 weeks shut by default
       await resetWeeksAfterClose(adminSelectedPeriodId);
 
       await loadRota(); // refresh main
@@ -6123,14 +3532,87 @@ await resetWeeksOpen(adminSelectedPeriodId);
   });
 }
 
+    /* =========================================================
+       5) PIN MODAL (open/close)
+       ========================================================= */
+function openPinModal(user){
+  selectedUser = user;
+
+  // pick language based on the person you're logging in as
+  setLang(user.preferred_lang || "en");
+
+  pinTitle.textContent = t("pinTitle", user.name);
+  pinDesc.textContent  = t("pinDesc");
+
+  pinErr.style.display = "none";
+  pinInput.value = "";
+
+  document.body.classList.add("modal-open");
+  modal.style.display = "flex";
+  modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => pinInput.focus(), 50);
+}
+
+function closePinModal(){
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+
+updateBodyModalOpen();
+
+
+  selectedUser = null;
+  pinConfirmBtn.disabled = false;
+}
+    
+pinCancelBtn.addEventListener("click", closePinModal);
+modal.addEventListener("click", (e) => { if(e.target === modal) closePinModal(); });
+
+pinInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    pinConfirmBtn.click();
+  }
+});
 
     /* =========================================================
-       5) SESSION / AUTH
+       6) AUTH (verify PIN via RPC)
        ========================================================= */
+    pinConfirmBtn.addEventListener("click", async () => {
+      const pin = pinInput.value.trim();
+      if(!selectedUser) return;
 
-    /* =========================================================
-       6) SHIFT PICKER LOGIC (with OFF priority)
-       ========================================================= */
+ if(!/^\d{4}$/.test(pin)){
+  pinErr.textContent = t("pinErrFormat");
+  pinErr.style.display = "block";
+  return;
+}
+
+      pinConfirmBtn.disabled = true;
+      pinErr.style.display = "none";
+
+      try{
+        if (!currentToken) {
+          throw new Error("Missing session token. Log in again.");
+        }
+
+        const ok = true; // token already proves session; no post-login PIN verification
+
+closePinModal();
+await loadUserPermissions();
+applyLanguage();
+applyUnlockState();
+updateBadges();
+updateCloseLabel(activePeriodObj);
+refreshNoticesAndMaybeBlock();
+
+
+      }catch(err){
+        console.error("Login exception:", err);
+        pinErr.textContent = "Login error. Try again.";
+        pinErr.style.display = "block";
+        pinConfirmBtn.disabled = false;
+      }
+    });
 function updateBadges(){
   const txt = loginBadge?.querySelector(".acc-txt");
 
@@ -6152,14 +3634,6 @@ if (txt) txt.textContent = `${t("accountEditTitle")}: ${currentUser.name}`;
 
   // Show print button only for admins
   if (printBtn) printBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
-  
-  // Show navigation admin link only for admins
-  const navAdminLink = document.getElementById("navAdminLink");
-  if (navAdminLink) navAdminLink.style.display = currentUser.is_admin ? "inline" : "none";
-
-  // Show View As button only for superadmin
-  const viewAsBtn = document.getElementById("viewAsBtn");
-  if (viewAsBtn) viewAsBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
 
   // Toggle a body-level class so we can scope admin-only UI affordances (e.g. locked-cell highlight)
   try {
@@ -6177,13 +3651,161 @@ if (txt) txt.textContent = `${t("accountEditTitle")}: ${currentUser.name}`;
    PATCH 2) SHIFT PICKER LOGIC (with OFF priority)
    ========================================================= */
 
+async function populateShiftGrid(){
+  try {
+    const { data: shifts, error: shiftsErr } = await supabaseClient
+      .from("shifts")
+      .select("id, code, label, metadata")
+      .order("sort_order", { ascending: true });
+    
+    if (shiftsErr) throw shiftsErr;
+    
+    const { data: scopes, error: scopesErr } = await supabaseClient
+      .from("shift_scopes")
+      .select("shift_id")
+      .eq("scope", "requests");
+    
+    if (scopesErr) throw scopesErr;
+    
+    const scopeSet = new Set((scopes || []).map(s => s.shift_id));
+    const requestShifts = (shifts || []).filter(s => scopeSet.has(s.id));
+    
+    const container = document.getElementById("shiftGridContainer");
+    if (!container) return;
+    
+    let html = "";
+    requestShifts.forEach(shift => {
+      const meta = shift.metadata || {};
+      const fillColor = meta.fill_color || "#f7f7f7";
+      const textColor = meta.text_color || "#000";
+      const borderColor = meta.border_color || "#ccc";
+      const fontWeight = meta.bold ? "bold" : "700";
+      const fontStyle = meta.italics ? "italic" : "normal";
+      
+      const style = `background-color:${fillColor}!important; color:${textColor}!important; border-color:${borderColor}!important; font-weight:${fontWeight}!important; font-style:${fontStyle}!important;`;
+      html += `<button class="shift-btn" data-shift="${escapeHtml(shift.code)}" type="button" style="${style}">${escapeHtml(shift.code)}</button>`;
+    });
+    
+    html += `<button class="shift-btn off" data-shift="O*" type="button">O*</button>`;
+    html += `<button class="shift-btn" data-shift="CLEAR" type="button">Clear</button>`;
+    
+    container.innerHTML = html;
+    attachShiftButtonListeners();
+  } catch (err) {
+    console.error("Failed to load shifts for picker", err);
+    const container = document.getElementById("shiftGridContainer");
+    if (container) {
+      container.innerHTML = `
+        <button class="shift-btn off" data-shift="O*" type="button">O*</button>
+        <button class="shift-btn" data-shift="CLEAR" type="button">Clear</button>
+      `;
+      attachShiftButtonListeners();
+    }
+  }
+}
+
+function attachShiftButtonListeners(){
+  document.querySelectorAll(".shift-btn").forEach(btn => {
+    btn.addEventListener("click", async function(){
+      if (!activeCell) return;
+
+      const td = activeCell.td;
+      const userId = activeCell.userId;
+      const date = activeCell.date;
+      const shift = this.dataset.shift;
+      const key = `${userId}_${date}`;
+
+      let rankToSave = null;
+
+      if (shift === "O*") {
+        const pe = pendingEdits[key];
+        const currentRank =
+          (pe && pe.shift === "O") ? (pe.important_rank ?? null) :
+          (requestsCache.get(key)?.value === "O") ? (requestsCache.get(key).important_rank ?? null) :
+          null;
+
+        const taken = getTakenOffRanksThisWeek(userId, date, key);
+        rankToSave = nextOffPrioritySmart(currentRank, taken);
+
+        if (rankToSave === null && (taken.has(1) && taken.has(2))) {
+          alert("No more strong preferences available.\\nUse O or add a comment if needed.");
+          closeShiftModal();
+          return;
+        }
+      }
+
+      try {
+        closeShiftModal();
+
+        if (shift !== "CLEAR" && shift !== "L") {
+          const currentCount = countUserRequestsThisWeek(userId, date);
+          const alreadyExists = requestsCache.has(key);
+
+          if (!alreadyExists && currentCount >= MAX_REQUESTS_PER_WEEK) {
+            alert("You can only enter 5 requests per week.");
+            closeShiftModal();
+            return;
+          }
+        }
+
+        if (shift === "CLEAR") {
+          td.textContent = "";
+          delete pendingEdits[key];
+        } else if (shift === "O*") {
+          if (rankToSave === 1) td.textContent = "OÂ¹";
+          else if (rankToSave === 2) td.textContent = "OÂ²";
+          else td.textContent = "O";
+          pendingEdits[key] = { userId, date, shift: "O", important_rank: rankToSave };
+        } else {
+          td.textContent = shift;
+          pendingEdits[key] = { userId, date, shift, important_rank: null };
+        }
+
+        if (shift === "CLEAR") {
+          await deleteRequestCell(userId, date);
+          requestsCache.delete(key);
+          delete pendingEdits[key];
+          toast(`Cleared + saved (${key})`);
+        } else {
+          const valueToSave = (shift === "O*") ? "O" : shift;
+          const saved = await upsertRequestCell(userId, date, valueToSave, rankToSave);
+          requestsCache.set(key, saved);
+          delete pendingEdits[key];
+          toast(`Saved (${key}) = ${shift}`);
+        }
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+
+        const msg = err?.message || err?.error?.message || err?.details || JSON.stringify(err);
+
+        const pe = pendingEdits[key];
+        const row = pe ? { value: pe.shift, important_rank: pe.important_rank } : requestsCache.get(key);
+        
+        if (row?.value === "O") {
+          if (row.important_rank === 1) td.textContent = "OÂ¹";
+          else if (row.important_rank === 2) td.textContent = "OÂ²";
+          else if (row.important_rank === 3) td.textContent = "OÂ³";
+          else td.textContent = "O";
+        } else {
+          td.textContent = row?.value || "";
+        }
+
+        delete pendingEdits[key];
+
+        if ((msg || "").toLowerCase().includes("max 5")) {
+          alert("Max 5 requests per week. Clear one day to pick another.");
+        } else if ((msg || "").toLowerCase().includes("priority") || (msg || "").toLowerCase().includes("max 2")) {
+          alert("No more strong preferences available.\\nUse O or add a comment.");
+        } else {
+          alert("Save failed. Check console.");
+        }
+      }
+    });
+  });
+}
+
 function openShiftModal(){
   if (!activeCell) return;
-
-  // Rebuild shift picker for current user
-  if (typeof populateShiftGrid === 'function') {
-    populateShiftGrid();
-  }
 
   // Admin-only: show lock button and paint state
   if (shiftLockBtn) {
@@ -6193,7 +3815,7 @@ function openShiftModal(){
     if (isAdmin) {
       const key = `${activeCell.userId}_${activeCell.date}`;
       const locked = locksCache.has(key);
-      shiftLockBtn.textContent = locked ? "🔒" : "🔓";
+      shiftLockBtn.textContent = locked ? "ðŸ”’" : "ðŸ”“";
       shiftLockBtn.title = locked ? "Unlock this cell" : "Lock this cell";
     }
   }
@@ -6243,153 +3865,6 @@ document.addEventListener("keydown", (e) => {
   if (userModal && userModal.style.display === "flex") closeUserModal();
 });
 
-/* =========================================================
-   SHIFT PICKER: Dynamic shift grid population
-   ========================================================= */
-
-// NOTE: This function is OVERRIDDEN by js/shift-functions.js
-// The external file handles NEW schema with allowed_staff_groups
-async function populateShiftGrid(){
-  console.warn("[INDEX.HTML] Old populateShiftGrid called - should be overridden by shift-functions.js");
-  try {
-    const { data: shifts, error: shiftsErr} = await supaClient
-      .from("shifts")
-      .select("id, code, label, hours_value, allowed_staff_groups")
-      .eq("allow_requests", true)
-      .order("code", { ascending: true });
-    
-    if (shiftsErr) throw shiftsErr;
-    
-    const container = document.getElementById("shiftGridContainer");
-    if (!container) return;
-    
-    let html = "";
-    (shifts || []).forEach(shift => {
-      html += `<button class="shift-btn" data-shift-id="${shift.id}" data-shift-code="${escapeHtml(shift.code)}" type="button">${escapeHtml(shift.code)}</button>`;
-    });
-    
-    html += `<button class="shift-btn off" data-shift-code="O*" type="button">O*</button>`;
-    html += `<button class="shift-btn" data-shift-code="CLEAR" type="button">Clear</button>`;
-    
-    container.innerHTML = html;
-    attachShiftButtonListeners();
-  } catch (err) {
-    console.error("Failed to load shifts for picker", err);
-    const container = document.getElementById("shiftGridContainer");
-    if (container) {
-      container.innerHTML = `
-        <button class="shift-btn off" data-shift-code="O*" type="button">O*</button>
-        <button class="shift-btn" data-shift-code="CLEAR" type="button">Clear</button>
-      `;
-      attachShiftButtonListeners();
-    }
-  }
-}
-
-function attachShiftButtonListeners(){
-  document.querySelectorAll(".shift-btn").forEach(btn => {
-    btn.addEventListener("click", async function(){
-      if (!activeCell) return;
-
-      const td = activeCell.td;
-      const userId = activeCell.userId;
-      const date = activeCell.date;
-      const shift = this.dataset.shiftCode || this.dataset.shift; // Support both NEW and OLD
-      const key = `${userId}_${date}`;
-
-      let rankToSave = null;
-
-      if (shift === "O*") {
-        const pe = pendingEdits[key];
-        const currentRank =
-          (pe && pe.shift === "O") ? (pe.important_rank ?? null) :
-          (requestsCache.get(key)?.value === "O") ? (requestsCache.get(key).important_rank ?? null) :
-          null;
-
-        const taken = getTakenOffRanksThisWeek(userId, date, key);
-        rankToSave = nextOffPrioritySmart(currentRank, taken);
-
-        if (rankToSave === null && (taken.has(1) && taken.has(2))) {
-          alert("No more strong preferences available.\\nUse O or add a comment if needed.");
-          closeShiftModal();
-          return;
-        }
-      }
-
-      try {
-        closeShiftModal();
-
-        if (shift !== "CLEAR" && shift !== "L") {
-          const currentCount = countUserRequestsThisWeek(userId, date);
-          const alreadyExists = requestsCache.has(key);
-
-          if (!alreadyExists && currentCount >= MAX_REQUESTS_PER_WEEK) {
-            alert("You can only enter 5 requests per week.");
-            return;
-          }
-        }
-
-        if (shift === "CLEAR") {
-          td.textContent = "";
-          delete pendingEdits[key];
-        } else if (shift === "O*") {
-          if (rankToSave === 1) td.textContent = "O¹";
-          else if (rankToSave === 2) td.textContent = "O²";
-          else td.textContent = "O";
-          pendingEdits[key] = { userId, date, shift: "O", important_rank: rankToSave };
-        } else {
-          td.textContent = shift;
-          pendingEdits[key] = { userId, date, shift, important_rank: null };
-        }
-
-        if (shift === "CLEAR") {
-          await deleteRequestCell(userId, date);
-          requestsCache.delete(key);
-          delete pendingEdits[key];
-          toast(`Cleared + saved (${key})`);
-        } else {
-          const valueToSave = (shift === "O*") ? "O" : shift;
-          const saved = await upsertRequestCell(userId, date, valueToSave, rankToSave);
-          requestsCache.set(key, saved);
-          delete pendingEdits[key];
-          toast(`Saved (${key}) = ${shift}`);
-        }
-      } catch (err) {
-        console.error("Auto-save failed:", err);
-
-        const msg = err?.message || err?.error?.message || err?.details || JSON.stringify(err);
-
-        const pe = pendingEdits[key];
-        const existing = requestsCache.get(key);
-
-        const row = pe ? { value: pe.shift, important_rank: pe.important_rank } : existing;
-        if (row?.value === "O") {
-          if (row.important_rank === 1) td.textContent = "O¹";
-          else if (row.important_rank === 2) td.textContent = "O²";
-          else if (row.important_rank === 3) td.textContent = "O³";
-          else td.textContent = "O";
-        } else {
-          td.textContent = row?.value || "";
-        }
-
-        delete pendingEdits[key];
-
-        if ((msg || "").toLowerCase().includes("max 5")) {
-          alert("Max 5 requests per week. Clear one day to pick another.");
-          return;
-        }
-
-        if ((msg || "").toLowerCase().includes("priority") ||
-            (msg || "").toLowerCase().includes("max 2")) {
-          alert("No more strong preferences available.\\nUse O or add a comment.");
-          return;
-        }
-        alert("Save failed. Check console.");
-      }
-    });
-  });
-}
-
 
     
 document.querySelectorAll(".shift-btn").forEach(btn => {
@@ -6403,7 +3878,7 @@ const shift = btn.dataset.shift;
 const key = `${userId}_${date}`;
 const existing = requestsCache.get(key);
 
-// Special handling for O*: cycle strong preference ranks (O¹ / O²)
+// Special handling for O*: cycle strong preference ranks (OÂ¹ / OÂ²)
 let rankToSave = null;
 
 if (shift === "O*") {
@@ -6418,7 +3893,7 @@ if (shift === "O*") {
   const taken = getTakenOffRanksThisWeek(userId, date, key);
   rankToSave = nextOffPrioritySmart(currentRank, taken);
 
-  // 🚫 HARD BLOCK after O¹ + O²
+  // ðŸš« HARD BLOCK after OÂ¹ + OÂ²
   if (rankToSave === null && (taken.has(1) && taken.has(2))) {
     alert("No more strong preferences available.\nUse O or add a comment if needed.");
     closeShiftModal();
@@ -6457,9 +3932,9 @@ if (shift === "O*") {
 
 } else if (shift === "O*") {
   // strong OFF, cycles rank
-  if (rankToSave === 1) td.textContent = "O¹";
-  else if (rankToSave === 2) td.textContent = "O²";
-  else td.textContent = "O"; // fallback (shouldn’t happen if cycling works)
+  if (rankToSave === 1) td.textContent = "OÂ¹";
+  else if (rankToSave === 2) td.textContent = "OÂ²";
+  else td.textContent = "O"; // fallback (shouldnâ€™t happen if cycling works)
 
   // note: we save as value "O" with important_rank 1/2
   pendingEdits[key] = { userId, date, shift: "O", important_rank: rankToSave };
@@ -6508,9 +3983,9 @@ const existing = requestsCache.get(key);
 
 const row = pe ? { value: pe.shift, important_rank: pe.important_rank } : existing;
 if (row?.value === "O") {
-  if (row.important_rank === 1) td.textContent = "O¹";
-  else if (row.important_rank === 2) td.textContent = "O²";
-  else if (row.important_rank === 3) td.textContent = "O³";
+  if (row.important_rank === 1) td.textContent = "OÂ¹";
+  else if (row.important_rank === 2) td.textContent = "OÂ²";
+  else if (row.important_rank === 3) td.textContent = "OÂ³";
   else td.textContent = "O";
 } else {
   td.textContent = row?.value || "";
@@ -6549,32 +4024,28 @@ function toast(msg){
 async function upsertRequestCell(userId, date, value, importantRank){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const token = getTokenOrThrow();
-
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
-    const { data, error } = await supaClient.rpc("admin_set_request_cell", {
-      p_token: token,
+    const { data, error } = await supabaseClient.rpc("admin_set_request_cell", {
+      p_token: currentToken,
       p_target_user_id: userId,
       p_date: date,
       p_value: value,
       p_important_rank: importantRank ?? null
     });
     if (error) throw error;
-    // SETOF returns an array - return the first element
-    return Array.isArray(data) ? data[0] : data;
+    return data;
   }
 
   // Normal -> user RPC
-  const { data, error } = await supaClient.rpc("set_request_cell", {
-    p_token: token,
+  const { data, error } = await supabaseClient.rpc("set_request_cell", {
+    p_token: currentToken,
     p_date: date,
     p_value: value,
     p_important_rank: importantRank ?? null
   });
   if (error) throw error;
-  // SETOF returns an array - return the first element
-  return Array.isArray(data) ? data[0] : data;
+  return data;
 }
 
 
@@ -6583,12 +4054,10 @@ async function upsertRequestCell(userId, date, value, importantRank){
 async function deleteRequestCell(userId, date){
   if (!currentUser) throw new Error("Not logged in.");
 
-  const token = getTokenOrThrow();
-
   // Admin editing someone else -> admin RPC
   if (currentUser.is_admin && String(userId) !== String(currentUser.id)) {
-    const { error } = await supaClient.rpc("admin_clear_request_cell", {
-      p_token: token,
+    const { error } = await supabaseClient.rpc("admin_clear_request_cell", {
+      p_token: currentToken,
       p_target_user_id: userId,
       p_date: date
     });
@@ -6597,19 +4066,27 @@ async function deleteRequestCell(userId, date){
   }
 
   // Normal -> user RPC
-  const { error } = await supaClient.rpc("clear_request_cell", {
-    p_token: token,
+  const { error } = await supabaseClient.rpc("clear_request_cell", {
+    p_token: currentToken,
     p_date: date
   });
   if (error) throw error;
 }
 
+function goToFullAdmin() {
+  console.log("[DEBUG] goToFullAdmin called");
+  if (!currentUser) {
+    alert("Not logged in.");
+    return;
+  }
+  window.location.href = "admin.html";
+}
     
 async function loadRota() {
   // -----------------------------
   // 7A) Load users
   // -----------------------------
-  const { data: users, error: userError } = await supaClient
+  const { data: users, error: userError } = await supabaseClient
 .from("users")
 .select("id, name, role_id, is_admin, is_active, preferred_lang, display_order, roles(name)")
     .order("role_id", { ascending: true })
@@ -6625,16 +4102,34 @@ async function loadRota() {
   allUsers = users || [];
   usersById = new Map((users || []).map(u => [u.id, u.name]));
 
-  // Update currentUser with full user data if already set from session validation
-  if (currentUser && currentUser.id) {
-    const fullUser = (users || []).find(u => String(u.id) === String(currentUser.id));
-    if (fullUser) {
-      // Merge with existing data to get roles and other details
-      currentUser = { ...fullUser };
-      updateBadges();
-      applyUnlockState();
-    }
+  // Refresh View As selector once users are loaded
+  if (typeof populateViewAsSelector === "function") {
+    populateViewAsSelector();
   }
+
+  // Restore logged-in user from sessionStorage/localStorage using token-backed session
+const savedSessionRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+let savedId = null;
+try {
+  const parsed = savedSessionRaw ? JSON.parse(savedSessionRaw) : null;
+  savedId = parsed?.user_id || parsed?.userId || savedSessionRaw;
+} catch (e) {
+  savedId = savedSessionRaw;
+}
+
+if (savedId && !currentUser) {
+  const restored = (users || []).find(u => String(u.id) === String(savedId));
+
+  if (restored) {
+    currentUser = restored;
+    await loadUserPermissions();
+    updateBadges();
+    applyUnlockState();
+  } else {
+    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
+  }
+}
 
 refreshNoticesAndMaybeBlock();
 
@@ -6672,13 +4167,13 @@ populatePeriodDropdown(periods);
 periodSelect.value = String(activePeriodId);
 
 const selected = periods.find(p => String(p.id) === String(activePeriodId));
-activePeriodObj = selected;   // ← THIS is 5A in action
+activePeriodObj = selected;   // â† THIS is 5A in action
 updateCloseLabel(selected);
   
 // -----------------------------
 // 7D) Load rota dates FOR SELECTED PERIOD
 // -----------------------------
-const { data: dates, error: dateError } = await supaClient
+const { data: dates, error: dateError } = await supabaseClient
   .from("rota_dates")
  .select("date, week_id, period_id, rota_weeks(id, open, open_after_close)")
   .eq("period_id", activePeriodId)
@@ -6698,12 +4193,11 @@ const start = selectedPeriod?.start_date;
 const end = selectedPeriod?.end_date;
 
 if (start && end) {
-  const { data: reqs, error: reqErr } = await supaClient.rpc('get_requests_for_period', {
-    p_token: window.currentToken,
-    p_start_date: start,
-    p_end_date: end,
-    p_force_view_all: true
-  });
+  const { data: reqs, error: reqErr } = await supabaseClient
+    .from("requests")
+    .select("id, user_id, date, value, important_rank")
+    .gte("date", start)
+    .lte("date", end);
 
   if (reqErr) {
     console.error("Requests load error:", reqErr);
@@ -6726,7 +4220,7 @@ if (start && end) {
 locksCache.clear();
 
 if (start && end) {
-  const { data: locks, error: lockErr } = await supaClient
+  const { data: locks, error: lockErr } = await supabaseClient
     .from("request_cell_locks")
     .select("user_id, date, reason_en, reason_es, locked_by, locked_at")
     .gte("date", start)
@@ -6753,7 +4247,7 @@ weekWindowStart = 0;
 
 
 // Hide inactive users from the rota table (for everyone)
-// (Admins can still view/manage them in Admin → Users with "Show inactive")
+// (Admins can still view/manage them in Admin â†’ Users with "Show inactive")
 const visibleUsers = users.filter(u => u.is_active !== false);
 
 render(visibleUsers, weeks);
@@ -6762,7 +4256,7 @@ render(visibleUsers, weeks);
 // Period label
 if (weeks.length) {
 document.getElementById("periodLabel").textContent =
-  `${fmt(weeks[0].weekStart)} – ${fmt(weeks[weeks.length - 1].weekEnd)} · 5-week period`;
+  `${fmt(weeks[0].weekStart)} â€“ ${fmt(weeks[weeks.length - 1].weekEnd)} Â· 5-week period`;
 
 }
 
@@ -6805,28 +4299,28 @@ function render(users, weeks){
 
     th.colSpan = 7;
     th.innerHTML = `
-  <span class="week-label">${fmt(w.weekStart)} – ${fmt(w.weekEnd)}</span>
+  <span class="week-label">${fmt(w.weekStart)} â€“ ${fmt(w.weekEnd)}</span>
 ${w.weekId ? `
   <button
     class="week-comment-btn"
     type="button"
     data-week-id="${String(w.weekId)}"
     title="Week comment"
-  >💬</button>
+  >ðŸ’¬</button>
 ` : `
   <span
     style="opacity:0.35; margin-left:6px;"
     title="Week has no ID (rota_dates.week_id missing)"
-  >💬</span>
+  >ðŸ’¬</span>
 `}
 `;
 r1.appendChild(th);
 
-    const sep = document.createElement("th");
-    sep.className = "week-sep";
-    sep.style.minWidth = "35px";
-    sep.style.backgroundColor = "#808080";
-    r1.appendChild(sep);
+    if(idx !== weeks.length - 1){
+      const sep = document.createElement("th");
+      sep.className = "week-sep";
+      r1.appendChild(sep);
+    }
   });
   thead.appendChild(r1);
 
@@ -6846,11 +4340,11 @@ r1.appendChild(th);
       th.textContent = dayLetters[i];
       r2.appendChild(th);
     }
-    const sep = document.createElement("th");
-    sep.className = "week-sep";
-    sep.style.minWidth = "35px";
-    sep.style.backgroundColor = "#808080";
-    r2.appendChild(sep);
+    if(idx !== weeks.length - 1){
+      const sep = document.createElement("th");
+      sep.className = "week-sep";
+      r2.appendChild(sep);
+    }
   });
   thead.appendChild(r2);
 
@@ -6871,11 +4365,11 @@ r1.appendChild(th);
       th.textContent = d.getDate();
       r3.appendChild(th);
     }
-    const sep = document.createElement("th");
-    sep.className = "week-sep";
-    sep.style.minWidth = "35px";
-    sep.style.backgroundColor = "#808080";
-    r3.appendChild(sep);
+    if(idx !== weeks.length - 1){
+      const sep = document.createElement("th");
+      sep.className = "week-sep";
+      r3.appendChild(sep);
+    }
   });
   thead.appendChild(r3);
 
@@ -6892,7 +4386,7 @@ r1.appendChild(th);
 
     const sectionTd = document.createElement("td");
     sectionTd.className = `name-col ${g.className}`;
-    sectionTd.colSpan = 1 + (weeks.length * 7) + weeks.length;
+    sectionTd.colSpan = 1 + (weeks.length * 7) + (weeks.length - 1);
     sectionTd.innerHTML = `<span>${g.title}</span>`;
     sectionTr.appendChild(sectionTd);
     tbody.appendChild(sectionTr);
@@ -6902,11 +4396,12 @@ r1.appendChild(th);
       const tr = document.createElement("tr");
       tr.dataset.userId = u.id;
 
-      // name cell
+      // name cell (PIN login)
       const nameTd = document.createElement("td");
       nameTd.className = "name-col";
       nameTd.textContent = u.name;
       nameTd.title = u.name;
+      nameTd.addEventListener("click", () => openPinModal(u));
       tr.appendChild(nameTd);
 
       // date cells
@@ -6921,7 +4416,7 @@ r1.appendChild(th);
           td.dataset.userId = u.id;
           td.dataset.date = dateStr;
 
-          // ✅ Fill from cache / pending edits
+          // âœ… Fill from cache / pending edits
           const key = `${u.id}_${dateStr}`;
 
           // Pending edits override everything visually
@@ -6929,9 +4424,9 @@ if (pendingEdits[key]) {
   const pe = pendingEdits[key];
 
 if (pe.shift === "O") {
-  if (pe.important_rank === 1) td.textContent = "O¹";
-  else if (pe.important_rank === 2) td.textContent = "O²";
-  else if (pe.important_rank === 3) td.textContent = "O³";
+  if (pe.important_rank === 1) td.textContent = "OÂ¹";
+  else if (pe.important_rank === 2) td.textContent = "OÂ²";
+  else if (pe.important_rank === 3) td.textContent = "OÂ³";
   else td.textContent = "O";
 } else {
   td.textContent = pe.shift || "";
@@ -6941,8 +4436,8 @@ if (pe.shift === "O") {
   const r = requestsCache.get(key);
 
   if (r?.value === "O") {
-    if (r.important_rank === 1) td.textContent = "O¹";
-    else if (r.important_rank === 2) td.textContent = "O²";
+    if (r.important_rank === 1) td.textContent = "OÂ¹";
+    else if (r.important_rank === 2) td.textContent = "OÂ²";
     else td.textContent = "O";
   } else {
     td.textContent = r?.value || "";
@@ -6953,19 +4448,11 @@ if (pe.shift === "O") {
           tr.appendChild(td);
         }
 
-        // Add separator with target number INSIDE it
-        const sep = document.createElement("td");
-        sep.className = "week-sep";
-        sep.setAttribute("data-user-id", u.id);
-        sep.setAttribute("data-week-start", w.weekStart.toISOString().split('T')[0]);
-        sep.style.position = "relative";
-        sep.style.minWidth = "35px";
-        sep.style.fontSize = "13px";
-        sep.style.fontWeight = "600";
-        sep.style.textAlign = "center";
-        sep.style.paddingTop = "4px";
-        sep.style.paddingBottom = "4px";
-        tr.appendChild(sep);
+        if(idx !== weeks.length - 1){
+          const sep = document.createElement("td");
+          sep.className = "week-sep";
+          tr.appendChild(sep);
+        }
       });
 
       tbody.appendChild(tr);
@@ -6973,91 +4460,14 @@ if (pe.shift === "O") {
   }
 
   // Keep your existing logic
-  populatePatternTargets();
   applyUnlockState();
   updateBadges();
 }
 
-/* =========================================================
-   PATTERN TARGET DISPLAY - Shows each person's weekly target
+
+    /* =========================================================
+   9) UNLOCK LOGIC (who can edit which row)
    ========================================================= */
-async function populatePatternTargets() {
-  try {
-    // Get all user patterns
-    const { data: userPatterns, error: upErr } = await supaClient
-      .from("user_patterns")
-      .select("user_id, pattern_id, anchor_week_start_date");
-    if (upErr) throw upErr;
-
-    const { data: patterns, error: pErr } = await supaClient
-      .from("pattern_definitions")
-      .select("id, weekly_targets, requires_anchor");
-    if (pErr) throw pErr;
-
-    const patternMap = {};
-    patterns.forEach(p => {
-      patternMap[p.id] = p;
-    });
-
-    console.log("[TARGETS] Found", patterns.length, "pattern definitions");
-    console.log("[TARGETS] Found", userPatterns.length, "user patterns");
-
-    // For each separator with target data, calculate the person's target for that week
-    const sepCells = document.querySelectorAll("td.week-sep[data-user-id]");
-    console.log("[TARGETS] Found", sepCells.length, "separator cells to populate");
-
-    sepCells.forEach((sep, idx) => {
-      const userId = sep.getAttribute("data-user-id");
-      const weekStart = new Date(sep.getAttribute("data-week-start"));
-
-      const userPattern = userPatterns.find(up => up.user_id === userId);
-      
-      if (!userPattern) {
-        sep.textContent = "-";
-        sep.style.color = "inherit";
-        sep.style.backgroundColor = "transparent";
-        return;
-      }
-
-      const pattern = patternMap[userPattern.pattern_id];
-      if (!pattern || !pattern.requires_anchor) {
-        sep.textContent = "";
-        sep.style.color = "inherit";
-        sep.style.backgroundColor = "transparent";
-        return;
-      }
-
-      // Calculate which week in the pattern cycle this is
-      const anchorDate = new Date(userPattern.anchor_week_start_date);
-      const weeksDiff = Math.floor((weekStart - anchorDate) / (7 * 24 * 60 * 60 * 1000));
-      const cycleLength = pattern.weekly_targets.length;
-      const weekInCycle = ((weeksDiff % cycleLength) + cycleLength) % cycleLength;
-      const target = pattern.weekly_targets[weekInCycle];
-
-      // Display with red text only for peak weeks (4 for 3/3/4, 3 for 2/2/3)
-      sep.textContent = String(target);
-      sep.style.textAlign = "center";
-      sep.style.fontSize = "12px";
-      
-      // Determine baseline: for 3/3/4 pattern baseline is 3, for 2/2/3 baseline is 2
-      const baseline = Math.min(...pattern.weekly_targets);
-      const isPeak = target > baseline;
-      
-      if (isPeak) {
-        sep.style.color = "#dc2626";
-        sep.style.fontWeight = "700";
-      } else {
-        sep.style.color = "inherit";
-        sep.style.fontWeight = "600";
-      }
-      sep.style.backgroundColor = "transparent";
-    });
-  } catch (e) {
-    console.error("[TARGETS] Failed to load pattern targets:", e);
-  }
-}
-
-
 function applyUnlockState(){
   const rows = document.querySelectorAll("#rota tbody tr");
 
@@ -7078,7 +4488,7 @@ function applyUnlockState(){
     r.querySelectorAll("td.cell").forEach(td => {
       const isClosedWeek = td.classList.contains("closed");
 
-      // ✅ FINAL rule:
+      // âœ… FINAL rule:
       // - must be your row (or admin)
       // - week must be open (closed class blocks)
       // periodClosed is NOT a blocker: week toggle overrides it
@@ -7106,12 +4516,12 @@ td.classList.toggle("editable", canEdit);
   const date = td.dataset.date;
   const lock = locksCache.get(`${userId}_${date}`);
 
-  // 🚫 Staff: locked cell blocks editing, shows reason
+  // ðŸš« Staff: locked cell blocks editing, shows reason
   if (lock && !currentUser?.is_admin) {
     const reason =
       (currentLang === "es" ? lock.reason_es : lock.reason_en) ||
       lock.reason_en ||
-      (currentLang === "es" ? "Este día está bloqueado por administración." : "This day is locked by management.");
+      (currentLang === "es" ? "Este dÃ­a estÃ¡ bloqueado por administraciÃ³n." : "This day is locked by management.");
 
     alert(reason);
     return;
@@ -7241,6 +4651,7 @@ td.section-cn { background: var(--cn-band) !important; font-weight: 700; color: 
 td.section-sn { background: var(--sn-band) !important; font-weight: 700; color: #01579b; border: 1pt solid #888 !important; }
 td.section-na { background: var(--na-band) !important; font-weight: 700; color: #e65100; border: 1pt solid #888 !important; }
 .weekend { background: #fafafa; }
+.closed.weekend { background: #fafafa !important; color: #000; }
 .closed { background: #f0f0f0; }
 tr { page-break-inside: avoid; }
 #rota { page-break-inside: auto; }
@@ -7262,7 +4673,7 @@ tr { page-break-inside: avoid; }
   background: #ffffff;
 }
 
-/* O¹ and O² - RED text, bold */
+/* OÂ¹ and OÂ² - RED text, bold */
 #rota td.cell.shift-o1,
 #rota td.cell.shift-o2 {
   background: #ffffff !important;
@@ -7497,9 +4908,9 @@ cells.forEach(function(cell){
   var text = (cell.textContent || '').trim();
   if(!text) return;
   
-  if(text === 'O¹' || text === 'O1') {
+  if(text === 'OÂ¹' || text === 'O1') {
     cell.classList.add('shift-o1');
-  } else if(text === 'O²' || text === 'O2') {
+  } else if(text === 'OÂ²' || text === 'O2') {
     cell.classList.add('shift-o2');
   } else if(text === 'O') {
     cell.classList.add('shift-o');
@@ -7625,7 +5036,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         let html = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
                 <h2 style="margin:0;font-size:17px;font-weight:700;letter-spacing:0.1px;">Admin Print Configuration</h2>
-                <button type="button" onclick="this.closest('[data-modal]').remove()" style="width:32px;height:32px;border-radius:10px;border:1px solid #e5eaf3;background:#ffffff;cursor:pointer;color:#94a3b8;box-shadow:0 3px 8px rgba(15,23,42,0.05);font-size:18px;line-height:1;">×</button>
+                <button type="button" onclick="this.closest('[data-modal]').remove()" style="width:32px;height:32px;border-radius:10px;border:1px solid #e5eaf3;background:#ffffff;cursor:pointer;color:#94a3b8;box-shadow:0 3px 8px rgba(15,23,42,0.05);font-size:18px;line-height:1;">Ã—</button>
             </div>
             
             <!-- ROLES SECTION -->
@@ -7844,7 +5255,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
               console.log("Week IDs from DOM:", weekIds);
 
               // Resolve week_start values for these IDs (safe table)
-              const { data: weeksData, error: weekErr } = await supaClient
+              const { data: weeksData, error: weekErr } = await supabaseClient
                 .from('rota_weeks')
                 .select('id, week_start')
                 .in('id', weekIds)
@@ -7955,9 +5366,9 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
             const formatRequestValue = (req) => {
                 if (!req) return "";
                 if (req.value === "O") {
-                    if (req.important_rank === 1) return "O¹";
-                    if (req.important_rank === 2) return "O²";
-                    if (req.important_rank === 3) return "O³";
+                    if (req.important_rank === 1) return "OÂ¹";
+                    if (req.important_rank === 2) return "OÂ²";
+                    if (req.important_rank === 3) return "OÂ³";
                     return "O";
                 }
                 if (req.value === "8-8") return "'8-8";
@@ -8089,7 +5500,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
                 alert("No active period selected.");
                 return
             }
-            const{data:comments,error}=await supaClient
+            const{data:comments,error}=await supabaseClient
                 .from("week_comments")
                 .select("*, users(name)")
                 .eq("period_id",activePeriodId)
@@ -8140,143 +5551,73 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
     printModal?.addEventListener("click",(e)=>{if(e.target===printModal)closePrintModal()});
 
 /* =========================================================
+       SHIFT SWAPS (Post-publish only)
+       ========================================================= */
+
+    async function adminExecuteShiftSwap(counterpartyUserId, counterpartyDate){
+      if (!currentUser?.is_admin) throw new Error("Admin only");
+      if (!activeCell) throw new Error("No active cell");
+      const periodId = currentPeriod?.id;
+      if (!periodId) throw new Error("No active period");
+
+      const { data, error } = await supabaseClient.rpc("admin_execute_shift_swap", {
+        p_token: currentToken,
+        p_initiator_user_id: activeCell.userId,
+        p_initiator_shift_date: activeCell.date,
+        p_counterparty_user_id: counterpartyUserId,
+        p_counterparty_shift_date: counterpartyDate
+      });
+
+      if (error) throw error;
+      if (!data[0]?.success) throw new Error(data[0]?.error_message || "Swap failed");
+
+      return data[0];
+    }
+
+    async function staffRequestShiftSwap(counterpartyUserId, counterpartyDate){
+      if (!currentUser || currentUser.is_admin) throw new Error("Staff only");
+      if (!currentUser.rota?.swap) throw new Error("Permission denied: rota.swap");
+      if (!activeCell) throw new Error("No active cell");
+
+      const periodId = currentPeriod?.id;
+      if (!periodId) throw new Error("No active period");
+
+      const { data, error } = await supabaseClient.rpc("staff_request_shift_swap", {
+        p_token: currentToken,
+        p_initiator_shift_date: activeCell.date,
+        p_counterparty_user_id: counterpartyUserId,
+        p_counterparty_shift_date: counterpartyDate
+      });
+
+      if (error) throw error;
+      if (!data[0]?.success) throw new Error(data[0]?.error_message || "Request failed");
+
+      return data[0];
+    }
+
+    async function staffRespondToSwapRequest(swapRequestId, response){
+      if (!currentUser || currentUser.is_admin) throw new Error("Staff only");
+      if (!['accepted', 'declined', 'ignored'].includes(response)) throw new Error("Invalid response");
+
+      const { data, error } = await supabaseClient.rpc("staff_respond_to_swap_request", {
+        p_token: currentToken,
+        p_swap_request_id: swapRequestId,
+        p_response: response
+      });
+
+      if (error) throw error;
+      if (!data[0]?.success) throw new Error(data[0]?.error_message || "Response failed");
+
+      return data[0];
+    }
+
+    // Expose swap functions to window for rota.html
+    window.adminExecuteShiftSwap = adminExecuteShiftSwap;
+    window.staffRequestShiftSwap = staffRequestShiftSwap;
+    window.staffRespondToSwapRequest = staffRespondToSwapRequest;
+
+/* =========================================================
        10) BOOT
        ========================================================= */
-    // Check for valid session token before loading
-    (async function initPage() {
-      // Check for impersonation token first, then normal token
-      const impersonationToken = sessionStorage.getItem('calpeward.impersonationToken');
-      const token = impersonationToken || sessionStorage.getItem('calpe_ward_token');
-      
-      if (!token) {
-        // No token - redirect to login
-        window.location.href = 'index.html';
-        return;
-      }
-
-      // Store token globally for RPC calls
-      window.currentToken = token;
-
-      // Validate token with server
-      try {
-        const { data, error } = await supaClient.rpc('validate_session', {
-          p_token: token
-        });
-        
-        console.log('Validation response:', data, error);
-        
-        // RPC returns an array, get first row
-        const result = Array.isArray(data) ? data[0] : data;
-        
-        if (error || !result || !result.valid) {
-          console.error('Session validation failed:', error || result);
-          sessionStorage.removeItem('calpe_ward_token');
-          localStorage.removeItem(STORAGE_KEY);
-          window.location.href = 'index.html';
-          return;
-        }
-        
-        // Get user_id from validation
-        const userId = result.user_id;
-        
-        // Fetch full user details from database
-        const { data: userData, error: userError } = await supaClient
-          .from('users')
-          .select('id, name, role_id, is_admin, is_active, preferred_lang')
-          .eq('id', userId)
-          .single();
-          
-        if (userError || !userData) {
-          console.error('Failed to fetch user data:', userError);
-          window.location.href = 'index.html';
-          return;
-        }
-        
-        // Set currentUser with full user data
-        currentUser = userData;
-        window.currentUser = userData;  // Also set on window for shift-functions.js access
-        
-        // Store user ID in localStorage for consistency
-        localStorage.setItem(STORAGE_KEY, userId);
-        
-        console.log('Session validated. Logged in as:', currentUser.name);
-        
-        // Dispatch event for external modules (e.g., shift-functions.js) to listen for
-        window.dispatchEvent(new CustomEvent('calpe:user-ready'));
-        
-        // Token is valid - proceed with page load
-        await loadUserPermissions();
-        await loadRota();
-        // Note: shift grid population is handled by shift-functions.js listening to calpe:user-ready
-        await refreshNoticesAndNotifications();
-      } catch (err) {
-        console.error('Init error:', err);
-        window.location.href = 'index.html';
-      }
-    })();
-    
-
-  </script>
-</body>
-</html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    loadRota();
+    populateShiftGrid();

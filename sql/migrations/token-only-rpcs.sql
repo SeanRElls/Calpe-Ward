@@ -440,6 +440,30 @@ BEGIN
     v_period_id_to_use
   );
 
+  -- Create notification for counterparty
+  INSERT INTO public.notifications (
+    type,
+    target_scope,
+    target_user_id,
+    requires_action,
+    status,
+    payload
+  ) VALUES (
+    'swap_request',
+    'user',
+    p_counterparty_user_id,
+    true,
+    'pending',
+    jsonb_build_object(
+      'swap_request_id', v_swap_req_id,
+      'initiator_name', (SELECT name FROM public.users WHERE id = v_uid),
+      'initiator_shift_code', v_initiator_shift_code,
+      'initiator_date', p_initiator_shift_date,
+      'counterparty_shift_code', v_counterparty_shift_code,
+      'counterparty_date', p_counterparty_shift_date
+    )
+  );
+
   RETURN QUERY SELECT true, v_swap_req_id, null::text;
 END;
 $$;
@@ -459,6 +483,13 @@ DECLARE
   v_uid uuid;
   v_swap_req public.swap_requests;
   v_counterparty_name text;
+  v_initiator_name text;
+  v_initiator_shift_id bigint;
+  v_counterparty_shift_id bigint;
+  v_initiator_old_shift_id bigint;
+  v_counterparty_old_shift_id bigint;
+  v_initiator_old_shift_code text;
+  v_counterparty_old_shift_code text;
 BEGIN
   v_uid := public.require_session_permissions(p_token, null);
 
@@ -476,16 +507,59 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Get names
+  SELECT name INTO v_counterparty_name FROM public.users WHERE id = v_uid;
+  SELECT name INTO v_initiator_name FROM public.users WHERE id = v_swap_req.initiator_user_id;
+
   -- Update swap request
   UPDATE public.swap_requests
   SET status = CASE
-        WHEN p_response = 'accept' THEN 'accepted_by_counterparty'::text
-        WHEN p_response = 'decline' THEN 'declined_by_counterparty'::text
+        WHEN p_response IN ('accept', 'accepted') THEN 'accepted_by_counterparty'::text
+        WHEN p_response IN ('decline', 'declined') THEN 'declined_by_counterparty'::text
         ELSE 'ignored'::text
       END,
       counterparty_responded_at = now(),
       counterparty_response = p_response
   WHERE id = p_swap_request_id;
+
+  -- If accepted, create notification for admins (no history/comments yet - wait for admin approval)
+  IF p_response IN ('accept', 'accepted') THEN
+    -- Insert notification for each admin user (staff approved their part, now needs admin approval)
+    INSERT INTO public.notifications (
+      type,
+      target_scope,
+      target_user_id,
+      requires_action,
+      status,
+      payload
+    )
+    SELECT
+      'swap_request',
+      'user',
+      u.id,
+      true,
+      'pending',
+      jsonb_build_object(
+        'swap_request_id', v_swap_req.id,
+        'initiator_name', v_initiator_name,
+        'initiator_shift_code', v_swap_req.initiator_shift_code,
+        'initiator_date', v_swap_req.initiator_shift_date,
+        'counterparty_name', v_counterparty_name,
+        'counterparty_shift_code', v_swap_req.counterparty_shift_code,
+        'counterparty_date', v_swap_req.counterparty_shift_date,
+        'notification_type', 'swap_accepted'
+      )
+    FROM public.users u
+    WHERE u.is_admin = true AND u.is_active = true;
+  END IF;
+
+  -- Mark the counterparty's original swap request notification as acknowledged
+  UPDATE public.notifications
+  SET status = 'ack'
+  WHERE type = 'swap_request'
+    AND target_user_id = v_uid
+    AND payload::jsonb->>'swap_request_id' = p_swap_request_id::text
+    AND (payload::jsonb->>'notification_type' IS NULL OR payload::jsonb->>'notification_type' != 'swap_accepted');
 
   RETURN QUERY SELECT true, null::text;
 EXCEPTION
@@ -697,6 +771,57 @@ BEGIN
       false, v_admin_uid, now();
   END IF;
 
+  -- Record history for both assignments (admin swap)
+  IF to_regclass('public.rota_assignment_history') IS NOT NULL THEN
+    INSERT INTO public.rota_assignment_history(
+      rota_assignment_id,
+      user_id,
+      date,
+      old_shift_id,
+      old_shift_code,
+      new_shift_id,
+      new_shift_code,
+      change_reason,
+      changed_by,
+      changed_by_name
+    ) VALUES (
+      v_initiator_shift_id,
+      p_initiator_user_id,
+      p_counterparty_shift_date,
+      v_initiator_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
+      v_counterparty_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
+      format('Admin swap with %s on %s', (SELECT name FROM public.users WHERE id = p_counterparty_user_id), to_char(p_counterparty_shift_date, 'Dy DD Mon')),
+      v_admin_uid,
+      (SELECT name FROM public.users WHERE id = v_admin_uid)
+    );
+
+    INSERT INTO public.rota_assignment_history(
+      rota_assignment_id,
+      user_id,
+      date,
+      old_shift_id,
+      old_shift_code,
+      new_shift_id,
+      new_shift_code,
+      change_reason,
+      changed_by,
+      changed_by_name
+    ) VALUES (
+      v_counterparty_shift_id,
+      p_counterparty_user_id,
+      p_initiator_shift_date,
+      v_counterparty_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
+      v_initiator_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
+      format('Admin swap with %s on %s', (SELECT name FROM public.users WHERE id = p_initiator_user_id), to_char(p_initiator_shift_date, 'Dy DD Mon')),
+      v_admin_uid,
+      (SELECT name FROM public.users WHERE id = v_admin_uid)
+    );
+  END IF;
+
   RETURN QUERY SELECT true, v_swap_exec_id, null::text;
 EXCEPTION
   WHEN OTHERS THEN
@@ -873,27 +998,77 @@ BEGIN
   IF to_regclass('public.rota_assignment_comments') IS NOT NULL THEN
     INSERT INTO public.rota_assignment_comments(rota_assignment_id, comment, is_admin_only, created_by, created_at)
     SELECT v_initiator_shift_id,
-      format('Swap approved: Now on %s on %s (was %s). Swapped with %s. Approved by: %s',
+      format('%s swapped shift with %s: was working %s on %s, now working %s on %s. Approved by Admin %s',
+        (SELECT name FROM public.users WHERE id = v_swap_req.initiator_user_id),
+        (SELECT name FROM public.users WHERE id = v_swap_req.counterparty_user_id),
+        COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
+        to_char(v_swap_req.initiator_shift_date, 'Dy DD Mon'),
         COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
         to_char(v_swap_req.counterparty_shift_date, 'Dy DD Mon'),
-        COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
-        (SELECT name FROM public.users WHERE id = v_swap_req.counterparty_user_id),
         (SELECT name FROM public.users WHERE id = v_admin_uid)),
       false, v_admin_uid, now();
 
     INSERT INTO public.rota_assignment_comments(rota_assignment_id, comment, is_admin_only, created_by, created_at)
     SELECT v_counterparty_shift_id,
-      format('Swap approved: Now on %s on %s (was %s). Swapped with %s. Approved by: %s',
+      format('%s swapped shift with %s: was working %s on %s, now working %s on %s. Approved by Admin %s',
+        (SELECT name FROM public.users WHERE id = v_swap_req.counterparty_user_id),
+        (SELECT name FROM public.users WHERE id = v_swap_req.initiator_user_id),
+        COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
+        to_char(v_swap_req.counterparty_shift_date, 'Dy DD Mon'),
         COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
         to_char(v_swap_req.initiator_shift_date, 'Dy DD Mon'),
-        COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
-        (SELECT name FROM public.users WHERE id = v_swap_req.initiator_user_id),
         (SELECT name FROM public.users WHERE id = v_admin_uid)),
       false, v_admin_uid, now();
   END IF;
 
+  -- Record history for both staff members
+  IF to_regclass('public.rota_assignment_history') IS NOT NULL THEN
+    INSERT INTO public.rota_assignment_history (
+      rota_assignment_id, user_id, date,
+      old_shift_id, old_shift_code,
+      new_shift_id, new_shift_code,
+      change_reason, changed_by, changed_by_name
+    ) VALUES (
+      v_initiator_shift_id,
+      v_swap_req.initiator_user_id,
+      v_swap_req.counterparty_shift_date,
+      v_initiator_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
+      v_counterparty_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
+      format('Shift swap with %s approved by Admin %s', (SELECT name FROM public.users WHERE id = v_swap_req.counterparty_user_id), (SELECT name FROM public.users WHERE id = v_admin_uid)),
+      v_admin_uid,
+      (SELECT name FROM public.users WHERE id = v_admin_uid)
+    );
+
+    INSERT INTO public.rota_assignment_history (
+      rota_assignment_id, user_id, date,
+      old_shift_id, old_shift_code,
+      new_shift_id, new_shift_code,
+      change_reason, changed_by, changed_by_name
+    ) VALUES (
+      v_counterparty_shift_id,
+      v_swap_req.counterparty_user_id,
+      v_swap_req.initiator_shift_date,
+      v_counterparty_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_counterparty_old_shift_id), 'UNKNOWN'),
+      v_initiator_old_shift_id,
+      COALESCE((SELECT code FROM public.shifts WHERE id = v_initiator_old_shift_id), 'UNKNOWN'),
+      format('Shift swap with %s approved by Admin %s', (SELECT name FROM public.users WHERE id = v_swap_req.initiator_user_id), (SELECT name FROM public.users WHERE id = v_admin_uid)),
+      v_admin_uid,
+      (SELECT name FROM public.users WHERE id = v_admin_uid)
+    );
+  END IF;
+
   -- Update swap request status
   UPDATE public.swap_requests SET status = 'approved_by_admin' WHERE id = p_swap_request_id;
+
+  -- Mark all admin notifications for this swap as acknowledged
+  UPDATE public.notifications
+  SET status = 'ack'
+  WHERE type = 'swap_request'
+    AND payload::jsonb->>'swap_request_id' = p_swap_request_id::text
+    AND payload::jsonb->>'notification_type' = 'swap_accepted';
 
   RETURN QUERY SELECT true, v_swap_exec_id, null::text;
 EXCEPTION
@@ -928,6 +1103,13 @@ BEGIN
   END IF;
 
   UPDATE public.swap_requests SET status = 'declined_by_admin' WHERE id = p_swap_request_id;
+
+  -- Mark all admin notifications for this swap as acknowledged
+  UPDATE public.notifications
+  SET status = 'ack'
+  WHERE type = 'swap_request'
+    AND payload::jsonb->>'swap_request_id' = p_swap_request_id::text
+    AND payload::jsonb->>'notification_type' = 'swap_accepted';
 
   RETURN QUERY SELECT true, null::text;
 EXCEPTION

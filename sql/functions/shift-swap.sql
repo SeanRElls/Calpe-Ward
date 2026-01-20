@@ -232,6 +232,49 @@ begin
       and ra.date = p_initiator_shift_date;
   end if;
 
+  -- Record history for both staff members
+  if to_regclass('public.rota_assignment_history') is not null then
+    insert into rota_assignment_history(
+      rota_assignment_id, user_id, date,
+      old_shift_id, old_shift_code,
+      new_shift_id, new_shift_code,
+      change_reason, changed_by, changed_by_name
+    )
+    select ra.id,
+      p_initiator_user_id,
+      p_counterparty_shift_date,
+      v_initiator_shift_id,
+      v_initiator_shift_code,
+      v_counterparty_shift_id,
+      v_counterparty_shift_code,
+      format('Admin swap executed: swapped with %s', v_counterparty_name),
+      p_admin_id,
+      v_admin_name
+    from rota_assignments ra
+    where ra.user_id = p_initiator_user_id
+      and ra.date = p_counterparty_shift_date;
+
+    insert into rota_assignment_history(
+      rota_assignment_id, user_id, date,
+      old_shift_id, old_shift_code,
+      new_shift_id, new_shift_code,
+      change_reason, changed_by, changed_by_name
+    )
+    select ra.id,
+      p_counterparty_user_id,
+      p_initiator_shift_date,
+      v_counterparty_shift_id,
+      v_counterparty_shift_code,
+      v_initiator_shift_id,
+      v_initiator_shift_code,
+      format('Admin swap executed: swapped with %s', v_initiator_name),
+      p_admin_id,
+      v_admin_name
+    from rota_assignments ra
+    where ra.user_id = p_counterparty_user_id
+      and ra.date = p_initiator_shift_date;
+  end if;
+
   return query select true, v_swap_exec_id, null::text;
 end;
 $$ language plpgsql security definer;
@@ -400,26 +443,21 @@ begin
   if p_response = 'accepted' then
     insert into public.notifications (type, target_scope, target_user_id, requires_action, status, payload)
     select
-      'swap_pending',
+      'swap_request',
       'user',
       id,
-      false,
+      true,
       'pending',
       jsonb_build_object(
         'swap_request_id', p_swap_request_id,
         'initiator_name', v_initiator_name,
         'counterparty_name', v_counterparty_name,
         'initiator_date', v_swap_req.initiator_shift_date,
-        'counterparty_date', v_swap_req.counterparty_shift_date
+        'counterparty_date', v_swap_req.counterparty_shift_date,
+        'notification_type', 'swap_accepted'
       )
     from public.users
-    where is_admin = true or id in (
-      select upa.user_id from user_permission_assignments upa
-      join permission_items pi on pi.id = upa.permission_id
-      where pi.key = 'rota.swap'
-        and upa.assigned_at <= now()
-        and (upa.revoked_at is null or upa.revoked_at > now())
-    );
+    where is_admin = true;
   end if;
 
   return query select true, null::text;
@@ -555,6 +593,49 @@ begin
         v_swap_req.counterparty_shift_code, to_char(v_swap_req.counterparty_shift_date, 'Dy DD Mon'),
         v_admin_name),
       false, p_admin_id, now()
+    from rota_assignments ra
+    where ra.user_id = v_swap_req.counterparty_user_id
+      and ra.date = v_swap_req.initiator_shift_date;
+  end if;
+
+  -- Record history for both staff members
+  if to_regclass('public.rota_assignment_history') is not null then
+    insert into rota_assignment_history(
+      rota_assignment_id, user_id, date,
+      old_shift_id, old_shift_code,
+      new_shift_id, new_shift_code,
+      change_reason, changed_by, changed_by_name
+    )
+    select ra.id,
+      v_swap_req.initiator_user_id,
+      v_swap_req.counterparty_shift_date,
+      v_initiator_shift_id,
+      v_swap_req.initiator_shift_code,
+      v_counterparty_shift_id,
+      v_swap_req.counterparty_shift_code,
+      format('Staff swap approved: swapped with %s', v_counterparty_name),
+      p_admin_id,
+      v_admin_name
+    from rota_assignments ra
+    where ra.user_id = v_swap_req.initiator_user_id
+      and ra.date = v_swap_req.counterparty_shift_date;
+
+    insert into rota_assignment_history(
+      rota_assignment_id, user_id, date,
+      old_shift_id, old_shift_code,
+      new_shift_id, new_shift_code,
+      change_reason, changed_by, changed_by_name
+    )
+    select ra.id,
+      v_swap_req.counterparty_user_id,
+      v_swap_req.initiator_shift_date,
+      v_counterparty_shift_id,
+      v_swap_req.counterparty_shift_code,
+      v_initiator_shift_id,
+      v_swap_req.initiator_shift_code,
+      format('Staff swap approved: swapped with %s', v_initiator_name),
+      p_admin_id,
+      v_admin_name
     from rota_assignments ra
     where ra.user_id = v_swap_req.counterparty_user_id
       and ra.date = v_swap_req.initiator_shift_date;
