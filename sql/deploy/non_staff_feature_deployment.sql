@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.non_staff_people (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK (category IN ('student', 'bank', 'agency')),
-    role_group TEXT NOT NULL CHECK (role_group IN ('staff_nurse', 'nursing_assistant')),
+    role_group TEXT,
     notes TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -51,8 +51,33 @@ CREATE TRIGGER trg_non_staff_people_updated_at
 
 COMMENT ON TABLE public.non_staff_people IS 'Reusable profiles for non-staff (students, bank, agency)';
 COMMENT ON COLUMN public.non_staff_people.category IS 'student, bank, or agency';
-COMMENT ON COLUMN public.non_staff_people.role_group IS 'staff_nurse or nursing_assistant - determines which group they appear in';
+COMMENT ON COLUMN public.non_staff_people.role_group IS 'NULL for students; staff_nurse or nursing_assistant for bank/agency';
 COMMENT ON COLUMN public.non_staff_people.is_active IS 'Soft delete flag - inactive people cannot be added to new periods';
+
+-- Ensure role_group NULLability and category/role_group consistency (idempotent)
+ALTER TABLE public.non_staff_people
+    ALTER COLUMN role_group DROP NOT NULL;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'non_staff_people_role_group_check'
+    ) THEN
+        ALTER TABLE public.non_staff_people DROP CONSTRAINT non_staff_people_role_group_check;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'non_staff_people_category_rolegroup_check'
+    ) THEN
+        ALTER TABLE public.non_staff_people
+        ADD CONSTRAINT non_staff_people_category_rolegroup_check
+        CHECK (
+          (category = 'student' AND role_group IS NULL)
+          OR (category IN ('bank','agency') AND role_group IN ('staff_nurse','nursing_assistant'))
+        );
+    END IF;
+END $$;
 
 -- =====================================================
 -- STEP 2: Create period_non_staff table
@@ -266,8 +291,14 @@ BEGIN
         RETURN json_build_object('success', false, 'error', 'Invalid category');
     END IF;
     
-    IF p_role_group NOT IN ('staff_nurse', 'nursing_assistant') THEN
-        RETURN json_build_object('success', false, 'error', 'Invalid role group');
+    -- Validate role group depending on category
+    IF p_category = 'student' THEN
+        -- Students must not have a role_group
+        p_role_group := NULL;
+    ELSIF p_category IN ('bank','agency') THEN
+        IF p_role_group NOT IN ('staff_nurse','nursing_assistant') THEN
+            RETURN json_build_object('success', false, 'error', 'Invalid role group');
+        END IF;
     END IF;
     
     IF p_category IN ('bank', 'agency') AND NOT v_is_admin THEN
@@ -381,9 +412,13 @@ BEGIN
     )
     VALUES (
         p_period_id, p_non_staff_person_id,
-        p_counts_towards_staffing, p_display_order,
+        -- Enforce staffing count rule: bank/agency count, students do not
+        CASE WHEN v_category = 'agency' THEN TRUE
+             WHEN v_category = 'student' THEN FALSE
+             ELSE p_counts_towards_staffing END,
+        p_display_order,
         v_user_id
-    )
+    
     RETURNING id INTO v_new_id;
     
     INSERT INTO public.audit_logs (
@@ -502,7 +537,7 @@ BEGIN
         nsp.id, nsp.name, nsp.category, nsp.role_group, nsp.notes, nsp.is_active
     FROM public.non_staff_people nsp
     WHERE nsp.is_active = TRUE
-      AND (p_role_group IS NULL OR nsp.role_group = p_role_group)
+            AND (p_role_group IS NULL OR nsp.role_group = p_role_group)
       AND (p_category IS NULL OR nsp.category = p_category)
       AND (p_query IS NULL OR nsp.name ILIKE '%' || p_query || '%')
       AND (
@@ -521,3 +556,186 @@ COMMIT;
 -- 2. Add mentor gating to context menu
 -- 3. Update staffing calculations
 -- =====================================================
+-- =====================================================
+-- ADDITIONAL ADMIN RPCs (Profiles Management)
+-- Safe to re-run; functions are CREATE OR REPLACE.
+-- =====================================================
+
+BEGIN;
+
+-- Admin list (optionally include inactive). Admin-only.
+CREATE OR REPLACE FUNCTION public.rpc_admin_list_non_staff_people(
+    p_token UUID,
+    p_include_inactive BOOLEAN DEFAULT FALSE,
+    p_category TEXT DEFAULT NULL,
+    p_role_group TEXT DEFAULT NULL,
+    p_query TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+    id UUID,
+    name TEXT,
+    category TEXT,
+    role_group TEXT,
+    notes TEXT,
+    is_active BOOLEAN,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+BEGIN
+    SELECT user_id INTO v_user_id
+    FROM public.sessions
+    WHERE token = p_token
+      AND expires_at > NOW()
+      AND revoked_at IS NULL;
+
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    SELECT is_admin INTO v_is_admin FROM public.users WHERE id = v_user_id;
+    IF NOT COALESCE(v_is_admin, FALSE) THEN
+        RETURN; -- admin only
+    END IF;
+
+    RETURN QUERY
+    SELECT nsp.id, nsp.name, nsp.category, nsp.role_group, nsp.notes, nsp.is_active, nsp.created_at, nsp.updated_at
+    FROM public.non_staff_people nsp
+    WHERE (p_role_group IS NULL OR nsp.role_group = p_role_group)
+      AND (p_category IS NULL OR nsp.category = p_category)
+      AND (p_query IS NULL OR nsp.name ILIKE '%' || p_query || '%')
+      AND (p_include_inactive OR nsp.is_active = TRUE)
+    ORDER BY nsp.is_active DESC, nsp.name ASC;
+END;
+$$;
+
+-- Admin update profile (name/category/role_group/notes). Admin-only.
+CREATE OR REPLACE FUNCTION public.rpc_update_non_staff_person(
+    p_token UUID,
+    p_id UUID,
+    p_name TEXT,
+    p_category TEXT,
+    p_role_group TEXT,
+    p_notes TEXT DEFAULT NULL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_prev RECORD;
+BEGIN
+    SELECT user_id INTO v_user_id
+    FROM public.sessions
+    WHERE token = p_token
+      AND expires_at > NOW()
+      AND revoked_at IS NULL;
+
+    IF v_user_id IS NULL THEN
+        RETURN json_build_object('success', false, 'error', 'Invalid or expired session');
+    END IF;
+
+    SELECT is_admin INTO v_is_admin FROM public.users WHERE id = v_user_id;
+    IF NOT COALESCE(v_is_admin, FALSE) THEN
+        RETURN json_build_object('success', false, 'error', 'Admin only');
+    END IF;
+
+    IF p_category NOT IN ('student','bank','agency') THEN
+        RETURN json_build_object('success', false, 'error', 'Invalid category');
+    END IF;
+    IF p_role_group NOT IN ('staff_nurse','nursing_assistant') THEN
+        RETURN json_build_object('success', false, 'error', 'Invalid role group');
+    END IF;
+
+    SELECT * INTO v_prev FROM public.non_staff_people WHERE id = p_id;
+    IF v_prev IS NULL THEN
+        RETURN json_build_object('success', false, 'error', 'Profile not found');
+    END IF;
+
+    UPDATE public.non_staff_people
+    SET name = p_name,
+        category = p_category,
+        role_group = p_role_group,
+        notes = p_notes,
+        updated_by = v_user_id,
+        updated_at = NOW()
+    WHERE id = p_id;
+
+    INSERT INTO public.audit_logs (user_id, action, resource_type, resource_id, old_values, new_values)
+    VALUES (
+      v_user_id,
+      'update',
+      'non_staff_person',
+      p_id,
+      to_jsonb(v_prev),
+      json_build_object('name', p_name, 'category', p_category, 'role_group', p_role_group, 'notes', p_notes)
+    );
+
+    RETURN json_build_object('success', true, 'message', 'Profile updated');
+END;
+$$;
+
+-- Admin toggle active flag. Admin-only.
+CREATE OR REPLACE FUNCTION public.rpc_set_non_staff_active(
+    p_token UUID,
+    p_id UUID,
+    p_active BOOLEAN
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_prev RECORD;
+BEGIN
+    SELECT user_id INTO v_user_id
+    FROM public.sessions
+    WHERE token = p_token
+      AND expires_at > NOW()
+      AND revoked_at IS NULL;
+
+    IF v_user_id IS NULL THEN
+        RETURN json_build_object('success', false, 'error', 'Invalid or expired session');
+    END IF;
+
+    SELECT is_admin INTO v_is_admin FROM public.users WHERE id = v_user_id;
+    IF NOT COALESCE(v_is_admin, FALSE) THEN
+        RETURN json_build_object('success', false, 'error', 'Admin only');
+    END IF;
+
+    SELECT * INTO v_prev FROM public.non_staff_people WHERE id = p_id;
+    IF v_prev IS NULL THEN
+        RETURN json_build_object('success', false, 'error', 'Profile not found');
+    END IF;
+
+    UPDATE public.non_staff_people
+    SET is_active = p_active,
+        updated_by = v_user_id,
+        updated_at = NOW()
+    WHERE id = p_id;
+
+    INSERT INTO public.audit_logs (user_id, action, resource_type, resource_id, old_values, new_values)
+    VALUES (
+      v_user_id,
+      CASE WHEN p_active THEN 'reactivate' ELSE 'deactivate' END,
+      'non_staff_person',
+      p_id,
+      to_jsonb(v_prev),
+      json_build_object('is_active', p_active)
+    );
+
+    RETURN json_build_object('success', true, 'message', 'Active status updated');
+END;
+$$;
+
+COMMIT;
+

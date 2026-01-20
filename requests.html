@@ -6,6 +6,7 @@
   <title>Calpe Ward Off Duty Requests</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/user-modal.css">
   <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-192.png">
@@ -18,6 +19,7 @@
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/session-validator.js"></script>
+  <script src="js/user-modal.js"></script>
   <script src="js/nav-bar.js"></script>
   <script src="js/view-as.js?v=8"></script>
 
@@ -2037,30 +2039,32 @@ button.badge{
   <h1>Calpe Ward Requests</h1>
 
   <div class="header-subrow">
-    <div class="subtitle" id="periodLabel"></div>
+    <label for="periodSelect" class="subtitle" style="font-weight: 600;">Period:</label>
+    <select id="periodSelect">
+      <option>Loading...</option>
+    </select>
+    <div class="subtitle" id="periodLabel" style="margin-left: 12px;"></div>
     <div class="subtitle" id="closeLabel"></div>
   </div>
 </div>
 </div>
 <div class="rightbits">
-  <select id="periodSelect"></select>
-  <!-- 👤 Account badge -->
-  <button class="badge account-badge" id="loginBadge" type="button">
+  <!-- Bell -->
+  <button class="badge" id="noticeBell" type="button" title="Notices & notifications">
+    🔔 <span id="noticeBellDot" style="display:none;">•</span>
+  </button>
+  
+  <!-- Admin badge -->
+  <div class="badge admin" id="adminBadge" style="display:none;">ADMIN</div>
+  
+  <!-- Account badge (clickable to edit account) -->
+  <button class="badge account-badge" id="loginBadge" type="button" title="Edit your account">
     <span class="acc-ic">👤</span>
     <span class="acc-txt">Not logged in</span>
   </button>
-
-  <!-- 🖨️ Print/Export button (only for Sean Ells) -->
-  <button class="badge" id="printBtn" type="button" title="Print & Export" style="display:none;">
-    🖨️
-  </button>
-
-  <!--  Bell is its own button -->
-  <button class="badge" id="noticeBell" type="button" title="Notices">
-    🔔 <span id="noticeBellDot" style="display:none;">•</span>
-  </button>
-
-  <div class="badge admin" id="adminBadge" style="display:none;">ADMIN</div>
+  
+  <!-- Logout -->
+  <button id="logoutBtn">Logout</button>
 </div>
     </div>
 
@@ -6132,26 +6136,22 @@ await resetWeeksOpen(adminSelectedPeriodId);
        6) SHIFT PICKER LOGIC (with OFF priority)
        ========================================================= */
 function updateBadges(){
+  const loginBadge = document.getElementById("loginBadge");
   const txt = loginBadge?.querySelector(".acc-txt");
+  const adminBadge = document.getElementById("adminBadge");
 
   if (!currentUser){
- if (txt) txt.textContent = t("notLoggedIn");
-
+    if (txt) txt.textContent = "Not logged in";
     else if (loginBadge) loginBadge.textContent = "Not logged in";
     if (adminBadge) adminBadge.style.display = "none";
-    if (printBtn) printBtn.style.display = "none";
     return;
   }
 
-  // Show "Account: Name" so staff realise it's a feature
-if (txt) txt.textContent = `${t("accountEditTitle")}: ${currentUser.name}`;
-
-  else if (loginBadge) loginBadge.textContent = `Account: ${currentUser.name}`;
+  // Just show the user's name (clickable to edit)
+  if (txt) txt.textContent = currentUser.name;
+  else if (loginBadge) loginBadge.textContent = currentUser.name;
 
   if (adminBadge) adminBadge.style.display = currentUser.is_admin ? "inline-block" : "none";
-
-  // Show print button only for admins
-  if (printBtn) printBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
   
   // Show navigation admin link only for admins
   const navAdminLink = document.getElementById("navAdminLink");

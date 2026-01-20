@@ -486,6 +486,131 @@
       background: var(--accent);
     }
 
+    /* Mobile Mode Toggle */
+    .mobile-toggle{
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      padding: 8px 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mobile-toggle:hover{
+      background: #4a6be8;
+    }
+
+    /* Mobile Mode Styles */
+    body.mobile-mode .layout{
+      grid-template-columns: 1fr;
+    }
+    body.mobile-mode .sidebar{
+      position: fixed;
+      left: -280px;
+      top: 0;
+      bottom: 0;
+      width: 280px;
+      z-index: 999;
+      transition: left 0.3s ease;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+    body.mobile-mode .sidebar.is-open{
+      left: 0;
+    }
+    body.mobile-mode .mobile-overlay{
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 998;
+      display: none;
+    }
+    body.mobile-mode .mobile-overlay.is-visible{
+      display: block;
+    }
+    body.mobile-mode .hamburger{
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 997;
+      padding: 10px 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    body.mobile-mode .hamburger:hover{
+      background: #4a6be8;
+    }
+
+    /* Mobile-friendly form controls */
+    body.mobile-mode .btn,
+    body.mobile-mode .control{
+      min-height: 44px;
+      font-size: 15px;
+    }
+    body.mobile-mode .section{
+      padding: 16px;
+    }
+    body.mobile-mode .field label{
+      font-size: 14px;
+    }
+
+    /* Mobile-friendly audit table */
+    body.mobile-mode #auditLogsTable table{
+      font-size: 12px;
+    }
+    body.mobile-mode #auditLogsTable th,
+    body.mobile-mode #auditLogsTable td{
+      padding: 8px 6px;
+    }
+    body.mobile-mode #auditLogsTable th:nth-child(1),
+    body.mobile-mode #auditLogsTable td:nth-child(1){
+      font-size: 11px;
+    }
+    @media (max-width: 640px) {
+      #auditLogsTable table{
+        font-size: 11px;
+      }
+      #auditLogsTable th,
+      #auditLogsTable td{
+        padding: 6px 4px;
+      }
+      #auditLogsTable th:nth-child(4),
+      #auditLogsTable td:nth-child(4){
+        display: none; /* Hide target column on very small screens */
+      }
+    }
+      margin-bottom: 6px;
+    }
+    body.mobile-mode .actions{
+      flex-direction: column;
+    }
+    body.mobile-mode .actions .btn{
+      width: 100%;
+    }
+    body.mobile-mode .row{
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    body.mobile-mode .subtabs{
+      flex-wrap: wrap;
+    }
+
     @media (max-width: 900px){
       .layout{ grid-template-columns: 1fr; }
       .sidebar{
@@ -499,11 +624,25 @@
       }
       .row{ grid-template-columns: 1fr; }
     }
+    @media (max-width: 768px){
+      body:not(.mobile-mode) .mobile-toggle::after{
+        content: ' (Auto)';
+        opacity: 0.8;
+      }
+    }
   </style>
 </head>
 <body>
+  <button id="mobileToggle" class="mobile-toggle" type="button" title="Toggle mobile-friendly mode">
+    <span id="mobileToggleIcon">📱</span>
+    <span id="mobileToggleText">Mobile Mode</span>
+  </button>
+  <button id="hamburger" class="hamburger" type="button" style="display:none;" title="Open menu">
+    ☰
+  </button>
+  <div class="mobile-overlay" id="mobileOverlay"></div>
   <div class="layout">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="brand">Admin Console</div>
       <div class="subbrand">Calpe Ward - Control Panel</div>
       <div id="adminUserStatus" class="status-chip">
@@ -526,6 +665,8 @@
       <nav class="nav">
         <a class="is-active" data-panel="overview" href="#overview">Status</a>
         <a data-panel="users" href="#users">Users</a>
+        <a data-panel="non-staff" href="#non-staff">Non‑Staff</a>
+        <a data-panel="bank-holidays" href="#bank-holidays">Bank Holidays</a>
         <a data-panel="permissions" href="#permissions">Permissions</a>
         <a data-panel="patterns" href="#patterns">Patterns</a>
         <a data-panel="rota-periods" href="#rota-periods">Rota Periods</a>
@@ -568,6 +709,145 @@
               <h3>Recent Activity</h3>
               <p>2 notices updated, 1 week re-opened</p>
             </div>
+          </div>
+        </section>
+
+        <section id="non-staff" class="section panel" style="display:none;">
+          <h2>Non‑Staff Profiles</h2>
+          <p>Create, edit, activate/deactivate non‑staff profiles (students, bank, agency).</p>
+
+          <div class="subtabs" role="tablist" aria-label="Non-staff management pages">
+            <button class="subtab is-active" data-ns-page="view" type="button">View profiles</button>
+            <button class="subtab" data-ns-page="add" type="button">Add profile</button>
+            <button class="subtab" data-ns-page="edit" type="button">Edit profile</button>
+          </div>
+
+          <!-- View -->
+          <div id="nsPageView" class="ns-page">
+            <div class="accordion-sub">Search and manage non‑staff profiles.</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;">
+              <div style="font-weight:700;">Profiles</div>
+              <label style="display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--muted);">
+                <input type="checkbox" id="nsShowInactive" />
+                Show inactive
+              </label>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+              <input id="nsSearchInput" class="control" placeholder="Search name..." />
+              <select id="nsFilterCategory" class="control" style="min-width:140px;">
+                <option value="">All categories</option>
+                <option value="student">Student</option>
+                <option value="bank">Bank</option>
+                <option value="agency">Agency</option>
+              </select>
+              <select id="nsFilterRole" class="control" style="min-width:160px;">
+                <option value="">All role groups</option>
+                <option value="staff_nurse">Staff Nurse</option>
+                <option value="nursing_assistant">Nursing Assistant</option>
+              </select>
+              <button id="nsRefreshBtn" class="btn" type="button">Refresh</button>
+            </div>
+            <div id="nsList" style="margin-top:12px; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff;"></div>
+          </div>
+
+          <!-- Add -->
+          <div id="nsPageAdd" class="ns-page" style="display:none;">
+            <div class="accordion-sub">Create a new non‑staff profile.</div>
+            <div class="field" style="margin-top:10px;">
+              <h3>New profile</h3>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <input id="nsAddName" class="control" placeholder="Full name" style="flex:1; min-width:200px;" />
+                <select id="nsAddCategory" class="control" style="min-width:160px;">
+                  <option value="student">Student</option>
+                  <option value="bank">Bank</option>
+                  <option value="agency">Agency</option>
+                </select>
+                <span id="nsAddRoleWrap"><select id="nsAddRole" class="control" style="min-width:180px;">
+                  <option value="staff_nurse">Staff Nurse</option>
+                  <option value="nursing_assistant">Nursing Assistant</option>
+                </select></span>
+              </div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <input id="nsAddNotes" class="control" placeholder="Notes (optional)" style="flex:1; min-width:280px;" />
+                <button id="nsCreateBtn" class="btn primary" type="button">Create</button>
+                <button id="nsAddClearBtn" class="btn" type="button">Clear</button>
+              </div>
+              <div id="nsAddHelp" class="page-subtitle" style="margin-top:8px;"></div>
+            </div>
+          </div>
+
+          <!-- Edit -->
+          <div id="nsPageEdit" class="ns-page" style="display:none;">
+            <div class="accordion-sub">Update profile details and status.</div>
+            <details class="accordion" open>
+              <summary class="accordion-title">Select profile</summary>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <input id="nsEditSearch" class="control" placeholder="Search profile..." style="flex:1; min-width:200px;" />
+                <select id="nsEditSelect" class="control" style="min-width:240px;">
+                  <option value="">Select profile...</option>
+                </select>
+              </div>
+            </details>
+
+            <details class="accordion" open>
+              <summary class="accordion-title">Identity & Details</summary>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <input id="nsEditName" class="control" placeholder="Full name" style="flex:1; min-width:200px;" />
+                <select id="nsEditCategory" class="control" style="min-width:160px;">
+                  <option value="student">Student</option>
+                  <option value="bank">Bank</option>
+                  <option value="agency">Agency</option>
+                </select>
+                <span id="nsEditRoleWrap"><select id="nsEditRole" class="control" style="min-width:180px;">
+                  <option value="staff_nurse">Staff Nurse</option>
+                  <option value="nursing_assistant">Nursing Assistant</option>
+                </select></span>
+              </div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <input id="nsEditNotes" class="control" placeholder="Notes (optional)" style="flex:1; min-width:280px;" />
+                <button id="nsSaveBtn" class="btn primary" type="button">Save</button>
+                <button id="nsEditCancelBtn" class="btn" type="button">Cancel</button>
+              </div>
+              <div id="nsEditHelp" class="page-subtitle" style="margin-top:8px;"></div>
+            </details>
+
+            <details class="accordion">
+              <summary class="accordion-title">Active Status</summary>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+                <button id="nsToggleActiveBtn" class="btn" type="button">Deactivate</button>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="bank-holidays" class="section panel" style="display:none;">
+          <h2>Bank Holidays</h2>
+          <p>Manage bank holidays displayed on the rota (by year).</p>
+
+          <div class="field" style="margin-top:10px;">
+            <label style="font-size:12px; color:var(--muted); font-weight:500;">Year</label>
+            <select id="bhYear" class="control" style="max-width:160px; margin-top:4px;">
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+              <option value="2028">2028</option>
+              <option value="2029">2029</option>
+              <option value="2030">2030</option>
+            </select>
+          </div>
+
+          <div class="field" style="margin-top:16px;">
+            <h3>Add Bank Holiday</h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+              <input id="bhDate" type="date" class="control" style="min-width:140px;" />
+              <input id="bhName" class="control" placeholder="Holiday name (e.g., Christmas Day)" style="flex:1; min-width:200px;" />
+              <button id="bhAddBtn" class="btn primary" type="button">Add</button>
+            </div>
+            <div id="bhAddHelp" class="page-subtitle" style="margin-top:8px;"></div>
+          </div>
+
+          <div style="margin-top:16px; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff;">
+            <div style="background:var(--header); padding:12px; font-weight:600; font-size:13px;">Bank Holidays</div>
+            <div id="bhList" style="max-height:400px; overflow-y:auto;"></div>
           </div>
         </section>
 
@@ -703,11 +983,61 @@
 
         <section id="rota-periods" class="section panel" style="display:none;">
           <h2>Rota Periods</h2>
-          <p>Create, activate, close, or hide periods.</p>
-          <div class="actions">
-            <button class="btn primary" type="button">Create Period</button>
-            <button class="btn" type="button">Set Active</button>
-            <button class="btn" type="button">Toggle Hidden</button>
+          <p>Create, activate, close, or hide periods. Manage week open/close state.</p>
+
+          <div class="subtabs" role="tablist" aria-label="Period management pages">
+            <button class="subtab is-active" data-periods-page="manage" type="button">Manage Periods</button>
+            <button class="subtab" data-periods-page="generate" type="button">Generate New Period</button>
+          </div>
+
+          <!-- Manage Periods Page -->
+          <div id="periodsPageManage" class="periods-page">
+            <!-- Period picker -->
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; margin-top:16px;">
+              <div style="font-weight:700;">Select Period</div>
+              <select id="adminPeriodSelect" class="control" style="min-width:220px; flex: 0 0 auto;"></select>
+              <div class="page-subtitle" id="adminPeriodMeta"></div>
+            </div>
+
+            <!-- Period Actions -->
+            <div style="border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:16px; background:#fff;">
+              <div style="font-weight:700; margin-bottom:10px;">Period Actions</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="adminSetActiveBtn" type="button" class="btn">Set Active</button>
+                <button id="adminToggleHiddenBtn" type="button" class="btn">Toggle Hidden</button>
+              </div>
+            </div>
+
+            <!-- Requests close time -->
+            <div style="border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:16px; background:#fff;">
+              <div style="font-weight:700; margin-bottom:10px;">Requests Closing Time</div>
+              
+              <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+                <input id="adminClosesAtInput" type="datetime-local" class="control" style="flex: 1; min-width:200px;" />
+                <button id="adminClosesAtSaveBtn" type="button" class="btn primary">Save Close Time</button>
+                <button id="adminClosesAtClearBtn" type="button" class="btn">Clear</button>
+              </div>
+              
+              <div class="page-subtitle" id="adminClosesAtHelp">
+                Set when requests will lock for this whole 5-week period. All weeks will be closed after this time.
+              </div>
+            </div>
+
+            <!-- Weeks list -->
+            <div style="border:1px solid var(--line); border-radius:14px; padding:14px; background:#fff;">
+              <div style="font-weight:700; margin-bottom:10px;">Weeks Management</div>
+              <div class="page-subtitle" style="margin-bottom:10px;">Open or close individual weeks for staff requests.</div>
+              <div id="adminWeeksList">Select a period to view weeks...</div>
+            </div>
+          </div>
+
+          <!-- Generate Period Page -->
+          <div id="periodsPageGenerate" class="periods-page" style="display:none;">
+            <div style="border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:16px; background:#fff;">
+              <div style="font-weight:700; margin-bottom:10px;">Generate Next 5-Week Period</div>
+              <div class="page-subtitle" id="adminGeneratePreview" style="margin-bottom:12px;">Preview will appear here.</div>
+              <button id="adminGenerateBtn" class="btn primary" type="button">Generate New Period</button>
+            </div>
           </div>
         </section>
 
@@ -878,6 +1208,13 @@
               </div>
 
               <div class="field" style="margin-bottom:12px;">
+                <h4 style="margin:0 0 8px 0;">Shift Type</h4>
+                <label style="display:flex; gap:6px; align-items:center; font-size:12.5px;">
+                  <input type="checkbox" id="editShiftIsTimeOff" /> This is a time-off code (e.g., Leave, Off, Sick)
+                </label>
+              </div>
+
+              <div class="field" style="margin-bottom:12px;">
                 <h4 style="margin:0 0 8px 0;">Eligible Staff Grades</h4>
                 <label style="display:flex; gap:6px; align-items:center; font-size:12.5px; margin-bottom:6px;">
                   <input type="checkbox" id="editShiftNA" /> Nursing Assistant
@@ -969,6 +1306,13 @@
               <div class="field" style="margin-bottom:12px;">
                 <h4 style="margin:0 0 8px 0;">Hours Total<span style="font-size:11px; color:var(--muted);"> optional</span></h4>
                 <input id="newShiftHours" class="control" type="number" placeholder="e.g., 8.0" />
+              </div>
+
+              <div class="field" style="margin-bottom:12px;">
+                <h4 style="margin:0 0 8px 0;">Shift Type</h4>
+                <label style="display:flex; gap:6px; align-items:center; font-size:12.5px;">
+                  <input type="checkbox" id="newShiftIsTimeOff" /> This is a time-off code (e.g., Leave, Off, Sick)
+                </label>
               </div>
 
               <div class="field" style="margin-bottom:12px;">
@@ -1124,11 +1468,29 @@
           <p>View all system actions, impersonations, and security events.</p>
           
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
-            <input id="auditFilterAction" class="control" placeholder="Filter by action..." style="min-width:180px;" />
-            <input id="auditFilterUser" class="control" placeholder="Filter by user..." style="min-width:180px;" />
-            <input id="auditFilterDays" class="control" type="number" value="7" min="1" max="365" placeholder="Days" style="max-width:80px;" />
+            <select id="auditFilterAction" class="control" style="min-width:180px;">
+              <option value="">All Actions</option>
+              <option value="shift">Shift Changes</option>
+              <option value="swap">Swap Requests</option>
+              <option value="request">Time Off Requests</option>
+              <option value="period">Period Management</option>
+              <option value="user">User Management</option>
+              <option value="admin">Admin Actions</option>
+              <option value="impersonate">Impersonations</option>
+              <option value="login">Login Events</option>
+            </select>
+            
+            <input id="auditFilterUser" class="control" placeholder="Filter by name or ID..." style="min-width:180px;" />
+            
+            <label style="font-size:12px; color:var(--dim);">From:</label>
+            <input id="auditFilterStartDate" class="control" type="date" style="max-width:150px;" />
+            
+            <label style="font-size:12px; color:var(--dim);">To:</label>
+            <input id="auditFilterEndDate" class="control" type="date" style="max-width:150px;" />
+            
             <button id="auditLoadBtn" class="btn primary" type="button">Load Logs</button>
             <button id="auditExportBtn" class="btn" type="button">Export CSV</button>
+            <button id="auditClearFiltersBtn" class="btn" type="button">Clear Filters</button>
           </div>
 
           <div id="auditLogsTable" style="border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; margin-top:12px;">
@@ -1155,7 +1517,8 @@
   <script src="js/notifications-shared.js" defer></script>
   <script src="js/view-as.js?v=8"></script>
   <script src="js/admin.js"></script>
-  <script src="js/audit-trail.js"></script>
+  <script src="js/audit-trail-enhanced.js"></script>
+  <script src="js/admin-periods.js"></script>
   <script>
     // Staffing defaults management
     const staffingDaySn = document.getElementById("staffingDaySn");
@@ -1191,6 +1554,68 @@
 
     // Load on page load
     document.addEventListener("DOMContentLoaded", loadStaffingDefaults);
+
+    // Mobile Mode Toggle
+    const mobileToggle = document.getElementById('mobileToggle');
+    const mobileToggleIcon = document.getElementById('mobileToggleIcon');
+    const mobileToggleText = document.getElementById('mobileToggleText');
+    const hamburger = document.getElementById('hamburger');
+    const sidebar = document.getElementById('sidebar');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    const MOBILE_MODE_KEY = 'calpeward.mobile_mode';
+
+    // Check saved preference or default to false
+    let mobileMode = localStorage.getItem(MOBILE_MODE_KEY) === 'true';
+
+    // Auto-enable mobile mode on small screens (but allow override)
+    if (!localStorage.getItem(MOBILE_MODE_KEY) && window.innerWidth < 768) {
+      mobileMode = true;
+    }
+
+    function updateMobileMode() {
+      if (mobileMode) {
+        document.body.classList.add('mobile-mode');
+        mobileToggleIcon.textContent = '🖥️';
+        mobileToggleText.textContent = 'Desktop Mode';
+        hamburger.style.display = 'block';
+      } else {
+        document.body.classList.remove('mobile-mode');
+        mobileToggleIcon.textContent = '📱';
+        mobileToggleText.textContent = 'Mobile Mode';
+        hamburger.style.display = 'none';
+        sidebar.classList.remove('is-open');
+        mobileOverlay.classList.remove('is-visible');
+      }
+      localStorage.setItem(MOBILE_MODE_KEY, mobileMode);
+    }
+
+    mobileToggle.addEventListener('click', () => {
+      mobileMode = !mobileMode;
+      updateMobileMode();
+    });
+
+    hamburger.addEventListener('click', () => {
+      sidebar.classList.add('is-open');
+      mobileOverlay.classList.add('is-visible');
+    });
+
+    mobileOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('is-open');
+      mobileOverlay.classList.remove('is-visible');
+    });
+
+    // Close sidebar when clicking nav links in mobile mode
+    document.querySelectorAll('.nav a').forEach(link => {
+      link.addEventListener('click', () => {
+        if (mobileMode) {
+          sidebar.classList.remove('is-open');
+          mobileOverlay.classList.remove('is-visible');
+        }
+      });
+    });
+
+    // Initialize on page load
+    updateMobileMode();
   </script>
 </body>
 </html>

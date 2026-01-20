@@ -46,6 +46,47 @@
     const createPermissionGroupBtn = document.getElementById("createPermissionGroupBtn");
     const permissionGroupHelp = document.getElementById("permissionGroupHelp");
     const permissionsMatrix = document.getElementById("permissionsMatrix");
+    // Non-staff admin elements
+    const nsList = document.getElementById("nsList");
+    const nsShowInactive = document.getElementById("nsShowInactive");
+    const nsSearchInput = document.getElementById("nsSearchInput");
+    const nsFilterCategory = document.getElementById("nsFilterCategory");
+    const nsFilterRole = document.getElementById("nsFilterRole");
+    const nsRefreshBtn = document.getElementById("nsRefreshBtn");
+    const nsPageTabs = Array.from(document.querySelectorAll('.subtab[data-ns-page]'));
+    const nsPages = [
+      document.getElementById('nsPageView'),
+      document.getElementById('nsPageAdd'),
+      document.getElementById('nsPageEdit')
+    ].filter(Boolean);
+    const nsAddName = document.getElementById('nsAddName');
+    const nsAddCategory = document.getElementById('nsAddCategory');
+    const nsAddRole = document.getElementById('nsAddRole');
+    const nsAddNotes = document.getElementById('nsAddNotes');
+    const nsCreateBtn = document.getElementById('nsCreateBtn');
+    const nsAddClearBtn = document.getElementById('nsAddClearBtn');
+    const nsAddHelp = document.getElementById('nsAddHelp');
+    const nsEditSearch = document.getElementById('nsEditSearch');
+    const nsEditSelect = document.getElementById('nsEditSelect');
+    const nsEditName = document.getElementById('nsEditName');
+    const nsEditCategory = document.getElementById('nsEditCategory');
+    const nsEditRole = document.getElementById('nsEditRole');
+    const nsEditNotes = document.getElementById('nsEditNotes');
+    const nsSaveBtn = document.getElementById('nsSaveBtn');
+    const nsEditCancelBtn = document.getElementById('nsEditCancelBtn');
+    const nsEditHelp = document.getElementById('nsEditHelp');
+    const nsToggleActiveBtn = document.getElementById('nsToggleActiveBtn');
+    let nsCache = [];
+    let nsEditingId = null;
+
+    // Bank holidays elements
+    const bhYear = document.getElementById('bhYear');
+    const bhDate = document.getElementById('bhDate');
+    const bhName = document.getElementById('bhName');
+    const bhAddBtn = document.getElementById('bhAddBtn');
+    const bhAddHelp = document.getElementById('bhAddHelp');
+    const bhList = document.getElementById('bhList');
+    let bhCache = [];
 
     function escapeHtml(str){
       return String(str || "")
@@ -418,6 +459,10 @@
 
       const permissionsNav = document.querySelector('[data-panel="permissions"]');
       if (permissionsNav) permissionsNav.style.display = canManagePermissions ? "flex" : "none";
+
+      // Non-staff admin is admin-only
+      const nsNav = document.querySelector('[data-panel="non-staff"]');
+      if (nsNav) nsNav.style.display = currentUser?.is_admin ? 'flex' : 'none';
 
       if (adminAddUserBtn) adminAddUserBtn.disabled = !canCreateUsers;
 
@@ -828,6 +873,18 @@
           }
         });
       }
+      if (id === 'non-staff'){
+        ensureCurrentUser().then(() => {
+          if (!currentUser?.is_admin) {
+            if (nsList) nsList.innerHTML = `<div class="page-subtitle" style="padding:10px;">Restricted</div>`;
+            return;
+          }
+          loadNonStaffList();
+          clearNonStaffAddForm();
+          clearNonStaffEditForm();
+          showNonStaffPage('view');
+        });
+      }
     }
 
     navLinks.forEach(link => {
@@ -854,6 +911,243 @@
         });
       });
     });
+
+    // ===== Non-staff management =====
+    function showNonStaffPage(id){
+      nsPages.forEach(page => {
+        if (!page) return;
+        const pageId = page.id.replace('nsPage','').toLowerCase();
+        page.style.display = (pageId === id) ? 'block' : 'none';
+      });
+      nsPageTabs.forEach(tab => tab.classList.toggle('is-active', tab.dataset.nsPage === id));
+    }
+
+    function clearNonStaffAddForm(){
+      if (nsAddName) nsAddName.value = '';
+      if (nsAddCategory) nsAddCategory.value = 'student';
+      if (nsAddRole) nsAddRole.value = 'staff_nurse';
+      if (nsAddNotes) nsAddNotes.value = '';
+      if (nsAddHelp) nsAddHelp.textContent = 'Fill details and click Create.';
+    }
+
+    function clearNonStaffEditForm(){
+      nsEditingId = null;
+      if (nsEditName) nsEditName.value = '';
+      if (nsEditCategory) nsEditCategory.value = 'student';
+      if (nsEditRole) nsEditRole.value = 'staff_nurse';
+      if (nsEditNotes) nsEditNotes.value = '';
+      if (nsEditHelp) nsEditHelp.textContent = 'Select a profile to edit.';
+      if (nsToggleActiveBtn) nsToggleActiveBtn.dataset.active = 'true', nsToggleActiveBtn.textContent = 'Deactivate';
+      if (nsEditSelect) nsEditSelect.value = '';
+    }
+
+    async function loadNonStaffList(){
+      if (!nsList) return;
+      nsList.textContent = 'Loading profiles...';
+      try {
+        const { data, error } = await supabaseClient.rpc('rpc_admin_list_non_staff_people', {
+          p_token: currentToken,
+          p_include_inactive: !!nsShowInactive?.checked,
+          p_category: (nsFilterCategory?.value || '') || null,
+          p_role_group: (nsFilterRole?.value || '') || null,
+          p_query: (nsSearchInput?.value || '') || null
+        });
+        if (error) throw error;
+        nsCache = data || [];
+        renderNonStaffList();
+        renderNonStaffSelectOptions(nsEditSearch?.value || '');
+      } catch (e) {
+        console.error(e);
+        nsList.textContent = 'Failed to load profiles.';
+      }
+    }
+
+    function renderNonStaffList(){
+      if (!nsList) return;
+      const q = (nsSearchInput?.value || '').trim().toLowerCase();
+      const cat = nsFilterCategory?.value || '';
+      const role = nsFilterRole?.value || '';
+      const showInactive = !!nsShowInactive?.checked;
+      let rows = nsCache.slice();
+      if (!showInactive) rows = rows.filter(r => r.is_active !== false);
+      if (cat) rows = rows.filter(r => r.category === cat);
+      if (role) rows = rows.filter(r => r.role_group === role);
+      if (q) rows = rows.filter(r => (r.name || '').toLowerCase().includes(q));
+      if (!rows.length){
+        nsList.innerHTML = `<div class="page-subtitle" style="padding:10px;">No profiles.</div>`;
+        return;
+      }
+      nsList.innerHTML = rows.map(r => {
+        const catTag = `<span class="user-tag">${escapeHtml(r.category)}</span>`;
+        const roleTag = `<span class="user-tag">${escapeHtml(r.role_group.replace('_',' '))}</span>`;
+        const inactiveTag = r.is_active === false ? `<span class="user-tag inactive">inactive</span>` : '';
+        const toggleLabel = r.is_active === false ? 'Reactivate' : 'Deactivate';
+        return `
+          <div class="user-row" data-ns-id="${r.id}">
+            <div class="user-meta">
+              <div class="user-name">${escapeHtml(r.name || '')} ${catTag} ${roleTag} ${inactiveTag}</div>
+            </div>
+            <div class="user-actions">
+              <button type="button" class="btn" data-act="ns-edit" data-id="${r.id}">Edit</button>
+              <button type="button" class="btn" data-act="ns-toggle" data-id="${r.id}">${toggleLabel}</button>
+            </div>
+          </div>`;
+      }).join('');
+
+      // Bind row action clicks
+      nsList.querySelectorAll('button[data-act="ns-edit"]').forEach(btn => {
+        btn.addEventListener('click', () => startEditNonStaff(btn.dataset.id));
+      });
+      nsList.querySelectorAll('button[data-act="ns-toggle"]').forEach(btn => {
+        btn.addEventListener('click', () => toggleNonStaffActive(btn.dataset.id));
+      });
+    }
+
+    function renderNonStaffSelectOptions(filterText){
+      if (!nsEditSelect) return;
+      const q = (filterText || '').trim().toLowerCase();
+      const options = nsCache
+        .slice()
+        .filter(r => (r.name || '').toLowerCase().includes(q))
+        .map(r => `<option value="${r.id}">${escapeHtml(r.name)}${r.is_active===false?' (inactive)':''}</option>`)
+        .join('');
+      nsEditSelect.innerHTML = `<option value="">Select profile...</option>${options}`;
+    }
+
+    function startEditNonStaff(id){
+      if (!currentUser?.is_admin) { alert('Restricted'); return; }
+      const r = nsCache.find(x => x.id === id);
+      if (!r) return;
+      nsEditingId = r.id;
+      if (nsEditName) nsEditName.value = r.name || '';
+      if (nsEditCategory) nsEditCategory.value = r.category || 'student';
+      if (nsEditRole) nsEditRole.value = r.role_group || 'staff_nurse';
+      if (nsEditNotes) nsEditNotes.value = r.notes || '';
+      if (nsToggleActiveBtn){
+        nsToggleActiveBtn.dataset.active = String(r.is_active !== false);
+        nsToggleActiveBtn.textContent = (r.is_active === false) ? 'Reactivate' : 'Deactivate';
+      }
+      if (nsEditSelect) nsEditSelect.value = String(id);
+      showNonStaffPage('edit');
+    }
+
+    async function saveNonStaff(){
+      if (!currentUser?.is_admin) { alert('Restricted'); return; }
+      if (!nsEditingId) { alert('Select a profile.'); return; }
+      const name = (nsEditName?.value || '').trim();
+      const category = nsEditCategory?.value || 'student';
+      const role = category === 'student' ? null : (nsEditRole?.value || 'staff_nurse');
+      const notes = nsEditNotes?.value || null;
+      if (!name) { alert('Name required.'); return; }
+      try {
+        const { data, error } = await supabaseClient.rpc('rpc_update_non_staff_person', {
+          p_token: currentToken,
+          p_id: nsEditingId,
+          p_name: name,
+          p_category: category,
+          p_role_group: role,
+          p_notes: notes
+        });
+        if (error || !data?.success) throw error || new Error(data?.error || 'Update failed');
+        nsEditHelp.textContent = 'Saved.';
+        await loadNonStaffList();
+      } catch (e) {
+        console.error(e);
+        alert('Save failed.');
+      }
+    }
+
+    async function toggleNonStaffActive(id){
+      if (!currentUser?.is_admin) { alert('Restricted'); return; }
+      const r = nsCache.find(x => x.id === id);
+      if (!r) return;
+      const next = r.is_active === false;
+      const ok = confirm(`${next ? 'Reactivate' : 'Deactivate'} ${r.name}?`);
+      if (!ok) return;
+      try {
+        const { data, error } = await supabaseClient.rpc('rpc_set_non_staff_active', {
+          p_token: currentToken,
+          p_id: id,
+          p_active: next
+        });
+        if (error || !data?.success) throw error || new Error(data?.error || 'Update failed');
+        await loadNonStaffList();
+        if (nsEditingId === id) startEditNonStaff(id);
+      } catch (e) {
+        console.error(e);
+        alert('Update failed.');
+      }
+    }
+
+    async function createNonStaff(){
+      if (!currentUser?.is_admin) { alert('Restricted'); return; }
+      const name = (nsAddName?.value || '').trim();
+      const category = nsAddCategory?.value || 'student';
+      const role = category === 'student' ? null : (nsAddRole?.value || 'staff_nurse');
+      const notes = nsAddNotes?.value || null;
+      if (!name) { alert('Name required.'); return; }
+      try {
+        const { data, error } = await supabaseClient.rpc('rpc_add_non_staff_person', {
+          p_token: currentToken,
+          p_name: name,
+          p_category: category,
+          p_role_group: role,
+          p_notes: notes
+        });
+        if (error || !data?.success) throw error || new Error(data?.error || 'Create failed');
+        nsAddHelp.textContent = 'Created.';
+        clearNonStaffAddForm();
+        await loadNonStaffList();
+        showNonStaffPage('view');
+      } catch (e) {
+        console.error(e);
+        alert('Create failed.');
+      }
+    }
+
+    // Wire up NS events if elements present
+    if (nsPageTabs.length){
+      nsPageTabs.forEach(tab => tab.addEventListener('click', () => showNonStaffPage(tab.dataset.nsPage)));
+    }
+    if (nsRefreshBtn) nsRefreshBtn.addEventListener('click', loadNonStaffList);
+    if (nsShowInactive) nsShowInactive.addEventListener('change', loadNonStaffList);
+    if (nsFilterCategory) nsFilterCategory.addEventListener('change', loadNonStaffList);
+    if (nsFilterRole) nsFilterRole.addEventListener('change', loadNonStaffList);
+    if (nsSearchInput) nsSearchInput.addEventListener('input', () => { renderNonStaffList(); });
+    if (nsCreateBtn) nsCreateBtn.addEventListener('click', createNonStaff);
+    if (nsAddClearBtn) nsAddClearBtn.addEventListener('click', clearNonStaffAddForm);
+    if (nsEditSearch) nsEditSearch.addEventListener('input', () => renderNonStaffSelectOptions(nsEditSearch.value));
+    if (nsEditSelect) nsEditSelect.addEventListener('change', () => { if (nsEditSelect.value) startEditNonStaff(nsEditSelect.value); });
+    if (nsSaveBtn) nsSaveBtn.addEventListener('click', saveNonStaff);
+    if (nsEditCancelBtn) nsEditCancelBtn.addEventListener('click', clearNonStaffEditForm);
+    if (nsToggleActiveBtn) nsToggleActiveBtn.addEventListener('click', () => {
+      if (!nsEditingId) { alert('Select a profile first.'); return; }
+      const r = nsCache.find(x => x.id === nsEditingId);
+      if (!r) return;
+      toggleNonStaffActive(nsEditingId);
+    });
+
+    // Category → role-group UI toggles
+    function updateNsAddRoleVisibility(){
+      if (!nsAddCategory) return;
+      const wrap = document.getElementById('nsAddRoleWrap');
+      if (nsAddCategory.value === 'student'){
+        if (wrap) wrap.style.display = 'none';
+      } else {
+        if (wrap) wrap.style.display = '';
+      }
+    }
+    function updateNsEditRoleVisibility(){
+      if (!nsEditCategory) return;
+      const wrap = document.getElementById('nsEditRoleWrap');
+      if (nsEditCategory.value === 'student'){
+        if (wrap) wrap.style.display = 'none';
+      } else {
+        if (wrap) wrap.style.display = '';
+      }
+    }
+    if (nsAddCategory) { nsAddCategory.addEventListener('change', updateNsAddRoleVisibility); updateNsAddRoleVisibility(); }
+    if (nsEditCategory) { nsEditCategory.addEventListener('change', updateNsEditRoleVisibility); updateNsEditRoleVisibility(); }
 
     let permissionsCatalogue = null;
     let permissionGroups = [];
@@ -1431,12 +1725,12 @@
         try {
           const { data, error } = await supabaseClient
             .from("shifts")
-            .select("id, code, label, hours_value, start_time, end_time, day_or_night, allowed_staff_groups, allow_requests, allow_draft, allow_post_publish, fill_color, text_color, text_bold, text_italic")
+            .select("id, code, label, hours_value, start_time, end_time, day_or_night, allowed_staff_groups, allow_requests, allow_draft, allow_post_publish, fill_color, text_color, text_bold, text_italic, is_time_off")
             .order("code", { ascending: true });
           if (error) throw error;
           shifts = data;
         } catch (e) {
-          console.warn("[SHIFTS] Styling columns not found; falling back without styling fields", e?.message);
+          console.warn("[SHIFTS] Styling or is_time_off columns not found; falling back without them", e?.message);
           styleFieldsAvailable = false;
           const { data, error } = await supabaseClient
             .from("shifts")
@@ -1459,6 +1753,7 @@
           if (shift.allow_draft) scopes.push("draft");
           if (shift.allow_post_publish) scopes.push("post-publish");
           const shiftScopes = scopes.join(", ") || "None";
+          const typeLabel = shift.is_time_off ? "(Time-Off)" : "(Shift)";
 
           // Styling preview values (safe defaults if fields missing)
           const fill = shift.fill_color || "#f7f7f7";
@@ -1470,7 +1765,7 @@
             <div style="padding:12px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px;">
               <div style="flex:1;">
                 <div style="display:inline-block; padding:4px 10px; border-radius:6px; margin-bottom:8px; background:${fill}; color:${text}; border:1px solid #ccc; font-size:12px; font-weight:${weight}; font-style:${fontStyle};">
-                  ${escapeHtml(shift.code)} – ${escapeHtml(shift.label)} (${shift.hours_value}h)
+                  ${escapeHtml(shift.code)} – ${escapeHtml(shift.label)} (${shift.hours_value}h) ${typeLabel}
                 </div>
                 <div style="font-size:11px; color:var(--muted); margin:4px 0;">Hours: ${escapeHtml(hours)}</div>
                 <div style="font-size:11px; color:var(--muted); margin:4px 0;">Staff Groups: ${escapeHtml(staffGroups)}</div>
@@ -1554,6 +1849,7 @@
         document.getElementById("editShiftRequests").checked = shift.allow_requests || false;
         document.getElementById("editShiftRotaDraft").checked = shift.allow_draft || false;
         document.getElementById("editShiftRotaPost").checked = shift.allow_post_publish || false;
+        document.getElementById("editShiftIsTimeOff").checked = shift.is_time_off || false;
         
         // Load styling fields
         document.getElementById("editShiftFill").value = shift.fill_color || "#ffffff";
@@ -1602,6 +1898,7 @@
           allow_requests: document.getElementById("editShiftRequests").checked,
           allow_draft: document.getElementById("editShiftRotaDraft").checked,
           allow_post_publish: document.getElementById("editShiftRotaPost").checked,
+          is_time_off: document.getElementById("editShiftIsTimeOff").checked,
           fill_color: document.getElementById("editShiftFill").value || null,
           text_color: document.getElementById("editShiftText").value || null,
           text_bold: document.getElementById("editShiftBold").checked,
@@ -1681,6 +1978,7 @@
             allow_requests: document.getElementById("newShiftRequests").checked,
             allow_draft: document.getElementById("newShiftRotaDraft").checked,
             allow_post_publish: document.getElementById("newShiftRotaPost").checked,
+            is_time_off: document.getElementById("newShiftIsTimeOff").checked,
             fill_color: document.getElementById("newShiftFill").value || null,
             text_color: document.getElementById("newShiftText").value || null,
             text_bold: document.getElementById("newShiftBold").checked,
@@ -1710,6 +2008,7 @@
       document.getElementById("newShiftNA").checked = false;
       document.getElementById("newShiftSN").checked = false;
       document.getElementById("newShiftCN").checked = false;
+      document.getElementById("newShiftIsTimeOff").checked = false;
       document.getElementById("newShiftFill").value = "#ffffff";
       document.getElementById("newShiftText").value = "#000000";
       document.getElementById("newShiftBold").checked = false;
@@ -2619,3 +2918,108 @@
         }
       }
     });
+
+    // ========== BANK HOLIDAYS MANAGEMENT ==========
+    async function loadBankHolidays() {
+      if (!currentToken) return;
+      try {
+        const selectedYear = parseInt(bhYear.value) || new Date().getFullYear();
+        const { data, error } = await supabaseClient.rpc('rpc_list_bank_holidays', {
+          p_year: selectedYear
+        });
+        if (error) throw error;
+        bhCache = data || [];
+        renderBankHolidaysList();
+      } catch (err) {
+        console.error('Failed to load bank holidays:', err);
+        bhAddHelp.textContent = 'Error loading bank holidays: ' + (err?.message || err);
+      }
+    }
+
+    function renderBankHolidaysList() {
+      bhList.innerHTML = '';
+      if (bhCache.length === 0) {
+        bhList.innerHTML = '<div style="padding:12px; color:var(--muted); font-size:13px;">No bank holidays for this year.</div>';
+        return;
+      }
+      bhCache.forEach(holiday => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.justifyContent = 'space-between';
+        row.style.alignItems = 'center';
+        row.style.padding = '12px';
+        row.style.borderBottom = '1px solid var(--line)';
+        
+        const info = document.createElement('div');
+        const dateObj = new Date(holiday.holiday_date);
+        const dateStr = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        info.innerHTML = `<strong>${holiday.name}</strong><br><span style="font-size:12px; color:var(--muted);">${dateStr}</span>`;
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.className = 'btn';
+        deleteBtn.style.whiteSpace = 'nowrap';
+        deleteBtn.addEventListener('click', async () => {
+          if (!confirm(`Remove "${holiday.name}"?`)) return;
+          try {
+            const { error } = await supabaseClient.rpc('rpc_delete_bank_holiday', {
+              p_token: currentToken,
+              p_id: holiday.id
+            });
+            if (error) throw error;
+            await loadBankHolidays();
+          } catch (err) {
+            alert('Failed to delete: ' + (err?.message || err));
+          }
+        });
+        
+        row.appendChild(info);
+        row.appendChild(deleteBtn);
+        bhList.appendChild(row);
+      });
+    }
+
+    if (bhYear) {
+      bhYear.addEventListener('change', loadBankHolidays);
+    }
+
+    if (bhAddBtn) {
+      bhAddBtn.addEventListener('click', async () => {
+        const dateVal = bhDate.value;
+        const nameVal = bhName.value?.trim();
+        const yearVal = parseInt(bhYear.value);
+        
+        bhAddHelp.textContent = '';
+        if (!dateVal) {
+          bhAddHelp.textContent = 'Please select a date.';
+          return;
+        }
+        if (!nameVal) {
+          bhAddHelp.textContent = 'Please enter a holiday name.';
+          return;
+        }
+        
+        try {
+          bhAddBtn.disabled = true;
+          const { data, error } = await supabaseClient.rpc('rpc_add_bank_holiday', {
+            p_token: currentToken,
+            p_year: yearVal,
+            p_date: dateVal,
+            p_name: nameVal
+          });
+          
+          if (error) throw error;
+          if (!data?.success) throw new Error(data?.error || 'Failed to add bank holiday');
+          
+          bhDate.value = '';
+          bhName.value = '';
+          bhAddHelp.textContent = '✓ Bank holiday added.';
+          await loadBankHolidays();
+        } catch (err) {
+          bhAddHelp.textContent = 'Error: ' + (err?.message || err);
+        } finally {
+          bhAddBtn.disabled = false;
+        }
+      });
+    }
+

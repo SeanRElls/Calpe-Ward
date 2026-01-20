@@ -1,0 +1,178 @@
+/* ===========================
+   USER ACCOUNT MODAL STYLES
+   =========================== */
+
+#userModal h2{
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin: 0 0 6px;
+}
+
+#userModal .subtitle{
+  font-size: 12px;
+  color: #667085;
+}
+
+/* User modal header with FLAGS */
+#userModal .user-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+#userModal .user-head-left{ 
+  min-width:0; 
+}
+
+#userModal .user-flags{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+#userModal .flags-label{
+  font-size: 12px;
+  font-weight: 600;
+  color: #667085;
+}
+
+#userModal .flags-buttons{
+  display:flex;
+  gap: 8px;
+}
+
+#userModal .flag-btn{
+  font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji", system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1;
+  width: 38px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid #d6dbe4;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+#userModal .flag-btn.is-active{
+  border-color: rgba(79,141,247,0.45);
+  background: rgba(79,141,247,0.10);
+  opacity: 1;
+}
+
+#userModal .flag-btn:not(.is-active){
+  opacity: 0.7;
+}
+
+#userModal .flag-img{
+  width: 20px;
+  height: 20px;
+  display: block;
+  border-radius: 4px;
+}
+
+/* Card blocks */
+#userModal .card,
+#userModal .modal-bubble{
+  border: 1px solid #e7ebf3;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15,23,42,0.06);
+}
+
+/* Stack inputs */
+#userModal .row{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Compact PIN inputs */
+#userModal input.user-pin,
+#userModal input.control[type="password"]{
+  height: 32px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5eaf3;
+  font-size: 12.5px;
+  background: #fff;
+  letter-spacing: 2px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* Buttons */
+#userModal button{
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  border: 1px solid #e5eaf3;
+  background: #fff;
+  color: var(--ink);
+  min-width: auto;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+#userModal button.primary{
+  background: linear-gradient(180deg, #6f8bff 0%, #5472f2 100%);
+  border: 1px solid rgba(84,114,242,0.5);
+  color: #fff;
+}
+
+#userModal button.primary:hover{
+  background: linear-gradient(180deg, #6382ff 0%, #4a67e2 100%);
+  border-color: rgba(74,103,226,0.6);
+}
+
+/* Save button right aligned */
+#userModal #userSavePin{
+  align-self: flex-end;
+}
+
+#userModal .btns{
+  display: flex;
+  gap: 8px;
+}
+
+/* Footer: logout left, close right */
+#userModal .user-footer,
+#userModal .btns:last-of-type{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Error and success messages */
+#userModal .err{
+  display: none;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+#userModal .success{
+  display: none;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  color: #059669;
+  font-weight: 600;
+  font-size: 13px;
+}

@@ -359,6 +359,12 @@ function initDraftEditing({
     const shifts = (getDraftShifts() || []).filter(shiftFilterFn);
     console.log("[SHIFT PICKER] getDraftShifts() returned:", shifts);
 
+    // Helper to check if shift object is time-off
+    function isTimeOff(shiftObj) {
+      if (!shiftObj) return false;
+      return shiftObj.is_time_off === true;
+    }
+
     // Sort so role-group compatible shifts appear first, but still show all options (even for admins)
     const userGroupCode = (() => {
       if (user?.role_group === 'staff_nurse') return 'SN';
@@ -369,13 +375,19 @@ function initDraftEditing({
       return null;
     })();
 
-    const sortedShifts = [...shifts].sort((a, b) => {
+    // Separate time-off from actual shifts
+    const actualShifts = shifts.filter(s => !isTimeOff(s));
+    const timeOffShifts = shifts.filter(s => isTimeOff(s));
+
+    const sortedActualShifts = [...actualShifts].sort((a, b) => {
       if (!userGroupCode) return (a.code || '').localeCompare(b.code || '');
       const aAllowed = (a.allowed_staff_groups || '').includes(userGroupCode);
       const bAllowed = (b.allowed_staff_groups || '').includes(userGroupCode);
       if (aAllowed !== bAllowed) return aAllowed ? -1 : 1;
       return (a.code || '').localeCompare(b.code || '');
     });
+
+    const sortedTimeOffShifts = [...timeOffShifts].sort((a, b) => (a.code || '').localeCompare(b.code || ''));
     
     if (!shifts || shifts.length === 0) {
       list.innerHTML = `<div style="padding:12px; text-align:center; color:#999;">No shifts available.</div>`;
@@ -383,54 +395,116 @@ function initDraftEditing({
       return;
     }
     
-    sortedShifts.forEach(shift => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "shift-card";
-      btn.dataset.shiftId = shift.id;
+    // Render actual shifts section
+    if (sortedActualShifts.length > 0) {
+      const shiftHeader = document.createElement("div");
+      shiftHeader.className = "shift-picker-section-header";
+      shiftHeader.textContent = "Shifts";
+      shiftHeader.style.cssText = "padding: 10px 16px; font-weight: 600; color: #1f2937; font-size: 0.9em; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 12px; margin-bottom: 8px; grid-column: 1 / -1; text-align: center;";
+      list.appendChild(shiftHeader);
 
-      // Display only the code; details stay in hover
-      const codeEl = document.createElement("div");
-      codeEl.className = "shift-code";
-      codeEl.textContent = shift.code || "Shift";
+      sortedActualShifts.forEach(shift => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "shift-card";
+        btn.dataset.shiftId = shift.id;
 
-      // Apply styling from shift definitions
-      if (shift.fill_color) btn.style.setProperty("--shift-fill", shift.fill_color);
-      if (shift.text_color) btn.style.setProperty("--shift-text", shift.text_color);
-      if (shift.fill_color) btn.style.setProperty("--shift-border", shift.fill_color);
-      if (shift.text_bold) btn.classList.add("is-bold");
-      if (shift.text_italic) btn.classList.add("is-italic");
-      if (shift.code && shift.code.trim().toUpperCase() === "O*") btn.classList.add("off");
+        // Display only the code; details stay in hover
+        const codeEl = document.createElement("div");
+        codeEl.className = "shift-code";
+        codeEl.textContent = shift.code || "Shift";
 
-      // Tooltip for fuller context
-      const staffGroups = (shift.allowed_staff_groups || "").split(",").map(g => g.trim()).filter(Boolean).join(", ") || "None";
-      const times = shift.start_time && shift.end_time ? `${shift.start_time} to ${shift.end_time}` : "No set times";
-      const hours = shift.hours_value ? `${shift.hours_value}h` : "?h";
-      const label = shift.label ? ` ${shift.label}` : "";
-      const tooltip = `${shift.code}${label}\n${times}\n${hours}\nStaff: ${staffGroups}`;
-      btn.title = tooltip.trim();
+        // Apply styling from shift definitions
+        if (shift.fill_color) btn.style.setProperty("--shift-fill", shift.fill_color);
+        if (shift.text_color) btn.style.setProperty("--shift-text", shift.text_color);
+        if (shift.fill_color) btn.style.setProperty("--shift-border", shift.fill_color);
+        if (shift.text_bold) btn.classList.add("is-bold");
+        if (shift.text_italic) btn.classList.add("is-italic");
 
-      if (currentAssignment && currentAssignment.shift_id === shift.id) {
-        btn.classList.add("selected");
-      }
-      btn.addEventListener("click", () => {
-        // In draft mode: save immediately (old behavior)
-        if (editMode === "draft") {
-          if (onSave) onSave(userId, date, shift.id, null);
-          closeShiftPicker();
-          return;
+        // Tooltip for fuller context
+        const staffGroups = (shift.allowed_staff_groups || "").split(",").map(g => g.trim()).filter(Boolean).join(", ") || "None";
+        const times = shift.start_time && shift.end_time ? `${shift.start_time} to ${shift.end_time}` : "No set times";
+        const hours = shift.hours_value ? `${shift.hours_value}h` : "?h";
+        const label = shift.label ? ` ${shift.label}` : "";
+        const tooltip = `${shift.code}${label}\n${times}\n${hours}\nStaff: ${staffGroups}`;
+        btn.title = tooltip.trim();
+
+        if (currentAssignment && currentAssignment.shift_id === shift.id) {
+          btn.classList.add("selected");
         }
-        
-        // In published mode: just select the shift
-        selectedShiftId = shift.id;
-        // Update UI to show selection
-        list.querySelectorAll(".shift-card").forEach(c => c.classList.remove("selected"));
-        btn.classList.add("selected");
-      });
+        btn.addEventListener("click", () => {
+          // In draft mode: save immediately (old behavior)
+          if (editMode === "draft") {
+            if (onSave) onSave(userId, date, shift.id, null);
+            closeShiftPicker();
+            return;
+          }
+          
+          // In published mode: just select the shift
+          selectedShiftId = shift.id;
+          // Update UI to show selection
+          list.querySelectorAll(".shift-card").forEach(c => c.classList.remove("selected"));
+          btn.classList.add("selected");
+        });
 
-      btn.appendChild(codeEl);
-      list.appendChild(btn);
-    });
+        btn.appendChild(codeEl);
+        list.appendChild(btn);
+      });
+    }
+
+    // Render time-off section
+    if (sortedTimeOffShifts.length > 0) {
+      const timeOffHeader = document.createElement("div");
+      timeOffHeader.className = "shift-picker-section-header";
+      timeOffHeader.textContent = "Time Off";
+      timeOffHeader.style.cssText = "padding: 10px 16px; font-weight: 600; color: #6b7280; font-size: 0.9em; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; margin-top: 8px; margin-bottom: 8px; grid-column: 1 / -1; text-align: center;";
+      list.appendChild(timeOffHeader);
+
+      sortedTimeOffShifts.forEach(shift => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "shift-card time-off";
+        btn.dataset.shiftId = shift.id;
+
+        // Display only the code; details stay in hover
+        const codeEl = document.createElement("div");
+        codeEl.className = "shift-code";
+        codeEl.textContent = shift.code || "Time Off";
+
+        // Apply styling from shift definitions (keep the nice colors!)
+        if (shift.fill_color) btn.style.setProperty("--shift-fill", shift.fill_color);
+        if (shift.text_color) btn.style.setProperty("--shift-text", shift.text_color);
+        if (shift.fill_color) btn.style.setProperty("--shift-border", shift.fill_color);
+        if (shift.text_bold) btn.classList.add("is-bold");
+        if (shift.text_italic) btn.classList.add("is-italic");
+
+        // Tooltip for fuller context
+        const label = shift.label ? ` ${shift.label}` : "";
+        const tooltip = `${shift.code}${label} (Time Off)`;
+        btn.title = tooltip.trim();
+
+        if (currentAssignment && currentAssignment.shift_id === shift.id) {
+          btn.classList.add("selected");
+        }
+        btn.addEventListener("click", () => {
+          // In draft mode: save immediately (old behavior)
+          if (editMode === "draft") {
+            if (onSave) onSave(userId, date, shift.id, null);
+            closeShiftPicker();
+            return;
+          }
+          
+          // In published mode: just select the shift
+          selectedShiftId = shift.id;
+          // Update UI to show selection
+          list.querySelectorAll(".shift-card").forEach(c => c.classList.remove("selected"));
+          btn.classList.add("selected");
+        });
+
+        btn.appendChild(codeEl);
+        list.appendChild(btn);
+      });
+    }
 
     // Add clear option (matches request picker affordance)
     const clearBtnCard = document.createElement("button");
@@ -480,7 +554,7 @@ function initDraftEditing({
 
       pickerKeyBuffer += e.key.toUpperCase();
       if (pickerKeyTimer) clearTimeout(pickerKeyTimer);
-      pickerKeyTimer = setTimeout(() => { pickerKeyBuffer = ""; }, 1200);
+      pickerKeyTimer = setTimeout(() => { pickerKeyBuffer = ""; }, 75);
 
       const resolution = resolveShiftByCode(pickerKeyBuffer, userId, shifts);
       if (!resolution) return;
@@ -592,38 +666,74 @@ function initDraftEditing({
     if (!norm) return null;
 
     const user = getAllUsers().find(u => u.id === userId);
+    const userName = (user?.name || "").toLowerCase();
+    const isPaulBoso = userName.includes("paul") && userName.includes("boso");
+    
     let staffGroup = ROLE_TO_STAFF_GROUP_EDIT[user?.role_id] || null;
-    if (user?.name && user.name.toLowerCase().includes("paul boso")) {
-      staffGroup = "SN"; // Exception: treat Paul Boso as SN for N code resolution
-    }
+    
+    console.log("[RESOLVE SHIFT] Code:", norm, "User:", userName, "Staff Group:", staffGroup, "Is Paul:", isPaulBoso);
 
     const matches = (shifts || []).filter(s => (s.code || "").toUpperCase() === norm);
+    console.log("[RESOLVE SHIFT] Matches found:", matches.length, matches.map(s => `${s.code} (${s.hours_value}h)`));
     if (matches.length === 0) return null;
     if (matches.length === 1) return matches[0];
 
-    // Disambiguate by staff group when possible
+    // Special handling for "N" code based on role
+    if (norm === "N" && staffGroup) {
+      const filtered = matches.filter(s => {
+        const allowed = (s.allowed_staff_groups || "").toUpperCase().split(",").map(x => x.trim()).filter(Boolean);
+        return allowed.includes(staffGroup);
+      });
+      
+      console.log("[RESOLVE N] Filtered by staff group:", filtered.map(s => `${s.code} (${s.hours_value}h, groups: ${s.allowed_staff_groups})`));
+      
+      if (filtered.length > 0) {
+        // CN or SN (except Paul): choose 12.5hr version
+        if ((staffGroup === "CN" || staffGroup === "SN") && !isPaulBoso) {
+          const maxHours = Math.max(...filtered.map(s => Number(s.hours_value) || 0));
+          const top = filtered.filter(s => (Number(s.hours_value) || 0) === maxHours);
+          console.log("[RESOLVE N] CN/SN - selecting max hours:", maxHours, "Result:", top[0]);
+          if (top.length >= 1) return top[0]; // Return first if multiple with same max hours
+        }
+        // NA or Paul: choose 12hr version
+        else if (staffGroup === "NA" || isPaulBoso) {
+          const minHours = Math.min(...filtered.map(s => Number(s.hours_value) || 999));
+          const low = filtered.filter(s => (Number(s.hours_value) || 999) === minHours);
+          console.log("[RESOLVE N] NA/Paul - selecting min hours:", minHours, "Result:", low[0]);
+          if (low.length >= 1) return low[0]; // Return first if multiple with same min hours
+        }
+        // Fallback: just return first filtered
+        if (filtered.length === 1) return filtered[0];
+      }
+    }
+
+    // General disambiguation by staff group for other codes
     if (staffGroup) {
       const filtered = matches.filter(s => {
         const allowed = (s.allowed_staff_groups || "").toUpperCase().split(",").map(x => x.trim()).filter(Boolean);
         return allowed.includes(staffGroup);
       });
+      console.log("[RESOLVE GENERAL] Filtered:", filtered.length);
       if (filtered.length === 1) return filtered[0];
+      if (filtered.length > 0) return filtered[0]; // Just pick first match if multiple
 
-      // Heuristic: choose hours by band (CN/SN -> max hours e.g., 12.5; NA -> min hours e.g., 12)
+      // Heuristic: choose hours by band (CN/SN -> max hours; NA -> min hours)
       if (filtered.length > 1) {
         if (staffGroup === "CN" || staffGroup === "SN") {
           const maxHours = Math.max(...filtered.map(s => Number(s.hours_value) || 0));
           const top = filtered.filter(s => (Number(s.hours_value) || 0) === maxHours);
-          if (top.length === 1) return top[0];
+          if (top.length >= 1) return top[0];
         } else if (staffGroup === "NA") {
           const minHours = Math.min(...filtered.map(s => Number(s.hours_value) || 999));
           const low = filtered.filter(s => (Number(s.hours_value) || 999) === minHours);
-          if (low.length === 1) return low[0];
+          if (low.length >= 1) return low[0];
         }
       }
     }
 
-    return { ambiguous: true };
+    // No staff group filtering worked, just return first match
+    console.log("[RESOLVE GENERAL] Returning first match as fallback");
+    return matches[0];
   }
 
   function detachPickerKeys() {

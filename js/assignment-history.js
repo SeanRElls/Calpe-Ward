@@ -106,8 +106,22 @@ const AssignmentHistoryModule = (() => {
       );
 
       if (error) {
-        console.error('[HISTORY] RPC error:', error);
-        throw error;
+        console.error('[HISTORY] RPC error (full):', JSON.stringify(error, null, 2));
+        console.error('[HISTORY] Error object:', error);
+        console.error('[HISTORY] Error properties:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          statusCode: error.statusCode,
+          status: error.status
+        });
+        
+        // Show user-friendly error message
+        let errorMessage = error.message || error.details || error.hint || 'Unknown error';
+        
+        content.innerHTML = `<p style="color: #dc2626; font-size: 13px; padding: 10px;">Error: ${errorMessage}</p>`;
+        return;
       }
 
       console.log('[HISTORY] RPC returned data:', data);

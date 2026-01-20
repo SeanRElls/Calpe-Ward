@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title id="pageTitle">Calpe Ward</title>
+  <title>Calpe Ward</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/rota.css">
   <link rel="stylesheet" href="css/rota-edit.css">
+  <link rel="stylesheet" href="css/user-modal.css">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/session-validator.js"></script>
@@ -31,19 +32,26 @@
       <button id="viewAsBtn" class="badge" type="button" style="display:none; padding: 6px 12px; white-space: nowrap;">👁 View As</button>
     </div>
     
-    <!-- Title + Status -->
+    <!-- Title + Controls -->
     <div class="titlebar">
-      <div style="display:flex; gap:12px; align-items:center;">
+      <div style="display:flex; gap:12px; align-items:center; flex:1;">
         <img
           src="logo.png"
           alt="Calpe Ward"
           style="height:44px; width:auto;"
         />
-        <div>
+        <div style="flex:1;">
           <h1>Calpe Ward</h1>
-          <div class="header-subrow">
-            <p id="periodLabel" class="subtitle"></p>
-            <div id="closeLabel"></div>
+          <div class="header-subrow" style="margin:0;">
+            <label for="periodSelect" class="subtitle" style="font-weight: 600;">Period:</label>
+            <select id="periodSelect" style="margin: 0 8px;">
+              <option>Loading...</option>
+            </select>
+            <button id="publishBtn" class="btn" style="display: none; background: #059669; color: white; padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px;">📤 Publish</button>
+            <button id="unpublishBtn" class="btn" style="display: none; background: #dc2626; color: white; padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; margin-left: 6px;">⚠️ Unpublish</button>
+            <button id="toggleEditingBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">🔒 Locked</button>
+            <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">👁️ Requests</button>
+            <button type="button" id="addNonStaffBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">➕ Non‑Staff</button>
           </div>
         </div>
       </div>
@@ -52,7 +60,17 @@
         <button class="badge" id="noticeBell" type="button" title="Notices & notifications">
           🔔 <span id="noticeBellDot" style="display:none;">•</span>
         </button>
-        <span id="userName" class="badge"></span>
+        
+        <!-- Admin badge -->
+        <div class="badge admin" id="adminBadge" style="display:none;">ADMIN</div>
+        
+        <!-- Account badge (clickable to edit account) -->
+        <button class="badge account-badge" id="loginBadge" type="button" title="Edit your account">
+          <span class="acc-ic">👤</span>
+          <span class="acc-txt">Not logged in</span>
+        </button>
+        
+        <!-- Logout -->
         <button id="logoutBtn">Logout</button>
       </div>
     </div>
@@ -61,19 +79,6 @@
     <div id="periodStatus" class="period-status" style="display: none;">
       <span class="status-badge" id="statusBadge"></span>
       <span id="statusText"></span>
-    </div>
-
-    <!-- Period Selector -->
-    <div class="header-subrow" style="margin: 0 2px 12px;">
-      <label for="periodSelect" class="subtitle" style="font-weight: 600;">Period:</label>
-      <select id="periodSelect">
-        <option>Loading...</option>
-      </select>
-      <button id="publishBtn" class="btn" style="margin-left: 12px; display: none; background: #059669; color: white; padding: 10px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📤 Publish Period</button>
-      <button id="unpublishBtn" class="btn" style="margin-left: 12px; display: none; background: #dc2626; color: white; padding: 10px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">⚠️ Unpublish</button>
-      <button id="toggleEditingBtn" class="btn" style="margin-left: 8px;">🔒 Locked</button>
-      <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: auto;">👁️ Show Requests</button>
-      <button type="button" id="addNonStaffBtn" class="btn" style="margin-left: 8px; display:none;">➕ Add Non‑Staff</button>
     </div>
 
     <!-- Metadata Display (shown when editing) -->
@@ -188,41 +193,89 @@
     <div class="modal-backdrop" id="nonStaffModalBackdrop" aria-hidden="true">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nonStaffModalTitle">
         <h2 id="nonStaffModalTitle">Add Non‑Staff to Period</h2>
-        <p class="subtitle">Create or select a profile, then add to this period.</p>
-        <div class="modal-bubble" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-          <div>
-            <label style="font-size:12px; color:#64748b;">Category</label>
-            <select id="nsCategory" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-              <option value="student">Student</option>
-              <option value="bank">Bank</option>
-              <option value="agency">Agency</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:12px; color:#64748b;">Role Group</label>
-            <select id="nsRoleGroup" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-              <option value="staff_nurse">Staff Nurse</option>
-              <option value="nursing_assistant">Nursing Assistant</option>
-            </select>
-          </div>
-          <div style="grid-column:1 / span 2; display:flex; gap:8px; align-items:center;">
-            <input id="nsSearch" placeholder="Search existing profiles..." style="flex:1; padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
-            <button id="nsSearchBtn" type="button">Search</button>
-          </div>
-          <div style="grid-column:1 / span 2; max-height:220px; overflow:auto; border:1px solid #e5e7eb; border-radius:6px; padding:8px;" id="nsResults"></div>
-        </div>
-        <div class="modal-bubble" style="margin-top:12px;">
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:center;">
-            <div>
-              <label style="font-size:12px; color:#64748b;">Or create new profile</label>
-              <input id="nsNewName" placeholder="Full name" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
-            </div>
-            <div>
-              <label style="font-size:12px; color:#64748b; display:block;">Counts towards staffing</label>
-              <input id="nsCounts" type="checkbox" />
-            </div>
+        
+        <!-- Tab / Section Toggle -->
+        <div class="modal-bubble" style="margin-bottom:16px;">
+          <div style="display:flex; gap:0; border-bottom:1px solid #e5e7eb;">
+            <button id="nsTabSelect" type="button" style="flex:1; padding:12px; border:none; background:none; color:#0f172a; font-weight:500; cursor:pointer; border-bottom:3px solid #3b82f6; margin-bottom:-1px;">Select Existing</button>
+            <button id="nsTabCreate" type="button" style="flex:1; padding:12px; border:none; background:none; color:#94a3b8; font-weight:500; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1px;">Create New</button>
           </div>
         </div>
+
+        <!-- Select Existing Section -->
+        <div id="nsSelectSection" style="display:block;">
+          <div class="modal-bubble" style="margin-bottom:12px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+              <div>
+                <label style="font-size:12px; color:#64748b; font-weight:500;">Category</label>
+                <select id="nsCategory" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;">
+                  <option value="student">Student</option>
+                  <option value="bank">Bank</option>
+                  <option value="agency">Agency</option>
+                </select>
+              </div>
+              <div id="nsRoleGroupWrap">
+                <label style="font-size:12px; color:#64748b; font-weight:500;">Role Group</label>
+                <select id="nsRoleGroup" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;">
+                  <option value="staff_nurse">Staff Nurse</option>
+                  <option value="nursing_assistant">Nursing Assistant</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+              <input id="nsSearch" placeholder="Search profiles..." style="flex:1; padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
+              <button id="nsSearchBtn" type="button" style="padding:8px 12px; white-space:nowrap;">Search</button>
+            </div>
+            <div style="max-height:260px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; padding:8px; background:#f8fafc;" id="nsResults"></div>
+          </div>
+        </div>
+
+        <!-- Create New Section (hidden by default) -->
+        <div id="nsCreateSection" style="display:none;">
+          <div class="modal-bubble" style="margin-bottom:12px;">
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div>
+                <label style="font-size:12px; color:#64748b; font-weight:500; display:block; margin-bottom:4px;">Full Name</label>
+                <input id="nsNewName" placeholder="Enter full name" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
+              </div>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div>
+                  <label style="font-size:12px; color:#64748b; font-weight:500;">Category</label>
+                  <select id="nsCategoryCreate" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;">
+                    <option value="student">Student</option>
+                    <option value="bank">Bank</option>
+                    <option value="agency">Agency</option>
+                  </select>
+                </div>
+                <div id="nsRoleGroupCreateWrap">
+                  <label style="font-size:12px; color:#64748b; font-weight:500;">Role Group</label>
+                  <select id="nsRoleGroupCreate" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;">
+                    <option value="staff_nurse">Staff Nurse</option>
+                    <option value="nursing_assistant">Nursing Assistant</option>
+                  </select>
+                </div>
+              </div>
+              <div id="nsCountsWrap" style="display:flex; align-items:center; gap:8px;">
+                <input id="nsCounts" type="checkbox" style="width:18px; height:18px; cursor:pointer;" />
+                <label style="font-size:12px; color:#64748b; cursor:pointer; margin:0;">Counts towards staffing</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Delete Section (shown in Select Existing when item selected) -->
+        <div id="nsDeleteSection" style="display:none;">
+          <div class="modal-bubble" style="background:#fef2f2; border:1px solid #fca5a5; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <label style="font-size:12px; color:#991b1b; font-weight:500; display:block; margin-bottom:4px;">Remove from Period</label>
+                <div id="nsDeleteItemName" style="font-size:14px; color:#0f172a;"></div>
+              </div>
+              <button id="nsDeleteBtn" type="button" style="padding:6px 12px; background:#dc2626; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Remove</button>
+            </div>
+          </div>
+        </div>
+
         <div class="btns">
           <button id="nsAddBtn" type="button" class="primary">Add to Period</button>
           <button id="nsCloseBtn" type="button">Close</button>
@@ -400,10 +453,45 @@
       </div>
     </div>
 
+    <!-- User Account Modal -->
+    <div class="modal-backdrop" id="userModal" aria-hidden="true" style="display:none;">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="userTitle">
+        <h2 id="userTitle">Edit your account</h2>
+        <p class="subtitle" id="userMeta">—</p>
+
+        <!-- CHANGE PIN CARD -->
+        <div class="modal-bubble" style="padding:16px; margin:12px 0;">
+          <div style="font-weight:700; margin-bottom:12px; font-size:14px;">Change PIN</div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+            <input id="userOldPin" class="control" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" />
+            <input id="userNewPin" class="control" type="password" inputmode="numeric" maxlength="4" placeholder="New PIN" />
+            <input id="userNewPin2" class="control" type="password" inputmode="numeric" maxlength="4" placeholder="Repeat new PIN" />
+          </div>
+
+          <div class="btns" style="margin-top:12px; justify-content:flex-end;">
+            <button id="userSavePin" class="primary" type="button">Save new PIN</button>
+          </div>
+
+          <div id="userPinErr" style="display:none; margin-top:8px; color:#dc2626; font-size:13px;"></div>
+          <div id="userPinOk" style="display:none; margin-top:8px; color:#059669; font-weight:600; font-size:13px;">
+            PIN updated successfully.
+          </div>
+        </div>
+
+        <!-- BOTTOM BUTTONS -->
+        <div class="btns">
+          <button id="userLogout" type="button">Log out</button>
+          <button id="userClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
   </div> <!-- close .wrap -->
 
   <script src="js/assignment-history.js"></script>
   <script src="js/rota-context-menu.js"></script>
+  <script src="js/user-modal.js"></script>
   <script>
     console.log("ROTA.HTML LOADING - VERSION 3", "readyState=", document.readyState);
     // Supabase + storage accessors (tolerate early execution before defer scripts)
@@ -475,15 +563,19 @@
       window.currentUser = currentUser;
       console.log("[ROTA DEBUG] User loaded:", currentUser.name);
       
-      // Update display with correct user name
-      const userNameEl = document.getElementById("userName");
-      if (userNameEl) {
-        userNameEl.textContent = currentUser.name;
-        if (currentUser.is_admin) {
-          userNameEl.classList.add("admin");
-        } else {
-          userNameEl.classList.remove("admin");
-        }
+      // Update loginBadge with user name
+      const loginBadge = document.getElementById("loginBadge");
+      const txt = loginBadge?.querySelector(".acc-txt");
+      if (txt) {
+        txt.textContent = currentUser.name;
+      } else if (loginBadge) {
+        loginBadge.textContent = currentUser.name;
+      }
+      
+      // Update admin badge
+      const adminBadge = document.getElementById("adminBadge");
+      if (adminBadge) {
+        adminBadge.style.display = currentUser.is_admin ? "inline-block" : "none";
       }
       
       // Show navigation admin link only for admins
@@ -512,7 +604,44 @@
       console.warn("[ROTA BOOT] logoutBtn not found; skipping logout binding");
     }
 
+    // User modal is now handled by js/user-modal.js
+
     // ========== HELPERS ==========
+    let selectedNonStaffForDelete = null; // Track which person is selected for deletion
+    let bankHolidaysByDate = {}; // Cache bank holidays by date string (YYYY-MM-DD)
+    
+    // Load bank holidays for the current and next few years
+    async function loadBankHolidays() {
+      try {
+        const currentYear = new Date().getFullYear();
+        const { data, error } = await supabaseClient.rpc('rpc_get_all_bank_holidays', {
+          p_start_year: currentYear,
+          p_end_year: currentYear + 3
+        });
+        if (error) throw error;
+        if (data) {
+          data.forEach(holiday => {
+            const dateStr = holiday.holiday_date; // YYYY-MM-DD format from DB
+            bankHolidaysByDate[dateStr] = holiday.name;
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load bank holidays:', e);
+      }
+    }
+    
+    function isBankHoliday(date) {
+      if (!date) return false;
+      const dateStr = date.toISOString().split('T')[0]; // Convert to YYYY-MM-DD
+      return bankHolidaysByDate.hasOwnProperty(dateStr);
+    }
+    
+    function getBankHolidayName(date) {
+      if (!date) return null;
+      const dateStr = date.toISOString().split('T')[0];
+      return bankHolidaysByDate[dateStr] || null;
+    }
+    
     function getWeekStart(date) {
       const d = new Date(date);
       const day = d.getDay(); // 0 = Sunday
@@ -568,14 +697,23 @@
       const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
       // Mentors default to students and lock categories
       const categorySel = document.getElementById('nsCategory');
+      const categorySelCreate = document.getElementById('nsCategoryCreate');
       if (categorySel) {
         categorySel.value = 'student';
         categorySel.disabled = !window.currentUser?.is_admin && isMentor;
       }
-      const counts = document.getElementById('nsCounts');
-      if (counts) counts.checked = false;
+      if (categorySelCreate) {
+        categorySelCreate.value = 'student';
+        categorySelCreate.disabled = !window.currentUser?.is_admin && isMentor;
+      }
+      // Initialize role group + counts UI for default (student)
+      updateNonStaffModalFields();
+      updateNonStaffModalFieldsCreate();
       document.getElementById('nsSearch')?.setAttribute('value','');
       document.getElementById('nsResults').innerHTML = '';
+      document.getElementById('nsNewName').value = '';
+      // Switch to Select tab by default
+      switchNonStaffTab('select');
       backdrop.setAttribute('aria-hidden','false');
     }
 
@@ -586,7 +724,7 @@
 
     async function searchNonStaff() {
       const category = document.getElementById('nsCategory')?.value || null;
-      const roleGroup = document.getElementById('nsRoleGroup')?.value || null;
+      const roleGroup = (category === 'student') ? null : (document.getElementById('nsRoleGroup')?.value || null);
       const query = document.getElementById('nsSearch')?.value || null;
       const resultsEl = document.getElementById('nsResults');
       if (!resultsEl) return;
@@ -609,12 +747,27 @@
           line.style.display = 'flex';
           line.style.justifyContent = 'space-between';
           line.style.alignItems = 'center';
-          line.style.padding = '6px 4px';
+          line.style.padding = '8px 6px';
+          line.style.cursor = 'pointer';
+          line.style.borderRadius = '4px';
+          line.style.transition = 'background 200ms';
+          
+          line.addEventListener('mouseenter', () => { line.style.background = '#f1f5f9'; });
+          line.addEventListener('mouseleave', () => { line.style.background = ''; });
+          line.addEventListener('click', () => {
+            selectedNonStaffForDelete = row;
+            showDeleteSection(row);
+          });
+          
           const left = document.createElement('div');
-          left.textContent = `${row.name} · ${row.category} · ${row.role_group}`;
+          left.textContent = `${row.name} · ${row.category}${row.role_group ? ' · ' + row.role_group : ''}`;
           const btn = document.createElement('button');
           btn.textContent = 'Add';
-          btn.addEventListener('click', () => addExistingNonStaff(row.id, row.category));
+          btn.style.whiteSpace = 'nowrap';
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addExistingNonStaff(row.id, row.category);
+          });
           line.appendChild(left);
           line.appendChild(btn);
           resultsEl.appendChild(line);
@@ -645,9 +798,9 @@
 
     async function addNewNonStaff() {
       const name = document.getElementById('nsNewName')?.value?.trim();
-      const category = document.getElementById('nsCategory')?.value;
-      const roleGroup = document.getElementById('nsRoleGroup')?.value;
-      const counts = document.getElementById('nsCounts')?.checked ?? (category !== 'student');
+      const category = document.getElementById('nsCategoryCreate')?.value;
+      const roleGroup = category === 'student' ? null : document.getElementById('nsRoleGroupCreate')?.value;
+      const counts = (category === 'student') ? false : true;
       if (!name) {
         alert('Enter a name for the new profile.');
         return;
@@ -669,6 +822,77 @@
       }
     }
 
+    function showDeleteSection(item) {
+      const deleteSection = document.getElementById('nsDeleteSection');
+      const deleteItemName = document.getElementById('nsDeleteItemName');
+      const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+      
+      // Only show delete if admin or mentor (for students)
+      const canDelete = window.currentUser?.is_admin || (isMentor && item.category === 'student');
+      if (!canDelete) {
+        deleteSection.style.display = 'none';
+        return;
+      }
+      
+      deleteItemName.textContent = `${item.name} (${item.category})`;
+      deleteSection.style.display = 'block';
+    }
+
+    async function deleteSelectedNonStaff() {
+      if (!selectedNonStaffForDelete || !selectedNonStaffForDelete.id) {
+        alert('No item selected for deletion');
+        return;
+      }
+      
+      const confirmMsg = `Remove ${selectedNonStaffForDelete.name} from this period?`;
+      if (!confirm(confirmMsg)) return;
+      
+      try {
+        const { error } = await supabaseClient.rpc('rpc_remove_non_staff_from_period', {
+          p_token: window.currentToken,
+          p_period_non_staff_id: selectedNonStaffForDelete.id
+        });
+        if (error) throw error;
+        selectedNonStaffForDelete = null;
+        document.getElementById('nsDeleteSection').style.display = 'none';
+        await loadPeriod(currentPeriod);
+      } catch (e) {
+        alert('Failed to remove: ' + (e?.message || e));
+      }
+    }
+
+    // Tab switching for Select vs Create sections
+    function switchNonStaffTab(tab) {
+      const selectSection = document.getElementById('nsSelectSection');
+      const createSection = document.getElementById('nsCreateSection');
+      const tabSelect = document.getElementById('nsTabSelect');
+      const tabCreate = document.getElementById('nsTabCreate');
+      
+      if (tab === 'select') {
+        if (selectSection) selectSection.style.display = 'block';
+        if (createSection) createSection.style.display = 'none';
+        if (tabSelect) {
+          tabSelect.style.color = '#0f172a';
+          tabSelect.style.borderBottomColor = '#3b82f6';
+        }
+        if (tabCreate) {
+          tabCreate.style.color = '#94a3b8';
+          tabCreate.style.borderBottomColor = 'transparent';
+        }
+      } else {
+        if (selectSection) selectSection.style.display = 'none';
+        if (createSection) createSection.style.display = 'block';
+        if (tabSelect) {
+          tabSelect.style.color = '#94a3b8';
+          tabSelect.style.borderBottomColor = 'transparent';
+        }
+        if (tabCreate) {
+          tabCreate.style.color = '#0f172a';
+          tabCreate.style.borderBottomColor = '#3b82f6';
+        }
+      }
+    }
+
     // Bind modal buttons after DOM ready
     document.addEventListener('DOMContentLoaded', () => {
       const searchBtn = document.getElementById('nsSearchBtn');
@@ -677,9 +901,65 @@
       if (closeBtn) closeBtn.addEventListener('click', closeNonStaffModal);
       const addBtn = document.getElementById('nsAddBtn');
       if (addBtn) addBtn.addEventListener('click', addNewNonStaff);
+      const deleteBtn = document.getElementById('nsDeleteBtn');
+      if (deleteBtn) deleteBtn.addEventListener('click', deleteSelectedNonStaff);
+      const categorySel = document.getElementById('nsCategory');
+      if (categorySel) categorySel.addEventListener('change', updateNonStaffModalFields);
+      const categorySelCreate = document.getElementById('nsCategoryCreate');
+      if (categorySelCreate) categorySelCreate.addEventListener('change', updateNonStaffModalFieldsCreate);
       const backdrop = document.getElementById('nonStaffModalBackdrop');
       if (backdrop) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeNonStaffModal(); });
+      
+      // Tab switching
+      const tabSelect = document.getElementById('nsTabSelect');
+      if (tabSelect) tabSelect.addEventListener('click', () => switchNonStaffTab('select'));
+      const tabCreate = document.getElementById('nsTabCreate');
+      if (tabCreate) tabCreate.addEventListener('click', () => switchNonStaffTab('create'));
     });
+
+    function updateNonStaffModalFields(){
+      const category = document.getElementById('nsCategory')?.value;
+      const roleWrap = document.getElementById('nsRoleGroupWrap');
+      const countsWrap = document.getElementById('nsCountsWrap');
+      const counts = document.getElementById('nsCounts');
+      if (!category) return;
+      if (category === 'student'){
+        if (roleWrap) roleWrap.style.display = 'none';
+        if (countsWrap) countsWrap.style.display = 'none';
+        if (counts) { counts.checked = false; counts.disabled = true; }
+      } else if (category === 'agency') {
+        if (roleWrap) roleWrap.style.display = '';
+        if (countsWrap) countsWrap.style.display = '';
+        if (counts) { counts.checked = true; counts.disabled = true; }
+      } else {
+        // bank: allow toggle
+        if (roleWrap) roleWrap.style.display = '';
+        if (countsWrap) countsWrap.style.display = '';
+        if (counts) { counts.disabled = false; }
+      }
+    }
+
+    function updateNonStaffModalFieldsCreate(){
+      const category = document.getElementById('nsCategoryCreate')?.value;
+      const roleWrap = document.getElementById('nsRoleGroupCreateWrap');
+      const countsWrap = document.getElementById('nsCountsWrap');
+      const counts = document.getElementById('nsCounts');
+      if (!category) return;
+      if (category === 'student'){
+        if (roleWrap) roleWrap.style.display = 'none';
+        if (countsWrap) countsWrap.style.display = 'none';
+        if (counts) { counts.checked = false; counts.disabled = true; }
+      } else if (category === 'agency') {
+        if (roleWrap) roleWrap.style.display = '';
+        if (countsWrap) countsWrap.style.display = '';
+        if (counts) { counts.checked = true; counts.disabled = true; }
+      } else {
+        // bank: allow toggle
+        if (roleWrap) roleWrap.style.display = '';
+        if (countsWrap) countsWrap.style.display = '';
+        if (counts) { counts.disabled = false; }
+      }
+    }
 
     // ========== LOAD PERIOD DATA ==========
     async function loadPeriod(periodId) {
@@ -879,9 +1159,12 @@
         // Render
         if (allWeeks.length) {
           const periodText = `${fmt(allWeeks[0].weekStart)} – ${fmt(allWeeks[allWeeks.length - 1].weekEnd)}`;
-          document.getElementById("periodLabel").textContent = periodText;
+          // Don't set periodLabel here anymore since it's part of the header controls
           // Update page title with period dates
-          document.getElementById("pageTitle").textContent = `Calpe Ward - ${periodText}`;
+          const pageTitle = document.querySelector("title");
+          if (pageTitle) {
+            pageTitle.textContent = `Calpe Ward - ${periodText}`;
+          }
         }
 
         renderRota();
@@ -990,8 +1273,9 @@
         for (let i = 0; i < 7; i++) {
           const d = new Date(w.days[i].date);
           const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+          const isBankHol = isBankHoliday(d);
           const th = document.createElement("th");
-          th.className = "date" + (isWeekend ? " weekend" : "");
+          th.className = "date" + (isWeekend ? " weekend" : "") + (isBankHol ? " bank-holiday" : "");
           th.textContent = d.getDate();
           r3.appendChild(th);
         }
@@ -1033,49 +1317,18 @@
             badge.style.padding = "2px 6px";
             badge.style.borderRadius = "999px";
 
-            if (u.category === "student") {
-              badge.textContent = "STUDENT";
-              badge.style.background = "#e0f2fe";
-              badge.style.color = "#0369a1";
-            } else if (u.category === "agency") {
-              badge.textContent = "AGENCY";
-              badge.style.background = "#fef3c7";
-              badge.style.color = "#92400e";
-            } else if (u.category === "bank") {
-              badge.textContent = "BANK";
-              badge.style.background = "#ecfccb";
-              badge.style.color = "#365314";
-            }
-
-            nameTd.appendChild(badge);
-
-            // Remove from period (admins, or mentors for students)
-            const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
-            if (window.currentUser?.is_admin || (isMentor && u.category === 'student')) {
-              const rmBtn = document.createElement('button');
-              rmBtn.textContent = 'Remove';
-              rmBtn.style.marginLeft = '8px';
-              rmBtn.style.fontSize = '11px';
-              rmBtn.style.padding = '2px 6px';
-              rmBtn.style.border = '1px solid #e5e7eb';
-              rmBtn.style.borderRadius = '6px';
-              rmBtn.style.background = '#fff';
-              rmBtn.addEventListener('click', async (ev) => {
-                ev.stopPropagation();
-                const confirmMsg = `Remove ${u.name} from this period?`;
-                if (!confirm(confirmMsg)) return;
-                try {
-                  const { error } = await supabaseClient.rpc('rpc_remove_non_staff_from_period', {
-                    p_token: window.currentToken,
-                    p_period_non_staff_id: u.id
-                  });
-                  if (error) throw error;
-                  await loadPeriod(currentPeriod);
-                } catch (e) {
-                  alert('Failed to remove: ' + (e?.message || e));
-                }
-              });
-              nameTd.appendChild(rmBtn);
+            // Only show badges for non-student non-staff
+            if (u.category !== "student") {
+              if (u.category === "agency") {
+                badge.textContent = "AGENCY";
+                badge.style.background = "#fef3c7";
+                badge.style.color = "#92400e";
+              } else if (u.category === "bank") {
+                badge.textContent = "BANK";
+                badge.style.background = "#ecfccb";
+                badge.style.color = "#365314";
+              }
+              nameTd.appendChild(badge);
             }
           }
 
@@ -1083,7 +1336,8 @@
 
           allWeeks.forEach(w => {
             w.days.forEach(day => {
-              const isWeekend = day.date && (new Date(day.date).getDay() === 0 || new Date(day.date).getDay() === 6);
+              const dateObj = day.date ? new Date(day.date) : null;
+              const isWeekend = dateObj && (dateObj.getDay() === 0 || dateObj.getDay() === 6);
               const dateStr = day.date;
 
               const td = document.createElement("td");
@@ -1261,7 +1515,17 @@
             //      and highlight weeks where assigned shifts exceed baseline.
             // 2) If no pattern is assigned, leave the separator blank (no assumptions).
             const upat = userPatterns.get(u.id);
-            const assignedCount = w.days.reduce((acc, d) => acc + (assignmentsMap.get(`${u.id}_${d.date}`) ? 1 : 0), 0);
+            // Count only non-time-off shifts for the weekly count
+            const assignedCount = w.days.reduce((acc, d) => {
+              const assignment = assignmentsMap.get(`${u.id}_${d.date}`);
+              if (!assignment) return acc;
+              const shift = shiftMap.get(assignment.shift_id);
+              // Only count if it's not a time-off shift
+              if (shift && shift.is_time_off !== true) {
+                return acc + 1;
+              }
+              return acc;
+            }, 0);
 
             if (upat && upat.pattern_id) {
               const pat = patterns.get(upat.pattern_id);
@@ -1276,7 +1540,15 @@
                 const target = pat.weekly_targets[weekInCycle];
                 sep.textContent = String(target);
                 const baseline = Math.min(...pat.weekly_targets);
-                if (target > baseline) {
+                
+                // Green when target is met, red when exceeded
+                if (assignedCount >= target && assignedCount <= target) {
+                  // Exactly meeting the target - green
+                  sep.style.backgroundColor = "#c1ffc1";
+                  sep.style.color = "#1a5c1a";
+                  sep.style.fontWeight = "700";
+                } else if (assignedCount > target || target > baseline) {
+                  // Exceeding target OR higher than baseline week - red
                   sep.style.color = "#dc2626";
                   sep.style.fontWeight = "700";
                 }
@@ -1288,9 +1560,19 @@
                 if (baseline == null && (u.role_id === 1 || u.role_id === 2)) baseline = 3; // nurse baseline if pattern implies flexibility
                 // Display assigned count if any, otherwise show baseline where known
                 sep.textContent = String(assignedCount > 0 ? assignedCount : (baseline ?? ""));
-                if (baseline != null && assignedCount > baseline) {
-                  sep.style.color = "#dc2626";
-                  sep.style.fontWeight = "700";
+                
+                // Green when target is met or exceeded, red when exceeded
+                if (baseline != null) {
+                  if (assignedCount >= baseline && assignedCount <= baseline) {
+                    // Exactly meeting the target - green
+                    sep.style.backgroundColor = "#c1ffc1";
+                    sep.style.color = "#1a5c1a";
+                    sep.style.fontWeight = "700";
+                  } else if (assignedCount > baseline) {
+                    // Exceeding the target - red
+                    sep.style.color = "#dc2626";
+                    sep.style.fontWeight = "700";
+                  }
                 }
               }
             } else {
@@ -1360,14 +1642,15 @@
 
       const groups = [
         { title: "Charge Nurses", className: "section-cn", items: buckets.charge_nurse },
-        { title: "Staff Nurses", className: "section-sn", items: buckets.staff_nurse },
-        { title: "Nursing Assistants", className: "section-na", items: buckets.nursing_assistant }
+        { title: "Staff Nurses", className: "section-sn", items: buckets.staff_nurse }
       ];
 
-      // Add students group if there are any
+      // Add students group if there are any (between Staff Nurses and Nursing Assistants)
       if (buckets.students.length > 0) {
         groups.push({ title: "Students", className: "section-students", items: buckets.students });
       }
+
+      groups.push({ title: "Nursing Assistants", className: "section-na", items: buckets.nursing_assistant });
 
       return groups.filter(g => g.items.length > 0);
     }
@@ -1456,15 +1739,22 @@
       const tfoot = document.createElement("tfoot");
       const STAFFING_DEFAULTS = getStaffingDefaults();
 
-      // Calculate shift value based on code
-      // Formula: LD and 8-8 = 1.0, 8-5 and 11-20 = 0.5, N = 1.0
-      function getShiftValue(shiftCode) {
-        if (!shiftCode) return 0;
-        const code = shiftCode.toUpperCase().trim();
-        if (code === "LD" || code === "8-8") return 1.0;
-        if (code === "8-5" || code === "11-20") return 0.5;
-        if (code === "N") return 1.0;
-        return 0;
+      // Calculate staffing count: 0 for time-off, 1 for full shifts (12+ hrs), 0.5 for part shifts
+      function getStaffingCount(shiftObj) {
+        if (!shiftObj) return 0;
+        // Time-off doesn't count toward staffing
+        if (shiftObj.is_time_off === true) return 0;
+        // Full day shifts (12+ hours) count as 1 person
+        const hours = Number(shiftObj.hours_value) || 0;
+        if (hours >= 12) return 1;
+        // Part day shifts count as 0.5 person
+        return 0.5;
+      }
+
+      // Check if shift is a time-off code (should be excluded from staffing totals)
+      function isTimeOff(shiftObj) {
+        if (!shiftObj) return false;
+        return shiftObj.is_time_off === true;
       }
 
       function isNightShift(shiftCode) {
@@ -1541,8 +1831,7 @@
                     if (shift) {
                       const shiftNight = isNightShift(shift.code);
                       if (shiftNight === rowDef.isNight) {
-                        const value = getShiftValue(shift.code);
-                        total += value;
+                        total += getStaffingCount(shift);
                       }
                     }
                   }
@@ -1551,7 +1840,7 @@
               // Get required (from defaults)
               const required = STAFFING_DEFAULTS[rowDef.reqField];
 
-              // Display total
+              // Display total (handle decimals for part-day shifts)
               const displayValue = total % 1 === 0 ? total.toString() : total.toFixed(1);
               cell.textContent = displayValue;
 
@@ -2283,6 +2572,7 @@
 
     function updateEditingControls(period) {
       const toggleEditingBtn = document.getElementById("toggleEditingBtn");
+      const addNsBtn = document.getElementById("addNonStaffBtn");
       const metadataDisplay = document.getElementById("metadataDisplay");
       const publishedBanner = document.getElementById("publishedEditBanner");
       const isPublished = period?.status === "published";
@@ -2297,6 +2587,13 @@
           toggleEditingBtn.textContent = "🔒 Locked";
           toggleEditingBtn.classList.remove("primary");
         }
+      }
+
+      // Show Add Non-Staff only in published mode (non-staff are post-publish only)
+      if (addNsBtn) {
+        const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+        const canShowNonStaff = isPublished && (window.currentUser?.is_admin || isMentor);
+        addNsBtn.style.display = canShowNonStaff ? "inline-block" : "none";
       }
 
       // Configure shift editor context (falls back silently if shift-editor not ready yet)
@@ -2654,6 +2951,23 @@
           console.error("Error clearing swap notifications:", e);
         }
 
+        // Remove all non-staff from this period (since non-staff are only for published rotas)
+        try {
+          const { error: nsErr } = await supabaseClient
+            .from("period_non_staff")
+            .update({ removed_at: new Date().toISOString(), removed_by: window.currentUser?.id })
+            .eq("period_id", periodData.id)
+            .is("removed_at", null);
+          
+          if (nsErr) {
+            console.error("Error removing non-staff from period:", nsErr);
+          } else {
+            console.log("Non-staff removed from unpublished period");
+          }
+        } catch (e) {
+          console.error("Error clearing non-staff:", e);
+        }
+
         const { data: refreshed, error: fetchErr } = await supabaseClient
           .from("rota_periods")
           .select("*")
@@ -2930,7 +3244,7 @@
               
               const key = `${userId}_${date}`;
               const newShift = draftShifts.find(s => s.id === shiftId);
-              const userMeta = getAllUsers().find(u => u.id === userId);
+              const userMeta = allUsers.find(u => u.id === userId);
               const isNonStaff = userMeta?.is_non_staff;
               const historyAssignee = isNonStaff
                 ? { user_id: null, period_non_staff_id: userId }
@@ -3144,7 +3458,7 @@
             },
             onClear: async (userId, date) => {
               const key = `${userId}_${date}`;
-              const userMeta = getAllUsers().find(u => u.id === userId);
+              const userMeta = allUsers.find(u => u.id === userId);
               const isNonStaff = userMeta?.is_non_staff;
               const historyAssignee = isNonStaff
                 ? { user_id: null, period_non_staff_id: userId }
@@ -3216,6 +3530,9 @@
         };
 
         bootEditing();
+        
+        console.log("[ROTA BOOT] Loading bank holidays...");
+        await loadBankHolidays();
         
         console.log("[ROTA BOOT] Calling loadPeriods...");
         try {
