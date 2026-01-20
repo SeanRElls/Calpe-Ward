@@ -17,9 +17,9 @@ const AssignmentHistoryModule = (() => {
     modal.className = 'modal-backdrop';
     modal.setAttribute('aria-hidden', 'true');
     modal.innerHTML = `
-      <div class="modal" style="width: min(600px, 100%);">
+      <div class="modal" style="width: min(900px, 95%);">
         <h2 style="margin: 0 0 8px 0; font-size: 17px; font-weight: 700;">Assignment History</h2>
-        <div class="modal-bubble" style="max-height: 400px; overflow-y: auto;">
+        <div class="modal-bubble" style="max-height: 400px; overflow-y: auto; overflow-x: auto;">
           <div id="historyContent">
             <p>Loading...</p>
           </div>
@@ -125,6 +125,7 @@ const AssignmentHistoryModule = (() => {
       }
 
       console.log('[HISTORY] RPC returned data:', data);
+      console.log('[HISTORY] First record keys:', data && data.length > 0 ? Object.keys(data[0]) : 'no data');
 
       if (!data || data.length === 0) {
         content.innerHTML = '<p style="color: #666; font-size: 13px;">No history for this assignment.</p>';
@@ -161,6 +162,7 @@ const AssignmentHistoryModule = (() => {
             <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">New</th>
             <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Reason</th>
             <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">By</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Override</th>
           </tr>
         </thead>
         <tbody>
@@ -177,14 +179,34 @@ const AssignmentHistoryModule = (() => {
       const newShift = record.new_shift_code || '—';
       const reason = record.change_reason || '—';
       const changedBy = record.changed_by_name || 'System';
+      
+      // Format override info if present
+      let overrideInfo = '—';
+      if (record.override_start_time || record.override_end_time || record.override_hours) {
+        const parts = [];
+        if (record.override_start_time) {
+          parts.push(`${record.override_start_time.substring(0, 5)}`);
+        }
+        if (record.override_end_time) {
+          parts.push(`${record.override_end_time.substring(0, 5)}`);
+        }
+        if (record.override_hours) {
+          parts.push(`${record.override_hours}h`);
+        }
+        if (record.override_comment) {
+          parts.push(`"${record.override_comment}"`);
+        }
+        overrideInfo = parts.join(' ');
+      }
 
       html += `
         <tr>
-          <td style="border: 1px solid #ddd; padding: 6px 8px; color: #666;">${record.assignment_date}</td>
+          <td style="border: 1px solid #ddd; padding: 6px 8px; color: #666;">${record.date}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-weight: 600; color: #333;">${oldShift}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-weight: 600; color: #2563eb;">${newShift}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-size: 11px; color: #666;">${reason}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-size: 11px; color: #666;">${changedBy}</td>
+          <td style="border: 1px solid #ddd; padding: 6px 8px; font-size: 11px; color: #f97316; font-weight: 500;">${overrideInfo}</td>
         </tr>
       `;
     });

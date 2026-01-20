@@ -24,6 +24,21 @@
     const adminSaveUserBtn = document.getElementById("adminSaveUserBtn");
     const adminCancelUserEditBtn = document.getElementById("adminCancelUserEditBtn");
     const adminUserEditHelp = document.getElementById("adminUserEditHelp");
+    const adminPrefShiftClustering = document.getElementById("adminPrefShiftClustering");
+    const adminPrefNightAppetite = document.getElementById("adminPrefNightAppetite");
+    const adminPrefWeekendAppetite = document.getElementById("adminPrefWeekendAppetite");
+    const adminPrefLeaveAdjacency = document.getElementById("adminPrefLeaveAdjacency");
+    const adminPrefShiftClusteringValue = document.getElementById("adminPrefShiftClusteringValue");
+    const adminPrefNightAppetiteValue = document.getElementById("adminPrefNightAppetiteValue");
+    const adminPrefWeekendAppetiteValue = document.getElementById("adminPrefWeekendAppetiteValue");
+    const adminPrefLeaveAdjacencyValue = document.getElementById("adminPrefLeaveAdjacencyValue");
+    const adminCanBeInChargeDay = document.getElementById("adminCanBeInChargeDay");
+    const adminCanBeInChargeNight = document.getElementById("adminCanBeInChargeNight");
+    const adminCannotBeSecondDay = document.getElementById("adminCannotBeSecondDay");
+    const adminCannotBeSecondNight = document.getElementById("adminCannotBeSecondNight");
+    const adminCanWorkNights = document.getElementById("adminCanWorkNights");
+    const adminSavePrefsBtn = document.getElementById("adminSavePrefsBtn");
+    const adminPrefsHelp = document.getElementById("adminPrefsHelp");
     const adminEditUserSearch = document.getElementById("adminEditUserSearch");
     const adminEditUserSelect = document.getElementById("adminEditUserSelect");
     const adminAddUserName = document.getElementById("adminAddUserName");
@@ -492,20 +507,36 @@
       }
       adminUsersList.textContent = "Loading users...";
 
-      const { data, error } = await supabaseClient
-        .from("users")
-        .select("id, name, role_id, is_admin, is_active, display_order, roles(name)")
-        .order("role_id", { ascending: true })
-        .order("display_order", { ascending: true })
-        .order("created_at", { ascending: true });
+      const primarySelect = "id, name, role_id, is_admin, is_active, display_order, roles(name), pref_shift_clustering, pref_night_appetite, pref_weekend_appetite, pref_leave_adjacency, can_be_in_charge_day, can_be_in_charge_night, cannot_be_second_rn_day, cannot_be_second_rn_night, can_work_nights";
+      const fallbackSelect = "id, name, role_id, is_admin, is_active, display_order, roles(name)";
 
-      if (error){
-        console.error(error);
-        adminUsersList.textContent = "Failed to load users.";
-        return;
+      let rows = null;
+      try {
+        const { data, error } = await supabaseClient
+          .from("users")
+          .select(primarySelect)
+          .order("role_id", { ascending: true })
+          .order("display_order", { ascending: true })
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+        rows = data;
+      } catch (err){
+        console.warn("loadAdminUsers: primary select failed, retrying fallback", err?.message || err);
+        const { data: fallbackData, error: fallbackErr } = await supabaseClient
+          .from("users")
+          .select(fallbackSelect)
+          .order("role_id", { ascending: true })
+          .order("display_order", { ascending: true })
+          .order("created_at", { ascending: true });
+        if (fallbackErr){
+          console.error(fallbackErr);
+          adminUsersList.textContent = "Failed to load users.";
+          return;
+        }
+        rows = fallbackData;
       }
 
-      adminUsersCache = data || [];
+      adminUsersCache = rows || [];
       renderAdminUsers();
     }
 
@@ -630,6 +661,90 @@
       if (adminEditUserRole) adminEditUserRole.disabled = false;
       if (adminEditUserPin) adminEditUserPin.disabled = false;
       if (adminSaveUserBtn) adminSaveUserBtn.disabled = false;
+      if (adminPrefShiftClustering) adminPrefShiftClustering.value = 3;
+      if (adminPrefNightAppetite) adminPrefNightAppetite.value = 3;
+      if (adminPrefWeekendAppetite) adminPrefWeekendAppetite.value = 3;
+      if (adminPrefLeaveAdjacency) adminPrefLeaveAdjacency.value = 3;
+      if (adminPrefShiftClusteringValue) adminPrefShiftClusteringValue.textContent = "3";
+      if (adminPrefNightAppetiteValue) adminPrefNightAppetiteValue.textContent = "3";
+      if (adminPrefWeekendAppetiteValue) adminPrefWeekendAppetiteValue.textContent = "3";
+      if (adminPrefLeaveAdjacencyValue) adminPrefLeaveAdjacencyValue.textContent = "3";
+      if (adminCanBeInChargeDay) adminCanBeInChargeDay.checked = false;
+      if (adminCanBeInChargeNight) adminCanBeInChargeNight.checked = false;
+      if (adminCannotBeSecondDay) adminCannotBeSecondDay.checked = false;
+      if (adminCannotBeSecondNight) adminCannotBeSecondNight.checked = false;
+      if (adminCanWorkNights) adminCanWorkNights.checked = true;
+      if (adminPrefsHelp) adminPrefsHelp.textContent = "";
+    }
+
+    function setAdminPref(control, labelEl, value){
+      if (control) control.value = value;
+      if (labelEl) labelEl.textContent = String(value);
+    }
+
+    function populateAdminPreferences(u){
+      const prefShift = Number(u?.pref_shift_clustering) || 3;
+      const prefNight = Number(u?.pref_night_appetite) || 3;
+      const prefWeekend = Number(u?.pref_weekend_appetite) || 3;
+      const prefLeave = Number(u?.pref_leave_adjacency) || 3;
+      setAdminPref(adminPrefShiftClustering, adminPrefShiftClusteringValue, prefShift);
+      setAdminPref(adminPrefNightAppetite, adminPrefNightAppetiteValue, prefNight);
+      setAdminPref(adminPrefWeekendAppetite, adminPrefWeekendAppetiteValue, prefWeekend);
+      setAdminPref(adminPrefLeaveAdjacency, adminPrefLeaveAdjacencyValue, prefLeave);
+      if (adminCanBeInChargeDay) adminCanBeInChargeDay.checked = !!u?.can_be_in_charge_day;
+      if (adminCanBeInChargeNight) adminCanBeInChargeNight.checked = !!u?.can_be_in_charge_night;
+      if (adminCannotBeSecondDay) adminCannotBeSecondDay.checked = !!u?.cannot_be_second_rn_day;
+      if (adminCannotBeSecondNight) adminCannotBeSecondNight.checked = !!u?.cannot_be_second_rn_night;
+      if (adminCanWorkNights) adminCanWorkNights.checked = u?.can_work_nights !== false;
+      if (adminPrefsHelp) adminPrefsHelp.textContent = "";
+    }
+
+    function readPrefValue(input){
+      const v = Number(input?.value);
+      return Number.isFinite(v) && v >= 1 && v <= 5 ? v : 3;
+    }
+
+    async function saveAdminPreferences(){
+      if (!requirePermission("users.edit", "Permission required to edit users.")) return;
+      if (!adminEditingUserId) return alert("Select a user first.");
+      if (adminPrefsHelp) adminPrefsHelp.textContent = "Saving preferences...";
+      const payload = {
+        p_token: currentToken,
+        p_target_user_id: adminEditingUserId,
+        p_pref_shift_clustering: readPrefValue(adminPrefShiftClustering),
+        p_pref_night_appetite: readPrefValue(adminPrefNightAppetite),
+        p_pref_weekend_appetite: readPrefValue(adminPrefWeekendAppetite),
+        p_pref_leave_adjacency: readPrefValue(adminPrefLeaveAdjacency),
+        p_can_be_in_charge_day: !!adminCanBeInChargeDay?.checked,
+        p_can_be_in_charge_night: !!adminCanBeInChargeNight?.checked,
+        p_cannot_be_second_rn_day: !!adminCannotBeSecondDay?.checked,
+        p_cannot_be_second_rn_night: !!adminCannotBeSecondNight?.checked,
+        p_can_work_nights: !!adminCanWorkNights?.checked
+      };
+      try {
+        const { error } = await supabaseClient.rpc("admin_update_user_preferences", payload);
+        if (error) throw error;
+        const idx = adminUsersCache.findIndex(u => u.id === adminEditingUserId);
+        if (idx >= 0) {
+          adminUsersCache[idx] = {
+            ...adminUsersCache[idx],
+            pref_shift_clustering: payload.p_pref_shift_clustering,
+            pref_night_appetite: payload.p_pref_night_appetite,
+            pref_weekend_appetite: payload.p_pref_weekend_appetite,
+            pref_leave_adjacency: payload.p_pref_leave_adjacency,
+            can_be_in_charge_day: payload.p_can_be_in_charge_day,
+            can_be_in_charge_night: payload.p_can_be_in_charge_night,
+            cannot_be_second_rn_day: payload.p_cannot_be_second_rn_day,
+            cannot_be_second_rn_night: payload.p_cannot_be_second_rn_night,
+            can_work_nights: payload.p_can_work_nights
+          };
+        }
+        if (adminPrefsHelp) adminPrefsHelp.textContent = "Preferences saved.";
+      } catch (e){
+        console.error(e);
+        if (adminPrefsHelp) adminPrefsHelp.textContent = "Save failed.";
+        alert("Failed to save preferences. Check console.");
+      }
     }
 
     function clearUserAddForm(){
@@ -674,6 +789,7 @@
         adminUserEditHelp.textContent = "You can edit this user, but PIN changes are restricted.";
       }
       if (adminEditUserSelect) adminEditUserSelect.value = String(userId);
+      populateAdminPreferences(u);
       loadPatternDefinitions();
       loadUserPattern();
       showUsersPage("edit");
@@ -2027,6 +2143,12 @@
     adminAddUserBtn?.addEventListener("click", openAddUserSection);
     adminCancelUserEditBtn?.addEventListener("click", clearUserEditor);
     adminSaveUserBtn?.addEventListener("click", saveUser);
+    adminSavePrefsBtn?.addEventListener("click", saveAdminPreferences);
+
+    adminPrefShiftClustering?.addEventListener("input", () => setAdminPref(adminPrefShiftClustering, adminPrefShiftClusteringValue, adminPrefShiftClustering.value));
+    adminPrefNightAppetite?.addEventListener("input", () => setAdminPref(adminPrefNightAppetite, adminPrefNightAppetiteValue, adminPrefNightAppetite.value));
+    adminPrefWeekendAppetite?.addEventListener("input", () => setAdminPref(adminPrefWeekendAppetite, adminPrefWeekendAppetiteValue, adminPrefWeekendAppetite.value));
+    adminPrefLeaveAdjacency?.addEventListener("input", () => setAdminPref(adminPrefLeaveAdjacency, adminPrefLeaveAdjacencyValue, adminPrefLeaveAdjacency.value));
 
     // Pattern selector listeners
     document.getElementById("adminUserPattern")?.addEventListener("change", () => {

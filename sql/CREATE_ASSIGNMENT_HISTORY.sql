@@ -51,7 +51,9 @@ DECLARE
 BEGIN
   v_admin_uid := public.require_session_permissions(p_token, null);
 
-  SELECT is_admin INTO v_is_admin FROM public.users WHERE id = v_admin_uid;
+  SELECT is_admin INTO v_is_admin
+  FROM public.users AS users_table
+  WHERE users_table.id = v_admin_uid;
   IF v_is_admin IS NULL OR NOT v_is_admin THEN
     PERFORM public.require_session_permissions(p_token, ARRAY['rota.view_history']);
   END IF;

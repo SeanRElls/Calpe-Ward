@@ -2020,11 +2020,11 @@ button.badge{
 <body>
   <div class="wrap">
     <!-- Page Navigation -->
-    <div id="pageNav" style="padding: 8px 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; gap: 12px; font-size: 14px;">
+    <div id="pageNav" style="padding: 8px 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; gap: 12px; font-size: 14px; align-items: center;">
       <a href="requests.html" style="color: #4F8DF7; text-decoration: none; font-weight: 600;">📋 Requests</a>
-      <a href="#" onclick="navigateToRota(); return false;" style="color: #4F8DF7; text-decoration: none;">📅 View Rota</a>
-      <a href="#" id="navAdminLink" onclick="goToFullAdmin(); return false;" style="color: #4F8DF7; text-decoration: none; display: none;">⚙️ Admin</a>
-      <button id="viewAsBtn" class="badge" type="button" style="display:none;">👁 View As</button>
+      <a href="rota.html" style="color: #4F8DF7; text-decoration: none;">📅 View Rota</a>
+      <a href="admin.html" id="navAdminLink" style="color: #4F8DF7; text-decoration: none; display: none;">⚙️ Admin</a>
+      <button id="viewAsBtn" class="badge" type="button" style="display:none;">👁️ View As</button>
     </div>
     
     <div class="titlebar">
@@ -2574,6 +2574,86 @@ button.badge{
           PIN updated.
         </div>
       </div>
+
+          <!-- PREFERENCES CARD -->
+          <div class="card" style="padding:10px; margin:10px 0;" id="userPrefsCard">
+            <div style="font-weight:800; margin-bottom:6px;">Preferences (1–5)</div>
+            <div class="subtitle" style="margin:0 0 10px 0; font-size:12px; color:var(--text-muted, #666);">1 = avoid if possible, 3 = neutral, 5 = keen.</div>
+
+            <div class="row" style="gap:10px; flex-direction:column; align-items:stretch;">
+              <label style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <span>Shift clustering</span>
+                <span id="prefShiftClusteringValue" style="font-weight:700;">3</span>
+              </label>
+              <input id="prefShiftClustering" type="range" min="1" max="5" step="1" value="3" aria-label="Shift clustering preference" />
+              <div class="subtitle" style="font-size:12px; color:var(--text-muted, #666);">Higher = prefers consecutive shifts; lower = prefers spacing.</div>
+
+              <label style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <span>Night appetite</span>
+                <span id="prefNightAppetiteValue" style="font-weight:700;">3</span>
+              </label>
+              <input id="prefNightAppetite" type="range" min="1" max="5" step="1" value="3" aria-label="Night appetite preference" />
+              <div class="subtitle" style="font-size:12px; color:var(--text-muted, #666);">Higher = more willing for nights.</div>
+
+              <label style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <span>Weekend appetite</span>
+                <span id="prefWeekendAppetiteValue" style="font-weight:700;">3</span>
+              </label>
+              <input id="prefWeekendAppetite" type="range" min="1" max="5" step="1" value="3" aria-label="Weekend appetite preference" />
+              <div class="subtitle" style="font-size:12px; color:var(--text-muted, #666);">Higher = more willing for weekends.</div>
+
+              <label style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <span>Leave adjacency</span>
+                <span id="prefLeaveAdjacencyValue" style="font-weight:700;">3</span>
+              </label>
+              <input id="prefLeaveAdjacency" type="range" min="1" max="5" step="1" value="3" aria-label="Leave adjacency preference" />
+              <div class="subtitle" style="font-size:12px; color:var(--text-muted, #666);">Higher = prefers leave next to days off; lower = fine to separate.</div>
+            </div>
+
+            <div class="btns" style="margin-top:12px; justify-content:flex-end; gap:8px;">
+              <button id="userSavePrefs" class="primary" type="button">Save preferences</button>
+            </div>
+
+            <div class="subtitle" id="userPrefsOk" style="display:none; margin-top:8px; color:#0b6b2b; font-weight:700;">Preferences saved.</div>
+            <div class="err" id="userPrefsErr" style="display:none;">Error.</div>
+          </div>
+
+          <!-- CALENDAR SUBSCRIPTION CARD -->
+          <div class="card" style="padding:10px; margin:10px 0;" id="userCalendarCard">
+            <div style="font-weight:800; margin-bottom:6px;">📅 Calendar Subscription</div>
+            <div class="subtitle" style="margin:0 0 10px 0; font-size:12px; color:var(--text-muted, #666);">
+              Subscribe to your published shifts in Apple Calendar, Google Calendar, or Outlook.
+            </div>
+
+            <div id="calendarTokenStatus"></div>
+
+            <div class="btns" style="gap:8px; margin-bottom:10px;">
+              <button id="generateCalendarToken" class="primary" type="button">Generate Calendar Link</button>
+              <button id="revokeCalendarToken" class="secondary" type="button" disabled>Revoke Link</button>
+            </div>
+
+            <div id="calendarLinkDisplay" style="display:none;">
+              <label style="font-weight:700; margin-top:10px; display:block;">HTTPS URL (Google/Outlook):</label>
+              <div style="display:flex; gap:4px; margin-bottom:10px;">
+                <input type="text" id="calendarURL" readonly style="flex:1; font-size:11px; padding:8px; border:1px solid #d1d5db; border-radius:4px; background:#f9fafb;" />
+                <button id="copyCalendarURL" class="secondary" type="button" title="Copy URL">📋</button>
+              </div>
+
+              <label style="font-weight:700; display:block;">webcal:// URL (Apple Calendar):</label>
+              <div style="display:flex; gap:4px;">
+                <input type="text" id="webcalURL" readonly style="flex:1; font-size:11px; padding:8px; border:1px solid #d1d5db; border-radius:4px; background:#f9fafb;" />
+                <button id="copyWebcalURL" class="secondary" type="button" title="Copy webcal URL">📋</button>
+              </div>
+
+              <div class="subtitle" style="font-size:11px; margin-top:10px; color:var(--text-muted, #666);">
+                <strong>⚠️ Keep this link private.</strong> Anyone with this URL can see your published shifts.
+                Regenerate the link to invalidate old URLs.
+              </div>
+            </div>
+
+            <div class="subtitle" id="calendarOk" style="display:none; margin-top:8px; color:#0b6b2b; font-weight:700;">Success.</div>
+            <div class="err" id="calendarErr" style="display:none;">Error.</div>
+          </div>
 
       <!-- BOTTOM BUTTONS -->
       <div class="user-footer">
@@ -8219,6 +8299,8 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
   </script>
 </body>
 </html>
+
+
 
 
 

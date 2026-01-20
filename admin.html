@@ -595,8 +595,6 @@
         display: none; /* Hide target column on very small screens */
       }
     }
-      margin-bottom: 6px;
-    }
     body.mobile-mode .actions{
       flex-direction: column;
     }
@@ -664,6 +662,7 @@
 
       <nav class="nav">
         <a class="is-active" data-panel="overview" href="#overview">Status</a>
+        <a href="preview.html">📊 Preview Generator</a>
         <a data-panel="users" href="#users">Users</a>
         <a data-panel="non-staff" href="#non-staff">Non‑Staff</a>
         <a data-panel="bank-holidays" href="#bank-holidays">Bank Holidays</a>
@@ -931,6 +930,58 @@
                 <button id="adminCancelUserEditBtn" class="btn" type="button">Cancel</button>
               </div>
               <div id="adminUserEditHelp" class="page-subtitle" style="margin-top:8px;"></div>
+            </details>
+
+            <details class="accordion" open>
+              <summary class="accordion-title">Preferences & capabilities</summary>
+              <div class="accordion-sub">1 = avoid if possible, 3 = neutral, 5 = keen. Use capabilities to mark charge eligibility, second RN restrictions, and night eligibility.</div>
+              <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:10px;">
+                <div class="card" style="padding:10px;">
+                  <div style="font-weight:700; margin-bottom:6px;">Preferences (1–5)</div>
+                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Shift clustering <span id="adminPrefShiftClusteringValue" style="font-weight:700;">3</span></label>
+                  <input id="adminPrefShiftClustering" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Shift clustering" />
+                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Higher = prefers clustered runs, lower = prefers spacing.</div>
+                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Night appetite <span id="adminPrefNightAppetiteValue" style="font-weight:700;">3</span></label>
+                  <input id="adminPrefNightAppetite" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Night appetite" />
+                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Higher = more willing for nights.</div>
+                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Weekend appetite <span id="adminPrefWeekendAppetiteValue" style="font-weight:700;">3</span></label>
+                  <input id="adminPrefWeekendAppetite" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Weekend appetite" />
+                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Higher = more willing for weekends.</div>
+                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Leave adjacency <span id="adminPrefLeaveAdjacencyValue" style="font-weight:700;">3</span></label>
+                  <input id="adminPrefLeaveAdjacency" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Leave adjacency" />
+                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 0;">Higher = prefers leave next to days off; lower = okay to separate.</div>
+                </div>
+
+                <div class="card" style="padding:10px;">
+                  <div style="font-weight:700; margin-bottom:6px;">Capabilities</div>
+                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Used by scheduling rules to keep charge coverage and avoid unsafe pairings.</div>
+                  <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="adminCanBeInChargeDay" />
+                    <span>Can be in charge (day)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="adminCanBeInChargeNight" />
+                    <span>Can be in charge (night)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="adminCannotBeSecondDay" />
+                    <span>Cannot be 2nd RN (day)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="adminCannotBeSecondNight" />
+                    <span>Cannot be 2nd RN (night)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="adminCanWorkNights" checked />
+                    <span>Can work nights</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="btns" style="margin-top:12px; gap:8px;">
+                <button id="adminSavePrefsBtn" class="btn primary" type="button">Save preferences</button>
+              </div>
+              <div id="adminPrefsHelp" class="page-subtitle" style="margin-top:8px;"></div>
             </details>
 
             <details class="accordion">

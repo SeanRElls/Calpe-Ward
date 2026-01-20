@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduling Preview Generator - Calpe Ward</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rota.css">
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    /* Preview-specific styles */
+    body { background-color: #f5f5f5; }
+    .preview-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .preview-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+    .preview-header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .preview-header p {
+      margin: 10px 0 0 0;
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    .section-card {
+      background: white;
+      border-radius: 8px;
+      padding: 25px;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin: 0 0 15px 0;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+    .subsection {
+      margin: 20px 0;
+      padding-left: 20px;
+      border-left: 3px solid #e0e0e0;
+    }
+    .subsection-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #555;
+      margin: 0 0 10px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .constraint-list, .feature-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .constraint-list li, .feature-list li {
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .constraint-list li:last-child, .feature-list li:last-child {
+      border-bottom: none;
+    }
+    .constraint-label {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-right: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .hard-constraint {
+      background-color: #ffe0e0;
+      color: #c41e3a;
+    }
+    .soft-penalty {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    .scoring {
+      background-color: #e7f3ff;
+      color: #004085;
+    }
+    .decision-flow {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.8;
+      font-family: 'Courier New', monospace;
+    }
+    .step {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+    .step::before {
+      content: "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ ";
+      color: #667eea;
+      font-weight: bold;
+      margin-left: -15px;
+      margin-right: 5px;
+    }
+    .example {
+      background: #f0f4ff;
+      border-left: 3px solid #667eea;
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .tab-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: #666;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .tab-btn.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .highlight-box {
+      background: #e8f5e9;
+      border: 1px solid #4caf50;
+      border-radius: 4px;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 13px;
+      color: #2e7d32;
+    }
+    .alert-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 13px;
+      color: #856404;
+    }
+    .shift-grid-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+    .shift-preview-card {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      padding: 15px;
+      font-size: 13px;
+    }
+    .shift-preview-header {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #667eea;
+    }
+    .charge-rn {
+      background: #e3f2fd;
+      border-left: 3px solid #2196f3;
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    .charge-rn-label {
+      font-weight: 600;
+      color: #1565c0;
+    }
+    .charge-reason {
+      font-size: 11px;
+      color: #555;
+      margin-top: 4px;
+      font-style: italic;
+    }
+    .load-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #5568d3;
+    }
+    .select-input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .preview-status {
+      padding: 12px;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-size: 13px;
+    }
+    .status-loading {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    .status-ready {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status-error {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation (shared) -->
+  <div id="navBar"></div>
+
+  <!-- Main Content -->
+  <div class="preview-container">
+    <!-- Header -->
+    <div class="preview-header">
+      <h1>Scheduling Preview Generator</h1>
+      <p>Admin-only tool: Preview shifts, charge assignments, constraints, and decision reasoning</p>
+    </div>
+
+    <!-- Controls -->
+    <div class="section-card">
+      <div class="section-title">Generate Preview</div>
+      <div class="load-controls">
+        <select id="periodSelect" class="select-input">
+          <option value="">Select a period...</option>
+        </select>
+        <button class="btn btn-primary" onclick="generatePreview()">Generate Preview</button>
+      </div>
+      <div id="previewStatus" class="preview-status status-loading" style="display: none;"></div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('features')">Features & Logic</button>
+      <button class="tab-btn" onclick="switchTab('constraints')">Constraints</button>
+      <button class="tab-btn" onclick="switchTab('scoring')">Scoring & Penalties</button>
+      <button class="tab-btn" onclick="switchTab('charge-assignment')">Charge Assignment Algorithm</button>
+      <button class="tab-btn" onclick="switchTab('decisions')">Decision Explanation Log</button>
+    </div>
+
+    <!-- TAB: Features & Logic -->
+    <div id="features" class="tab-content active">
+      <div class="section-card">
+        <div class="section-title">Core Features</div>
+        
+        <div class="subsection">
+          <div class="subsection-title">What This Generator Does</div>
+          <ul class="feature-list">
+            <li>
+              <strong>Reads Current Data:</strong>
+              Loads periods, shifts, staff, requests, patterns, staffing requirements, and user preferences/capabilities.
+            </li>
+            <li>
+              <strong>Validates Constraints:</strong>
+              Ensures all hard constraints are met (charge RN presence, availability, role eligibility).
+            </li>
+            <li>
+              <strong>Optimizes Scheduling:</strong>
+              Applies soft penalties (shift clustering preferences, anti-horror patterns, fairness, charge seniority) to find a high-quality schedule.
+            </li>
+            <li>
+              <strong>Charge RN Priority:</strong>
+              Selects the highest-ranked eligible RN for "in charge" roles, recording reasons if a lower-ranked person is chosen.
+            </li>
+            <li>
+              <strong>Explainability:</strong>
+              Logs every decision: who was assigned, what constraints/penalties influenced the choice, and what alternatives were skipped.
+            </li>
+            <li>
+          <strong>⚠️ Preview Only:</strong> This is a read-only preview. To apply these changes to the rota, click "Save to Rota" (requires confirmation).
+              Read-only; does not save to database. Click "Save to Rota" to commit (requires additional confirmation).
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Staff Ordering (Rota Rank)</div>
+          <div class="highlight-box">
+            <strong>Rota Rank Defines Charge Priority:</strong>
+            Lower rank number = higher priority for "in charge" assignments. This reflects seniority, charge competence, and ward preference.
+            The generator prefers the top-ranked (lowest rota_rank) eligible staff for charge roles.
+          </div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">User Preferences & Capabilities</div>
+          <ul class="feature-list">
+            <li>
+              <strong>Preference Sliders (1ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ5):</strong>
+              Shift clustering, night appetite, weekend appetite, leave adjacency preferences inform soft penalties.
+            </li>
+            <li>
+              <strong>Capability Flags:</strong>
+              can_be_in_charge_day/night, cannot_be_second_rn_day/night, can_work_nights are hard constraints.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Decision Output Includes</div>
+          <ul class="feature-list">
+            <li>Shift assignments (date, shift code, staff member, role)</li>
+            <li>Charge RN name and rota rank for each shift</li>
+            <li>Reason if lower-ranked charge RN selected</li>
+            <li>Violations/warnings (e.g., coverage gaps)</li>
+            <li>Scoring breakdown (constraints met, penalties applied)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Constraints -->
+    <div id="constraints" class="tab-content">
+      <div class="section-card">
+        <div class="section-title">Hard Constraints (Must Be Met)</div>
+        
+        <div class="subsection">
+          <div class="subsection-title">Charge RN Requirement</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label hard-constraint">Hard</span>
+              Every shift requiring "in charge" coverage <strong>must</strong> include at least one RN with
+              <code>can_be_in_charge_day=true</code> or <code>can_be_in_charge_night=true</code> (depending on shift type).
+            </li>
+            <li>
+              If no charge-capable RN is available or willing, the schedule is infeasible and a warning is logged.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Staff Availability</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label hard-constraint">Hard</span>
+              Staff member must not have leave, unavailability, or strong off-request for the shift date.
+            </li>
+            <li>
+              Off-requests: Soft penalty if weak off-request; hard constraint if strong off-request.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Cannot-Be-Second RN Rule</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label hard-constraint">Hard</span>
+              If staff has <code>cannot_be_second_rn_day=true</code> / <code>cannot_be_second_rn_night=true</code>,
+              they cannot be assigned to the second RN slot in a day/night shift.
+            </li>
+            <li>
+              Ensures charge RNs are not forced into subordinate roles against their capability.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Night Eligibility</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label hard-constraint">Hard</span>
+              Staff with <code>can_work_nights=false</code> cannot be assigned to night shifts.
+            </li>
+            <li>
+              Default: <code>can_work_nights=true</code> (most staff work nights).
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Role & Skill Matching</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label hard-constraint">Hard</span>
+              Staff role (RN, NA, etc.) must match the shift requirement.
+            </li>
+            <li>
+              Staffing requirements table defines minimum RN, NA, etc. per shift.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">Soft Constraints & Preferences</div>
+        
+        <div class="subsection">
+          <div class="subsection-title">Off-Requests (Weak)</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label soft-penalty">Soft</span>
+              If staff has a weak off-request for a shift, assigning them incurs a penalty.
+              The system tries to avoid weak off-requests but will use them if needed.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">User Preferences (1ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ5 Sliders)</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label soft-penalty">Soft</span>
+              <strong>Shift Clustering (pref_shift_clustering):</strong>
+              Higher = staff prefers consecutive shifts; lower = prefers spacing. Affects clustering penalty.
+            </li>
+            <li>
+              <span class="constraint-label soft-penalty">Soft</span>
+              <strong>Night Appetite (pref_night_appetite):</strong>
+              Higher = willing to work more nights; lower = fewer nights preferred. Affects night assignment penalty.
+            </li>
+            <li>
+              <span class="constraint-label soft-penalty">Soft</span>
+              <strong>Weekend Appetite (pref_weekend_appetite):</strong>
+              Higher = willing weekends; lower = prefers weekdays. Affects weekend assignment penalty.
+            </li>
+            <li>
+              <span class="constraint-label soft-penalty">Soft</span>
+              <strong>Leave Adjacency (pref_leave_adjacency):</strong>
+              Higher = comfortable leaves next to shifts; lower = prefers separation. Affects leave proximity penalty.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Scoring & Penalties -->
+    <div id="scoring" class="tab-content">
+      <div class="section-card">
+        <div class="section-title">Scoring System</div>
+        <p><em>The generator minimizes total penalty; lower score = better schedule.</em></p>
+
+        <div class="subsection">
+          <div class="subsection-title">Charge Seniority Penalty</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Incentivizes top-ranked charge RNs:</strong>
+              If the selected charge RN is not the highest-ranked eligible person, a penalty is applied proportional to how far down the list they are.
+            </li>
+            <li class="example">
+              Example: If eligible charge RNs are ranks [1, 3, 5], and we pick rank 3:
+              <br/>Rank 1 skipped ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ penalty (medium).
+              <br/>If we pick rank 5: even larger penalty (both rank 1 and 3 skipped).
+            </li>
+            <li>
+              This nudges the system to keep charge assignments at the top unless significant constraints prevent it.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Anti-Horror Penalties</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Oscillation Penalty:</strong>
+              Penalizes rapid day/night switches (working day, then night, then day). Encourages consecutive stretches.
+            </li>
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Recovery Penalty:</strong>
+              If a staff member is assigned too many consecutive shifts without break, a penalty increases.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Preference Alignment Penalty</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Shift Clustering:</strong>
+              If a low-clustering preference staff member is given isolated shifts, penalty applies. Vice versa for high-clustering staff.
+            </li>
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Night Appetite:</strong>
+              If staff with low night appetite are assigned many nights, penalty.
+            </li>
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Weekend Appetite:</strong>
+              Similar logic for weekend assignments.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Fairness Penalty (Optional)</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              <strong>Future Enhancement:</strong>
+              Can track shift counts per staff over a period and penalize over-assignment to balance workload.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Coverage & Staffing Penalty</div>
+          <ul class="constraint-list">
+            <li>
+              <span class="constraint-label scoring">Score</span>
+              If a shift is under-staffed (fewer RNs/NAs than required), a penalty is applied.
+            </li>
+            <li>
+              The system will still generate a schedule but flag the gap in the explanation log.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Charge Assignment Algorithm -->
+    <div id="charge-assignment" class="tab-content">
+      <div class="section-card">
+        <div class="section-title">How Charge RN Selection Works</div>
+
+        <div class="subsection">
+          <div class="subsection-title">Decision Tree</div>
+          <div class="decision-flow">
+For each shift requiring charge coverage:
+
+Step A: Build Eligible List
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Load all staff
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Filter by: can_be_in_charge_(day|night) = true for shift type
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Filter by: available (no leave, strong off-request, unavailable flag)
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Filter by: not violating cannot_be_second_rn constraint in charge slot
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Sort by rota_rank ascending (lowest rank = highest priority)
+
+Step B: Select Charge RN
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ candidate = first eligible staff (highest rank)
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ score_if_selected = calculate_penalty(candidate, other_constraints)
+  
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ for each next_lower_ranked_candidate:
+      next_score = calculate_penalty(next_candidate, constraints)
+      if next_score << score_if_selected (significantly better):
+          candidate = next_lower_ranked_candidate
+          reason = "constraints made lower rank necessary"
+      else:
+          break (stick with current candidate)
+  
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ assign candidate as charge RN
+
+Step C: Log Decision
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ record: charge_rn_name, charge_rn_rank, was_first_choice (yes/no)
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ if not first choice: record reason
+  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ reasons include:
+      - "higher-ranked RNs have strong off-requests"
+      - "cannot-be-second constraint conflicts"
+      - "cannot_work_nights=true for night shift"
+      - "anti-horror penalty would spike significantly"
+      - "fairness: higher-rank already has N shifts"
+          </div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Why Lower-Ranked Charge RN Might Be Selected</div>
+          <ul class="constraint-list">
+            <li>
+              <strong>Leave / Unavailable:</strong>
+              Higher-ranked staff on leave for that date.
+            </li>
+            <li>
+              <strong>Off-Requests:</strong>
+              Higher-ranked staff has strong off-request; system honors hard off-requests, soft ones incur penalty.
+            </li>
+            <li>
+              <strong>cannot_be_second_rn Conflict:</strong>
+              Higher-ranked staff cannot be in charge slot due to capability flag.
+            </li>
+            <li>
+              <strong>Night Ineligibility:</strong>
+              Night shift + higher-ranked staff has can_work_nights=false.
+            </li>
+            <li>
+              <strong>Anti-Horror Protection:</strong>
+              Assigning higher-ranked staff would create severe oscillation/recovery penalty; lower rank avoids it.
+            </li>
+            <li>
+              <strong>Fairness:</strong>
+              Higher-ranked staff already has many shifts in the period; lower-ranked staff needs more.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Example Scenario</div>
+          <div class="example">
+            <strong>Shift:</strong> Monday, 08:00ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ20:00 (Day shift, requires charge RN)<br/>
+            <strong>Eligible Charge RNs (sorted by rank):</strong><br/>
+            1. Alice (rank 1) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â can_be_in_charge_day=true<br/>
+            2. Bob (rank 3) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â can_be_in_charge_day=true<br/>
+            3. Carol (rank 5) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â can_be_in_charge_day=true<br/>
+            <br/>
+            <strong>Constraints:</strong><br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Alice: strong off-request for Monday (hard constraint)<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Bob: no off-request, available<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Carol: no off-request, available<br/>
+            <br/>
+            <strong>Decision:</strong><br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Alice is skipped (hard off-request).<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Bob becomes charge RN (rank 3).<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Log: "Assigned Bob (rank 3) as charge RN. Reason: higher-ranked Alice (rank 1) has strong off-request for this date."<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ Penalty: seniority penalty for not choosing rank 1 (medium, because Alice is unavailable).<br/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Decision Explanation Log -->
+    <div id="decisions" class="tab-content">
+      <div class="section-card">
+        <div class="section-title">Understanding the Explanation Log</div>
+
+        <div class="subsection">
+          <div class="subsection-title">What Gets Logged?</div>
+          <ul class="constraint-list">
+            <li>
+              <strong>For Every Shift:</strong>
+              Date, shift code, assigned staff, role, decision reason.
+            </li>
+            <li>
+              <strong>For Every Charge RN Assignment:</strong>
+              Name, rota rank, was first choice (yes/no), reason if not first choice.
+            </li>
+            <li>
+              <strong>Skipped Candidates (if applicable):</strong>
+              Why higher-ranked person was not selected (e.g., "unavailable", "strong off-request", "anti-horror penalty").
+            </li>
+            <li>
+              <strong>Violations / Warnings:</strong>
+              Coverage gaps, constraint conflicts, infeasible regions.
+            </li>
+          </ul>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">Example Log Entry</div>
+          <div class="example">
+            <strong>Date:</strong> 2026-02-01 (Monday)<br/>
+            <strong>Shift:</strong> Day (08:00ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ20:00)<br/>
+            <br/>
+            <strong>Assignment:</strong><br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ RN (Charge): Bob (rank 3)<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ RN (Second): Sarah (rank 8)<br/>
+            ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ NA: James<br/>
+            <br/>
+            <strong>Charge Decision Log:</strong><br/>
+            "Eligible charge RNs: [Alice(1), Bob(3), Carol(5)].<br/>
+            Alice(1) SKIPPED: strong off-request for this date.<br/>
+            Carol(5) SKIPPED: seniority penalty would be larger than Bob(3).<br/>
+            SELECTED: Bob(rank 3) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â good balance of availability and seniority.<br/>
+            Seniority penalty: 2 (Alice unavailable, so penalty reduced)."<br/>
+            <br/>
+            <strong>Preferences Alignment:</strong><br/>
+            "Sarah (pref_shift_clustering=2, low) assigned single shift (isolated). Penalty: +1.<br/>
+            James: no conflicts."<br/>
+            <br/>
+            <strong>Overall Shift Score: 8</strong> (lower is better)
+          </div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">How to Use the Log to Validate Decisions</div>
+          <ul class="constraint-list">
+            <li>
+              <strong>Check Charge RN Choice:</strong>
+              Is the charge RN reasonable? If not top-ranked, is the reason compelling?
+            </li>
+            <li>
+              <strong>Spot Fairness Issues:</strong>
+              Are some staff consistently getting more/fewer shifts? Log will show cumulative counts.
+            </li>
+            <li>
+              <strong>Verify Constraint Compliance:</strong>
+              Log should explain any violations or warnings (e.g., "Coverage gap on Night of 2026-02-05: only 1 RN, need 2").
+            </li>
+            <li>
+              <strong>Respect Preferences:</strong>
+              Do assignments mostly align with user preferences? If not, why (hard constraints override soft)?
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shift Preview Grid (appears after generation) -->
+    <div id="previewGrid" style="display: none;">
+      <div class="section-card">
+        <div class="section-title">Generated Schedule Preview</div>
+        <div class="rota-scroll" style="max-height: 70vh;">
+          <table id="previewRota"></table>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">Explanation Log</div>
+        <div id="explanationLog" style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; font-family: 'Courier New', monospace; background: #f5f5f5; padding: 15px; border-radius: 4px;"></div>
+      </div>
+
+      <div class="section-card">
+        <div class="alert-box">
+          <strong>⚠️ Preview Only:</strong> This is a read-only preview. To apply these changes to the rota, click "Save to Rota" (requires confirmation).
+        </div>
+        <button class="btn btn-primary" onclick="saveToRota()" style="margin-top: 10px;">Save to Rota</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/session-validator.js"></script>
+  <script src="js/permissions.js"></script>
+  <script src="js/nav-bar.js"></script>
+  <script>
+    let currentPeriodData = null;
+    let generatedPreview = null;
+    const periodMap = new Map();
+
+    // Tab switching
+    function switchTab(tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      // Show selected tab
+      document.getElementById(tabName).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Load periods on page load
+    async function loadPeriods() {
+      try {
+        const { data, error } = await window.supabaseClient
+          .from('rota_periods')
+          .select('id, name, start_date, end_date')
+          .order('start_date', { ascending: false })
+          .limit(12);
+        
+        if (error) throw error;
+        
+        const select = document.getElementById('periodSelect');
+        data.forEach(period => {
+          const option = document.createElement('option');
+          option.value = period.id;
+          // Format dates nicely
+          const startDate = new Date(period.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const endDate = new Date(period.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          option.textContent = `${period.name} (${startDate} - ${endDate})`;
+          select.appendChild(option);
+          periodMap.set(period.id, {
+            id: period.id,
+            name: period.name,
+            start_date: period.start_date,
+            end_date: period.end_date
+          });
+        });
+      } catch (e) {
+        console.error('Error loading periods:', e);
+        showStatus('Error loading periods: ' + e.message, 'error');
+      }
+    }
+
+    // Generate preview
+    async function generatePreview() {
+      const periodId = document.getElementById('periodSelect').value;
+      if (!periodId) {
+        showStatus('Please select a period', 'error');
+        return;
+      }
+
+      showStatus('Generating preview...', 'loading');
+      
+      // Get token from window or sessionStorage
+      const token = window.currentToken || sessionStorage.getItem('session_token');
+      if (!token) {
+        showStatus('Error: Session token not available. Please log in.', 'error');
+        return;
+      }
+      
+      try {
+        // Call the backend RPC to generate schedule preview
+        const { data, error } = await window.supabaseClient.rpc('generate_schedule_preview', {
+          p_period_id: periodId,
+          p_token: token
+        });
+
+        if (error) {
+          console.error('RPC error:', error);
+          throw new Error(error.message || 'Failed to generate preview');
+        }
+
+        if (!data || data.length === 0) {
+          throw new Error('No data returned from preview generator');
+        }
+
+        const result = data[0];
+        
+        // Show preview grid
+        document.getElementById('previewGrid').style.display = 'block';
+        
+        // Generate preview from real data
+        await generatePreviewFromData(result);
+        
+        showStatus('Preview generated successfully', 'ready');
+      } catch (e) {
+        console.error('Error generating preview:', e);
+        showStatus('Error generating preview: ' + e.message, 'error');
+        document.getElementById('previewGrid').style.display = 'none';
+      }
+    }
+
+    async function generatePreviewFromData(result) {
+      const previewTable = document.getElementById('previewRota');
+      const rawGrid = result.rota_grid || result.rotaGrid || [];
+      let rotaGrid = rawGrid;
+      if (typeof rotaGrid === 'string') {
+        try {
+          rotaGrid = JSON.parse(rotaGrid);
+        } catch (err) {
+          console.warn('[PREVIEW] Failed to parse rota_grid:', err);
+          rotaGrid = [];
+        }
+      }
+      if (rotaGrid && !Array.isArray(rotaGrid)) {
+        rotaGrid = Object.values(rotaGrid);
+      }
+      if (!Array.isArray(rotaGrid)) {
+        rotaGrid = [];
+      }
+      const shifts = [];
+      rotaGrid.forEach(day => {
+        const date = day?.date;
+        (day?.shifts || []).forEach(shift => {
+          const assignedUser = shift?.assigned_user;
+          const shiftCode = shift?.shift_code;
+          if (date && assignedUser && shiftCode) {
+            shifts.push({ date, assigned_user: assignedUser, shift_code: shiftCode });
+          }
+        });
+      });
+      const periodId = document.getElementById('periodSelect').value;
+      const periodInfo = periodMap.get(periodId) || getPeriodBoundsFromShifts(shifts);
+      const previewUsers = await loadPreviewUsers(shifts);
+
+      if (!previewTable) return;
+
+      if (!Array.isArray(shifts) || shifts.length === 0 || !periodInfo) {
+        previewTable.innerHTML = '<tr><td style="padding:12px; color:#666;">No shifts found for this period.</td></tr>';
+        document.getElementById('explanationLog').textContent = result.explanation_log || 'No schedule generated.';
+        return;
+      }
+
+      renderPreviewRota(previewTable, shifts, periodInfo, previewUsers);
+      document.getElementById('explanationLog').textContent = result.explanation_log;
+    }
+
+    function getPeriodBoundsFromShifts(shifts) {
+      if (!Array.isArray(shifts) || shifts.length === 0) return null;
+      const dates = shifts.map(s => new Date(s.date));
+      const minDate = new Date(Math.min(...dates));
+      const maxDate = new Date(Math.max(...dates));
+      return {
+        id: null,
+        name: 'Preview Period',
+        start_date: minDate.toISOString().split('T')[0],
+        end_date: maxDate.toISOString().split('T')[0]
+      };
+    }
+
+    function generateDatesForPeriod(startDateStr, endDateStr) {
+      const start = new Date(startDateStr);
+      const end = new Date(endDateStr);
+      const dates = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        dates.push({ date: dateStr });
+      }
+      return dates;
+    }
+
+    function getWeekStart(dateObj) {
+      const d = new Date(dateObj);
+      d.setHours(12, 0, 0, 0);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day);
+      return d;
+    }
+
+    function groupDatesIntoWeeks(dates) {
+      const weekMap = new Map();
+      dates.forEach(d => {
+        const dt = new Date(d.date);
+        const sun = getWeekStart(dt);
+        const key = sun.toISOString().split('T')[0];
+        if (!weekMap.has(key)) {
+          weekMap.set(key, {
+            weekStart: sun,
+            weekEnd: new Date(sun.getTime() + 6 * 24 * 60 * 60 * 1000),
+            days: []
+          });
+        }
+        weekMap.get(key).days.push(d);
+      });
+      return Array.from(weekMap.values()).sort((a, b) => a.weekStart - b.weekStart);
+    }
+
+    function fmtDate(d) {
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    }
+
+    function getRoleGroupKey(user) {
+      const roleId = user?.role_id;
+      if (roleId === 1) return 'charge_nurse';
+      if (roleId === 2) return 'staff_nurse';
+      if (roleId === 3) return 'nursing_assistant';
+      return 'staff_nurse';
+    }
+
+    function groupUsers(users) {
+      const buckets = {
+        charge_nurse: [],
+        staff_nurse: [],
+        nursing_assistant: [],
+        students: []
+      };
+
+      users.forEach(u => {
+        if (u.is_non_staff && u.category === 'student') {
+          buckets.students.push(u);
+        } else {
+          const groupKey = getRoleGroupKey(u);
+          (buckets[groupKey] || buckets.staff_nurse).push(u);
+        }
+      });
+
+      const sortBucket = (arr) => {
+        arr.sort((a, b) => {
+          if (a.is_non_staff && !b.is_non_staff) return 1;
+          if (!a.is_non_staff && b.is_non_staff) return -1;
+          const aOrder = a.display_order ?? 9999;
+          const bOrder = b.display_order ?? 9999;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+      };
+
+      sortBucket(buckets.charge_nurse);
+      sortBucket(buckets.staff_nurse);
+      sortBucket(buckets.nursing_assistant);
+      sortBucket(buckets.students);
+
+      const groups = [
+        { title: 'Charge Nurses', className: 'section-cn', items: buckets.charge_nurse },
+        { title: 'Staff Nurses', className: 'section-sn', items: buckets.staff_nurse }
+      ];
+
+      if (buckets.students.length > 0) {
+        groups.push({ title: 'Students', className: 'section-students', items: buckets.students });
+      }
+
+      groups.push({ title: 'Nursing Assistants', className: 'section-na', items: buckets.nursing_assistant });
+
+      return groups.filter(g => g.items.length > 0);
+    }
+
+    async function loadPreviewUsers(shifts) {
+      const names = Array.from(new Set((shifts || [])
+        .map(s => s.assigned_user)
+        .filter(Boolean)));
+
+      if (!names.length || !window.supabaseClient) {
+        return names.map(name => ({ id: `preview-${name}`, name }));
+      }
+
+      try {
+        const { data, error } = await window.supabaseClient
+          .from('users')
+          .select('id, name, role_id, is_non_staff, category, display_order')
+          .in('name', names);
+
+        if (error) throw error;
+
+        const byName = new Map((data || []).map(u => [u.name, u]));
+        return names.map(name => byName.get(name) || { id: `preview-${name}`, name });
+      } catch (err) {
+        console.warn('[PREVIEW] Failed to load user metadata:', err);
+        return names.map(name => ({ id: `preview-${name}`, name }));
+      }
+    }
+
+    function renderPreviewRota(table, shifts, periodInfo, previewUsers) {
+      table.innerHTML = '';
+      const dates = generateDatesForPeriod(periodInfo.start_date, periodInfo.end_date);
+      const weeks = groupDatesIntoWeeks(dates);
+
+      const assignments = new Map();
+      shifts.forEach(s => {
+        if (!s || !s.date || !s.assigned_user) return;
+        const key = `${s.assigned_user}__${s.date}`;
+        if (!assignments.has(key)) assignments.set(key, []);
+        assignments.get(key).push(s.shift_code);
+      });
+
+      const fallbackUsers = Array.from(new Set(shifts.map(s => s.assigned_user).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b))
+        .map(name => ({ id: `preview-${name}`, name }));
+      const resolvedUsers = (previewUsers && previewUsers.length) ? previewUsers : fallbackUsers;
+      const groups = groupUsers(resolvedUsers);
+
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+      table.appendChild(thead);
+      table.appendChild(tbody);
+
+      const r1 = document.createElement('tr');
+      const h1 = document.createElement('th');
+      h1.className = 'name-col';
+      h1.textContent = 'Name';
+      r1.appendChild(h1);
+      weeks.forEach(w => {
+        const th = document.createElement('th');
+        th.className = 'week-head';
+        th.colSpan = 7;
+        th.innerHTML = `<span class="week-label">${fmtDate(w.weekStart)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ ${fmtDate(w.weekEnd)}</span>`;
+        r1.appendChild(th);
+        const sep = document.createElement('th');
+        sep.className = 'week-sep';
+        r1.appendChild(sep);
+      });
+      thead.appendChild(r1);
+
+      const r2 = document.createElement('tr');
+      const h2 = document.createElement('th');
+      h2.className = 'name-col';
+      r2.appendChild(h2);
+      const dayLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+      weeks.forEach(() => {
+        for (let i = 0; i < 7; i++) {
+          const th = document.createElement('th');
+          th.className = 'day';
+          th.textContent = dayLetters[i];
+          r2.appendChild(th);
+        }
+        const sep = document.createElement('th');
+        sep.className = 'week-sep';
+        r2.appendChild(sep);
+      });
+      thead.appendChild(r2);
+
+      const r3 = document.createElement('tr');
+      const h3 = document.createElement('th');
+      h3.className = 'name-col';
+      r3.appendChild(h3);
+      weeks.forEach(w => {
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(w.days[i].date);
+          const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+          const th = document.createElement('th');
+          th.className = `date${isWeekend ? ' weekend' : ''}`;
+          th.textContent = d.getDate();
+          r3.appendChild(th);
+        }
+        const sep = document.createElement('th');
+        sep.className = 'week-sep';
+        r3.appendChild(sep);
+      });
+      thead.appendChild(r3);
+
+      groups.forEach(group => {
+        const sectionTr = document.createElement('tr');
+        sectionTr.className = 'section-row';
+        const sectionTd = document.createElement('td');
+        sectionTd.className = `name-col ${group.className}`;
+        sectionTd.colSpan = 1 + (weeks.length * 7) + weeks.length;
+        sectionTd.innerHTML = `<span>${group.title}</span>`;
+        sectionTr.appendChild(sectionTd);
+        tbody.appendChild(sectionTr);
+
+        group.items.forEach(user => {
+          const name = user.name || 'Unknown';
+          const tr = document.createElement('tr');
+          const nameTd = document.createElement('td');
+          nameTd.className = 'name-col';
+          nameTd.textContent = name;
+          tr.appendChild(nameTd);
+
+          weeks.forEach(w => {
+            w.days.forEach(day => {
+              const dateObj = new Date(day.date);
+              const isWeekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
+              const td = document.createElement('td');
+              td.className = `cell${isWeekend ? ' weekend' : ''}`;
+              const key = `${name}__${day.date}`;
+              const codes = assignments.get(key) || [];
+              if (codes.length) {
+                const display = codes.join(' / ');
+                td.innerHTML = `<div class="shift-block">${display}</div>`;
+              } else {
+                td.innerHTML = '<div class="shift-block"></div>';
+              }
+              tr.appendChild(td);
+            });
+            const sep = document.createElement('td');
+            sep.className = 'week-sep';
+            tr.appendChild(sep);
+          });
+
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    function showStatus(message, type) {
+      const statusEl = document.getElementById('previewStatus');
+      statusEl.textContent = message;
+      statusEl.style.display = 'block';
+      statusEl.className = `preview-status status-${type}`;
+    }
+
+    function saveToRota() {
+      if (!confirm('Save this preview to the rota? This action cannot be undone.')) {
+        return;
+      }
+      alert('(Placeholder) Preview saved to rota. Redirecting to rota view...');
+      window.location.href = 'rota.html';
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      loadPeriods();
+    });
+  </script>
+</body>
+</html>
