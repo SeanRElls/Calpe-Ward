@@ -547,7 +547,43 @@
           .order("created_at", { ascending: true });
 
         if (uErr) throw new Error(`Users load failed: ${uErr.message}`);
-        allUsers = (users || []).map(u => ({ ...u, name: u.name }));
+        allUsers = (users || []).map(u => ({ ...u, name: u.name, is_non_staff: false }));
+
+        // Load non-staff for this period
+        console.log("[LOAD] Loading period non-staff...");
+        try {
+          const { data: nonStaff, error: nsErr } = await supabaseClient.rpc("rpc_get_period_non_staff", {
+            p_token: window.currentToken,
+            p_period_id: periodId
+          });
+
+          if (nsErr) {
+            console.error("Non-staff load failed:", nsErr);
+          } else if (nonStaff && nonStaff.length > 0) {
+            console.log("[LOAD] Loaded", nonStaff.length, "non-staff");
+            
+            // Merge non-staff into allUsers with special flags
+            nonStaff.forEach(ns => {
+              // Use period_non_staff_id as the primary identifier so assignments map aligns
+              allUsers.push({
+                id: ns.period_non_staff_id,
+                non_staff_person_id: ns.id,
+                period_non_staff_id: ns.period_non_staff_id,
+                name: ns.name,
+                role_id: ns.role_group === 'staff_nurse' ? 2 : 3, // Map to SN or NA for grouping
+                is_admin: false,
+                display_order: ns.display_order,
+                is_non_staff: true,
+                category: ns.category, // 'student', 'bank', 'agency'
+                role_group: ns.role_group, // 'staff_nurse', 'nursing_assistant'
+                counts_towards_staffing: ns.counts_towards_staffing,
+                notes: ns.notes
+              });
+            });
+          }
+        } catch (e) {
+          console.error("Failed to load non-staff:", e);
+        }
 
         // Load shift catalogue
         console.log("[LOAD] Loading shifts...");
@@ -578,7 +614,9 @@
           
           const assignmentIds = [];
           (assignments || []).forEach(a => {
-            assignmentsMap.set(`${a.user_id}_${a.date}`, a);
+            // Handle both regular users and non-staff assignments
+            const key = a.user_id ? `${a.user_id}_${a.date}` : `${a.period_non_staff_id}_${a.date}`;
+            assignmentsMap.set(key, a);
             if (a.id) assignmentIds.push(a.id);
           });
           
@@ -812,6 +850,33 @@
           const nameTd = document.createElement("td");
           nameTd.className = "name-col";
           nameTd.textContent = u.name;
+
+          // Badge for non-staff categories
+          if (u.is_non_staff) {
+            const badge = document.createElement("span");
+            badge.className = "badge pill";
+            badge.style.marginLeft = "8px";
+            badge.style.fontSize = "11px";
+            badge.style.padding = "2px 6px";
+            badge.style.borderRadius = "999px";
+
+            if (u.category === "student") {
+              badge.textContent = "STUDENT";
+              badge.style.background = "#e0f2fe";
+              badge.style.color = "#0369a1";
+            } else if (u.category === "agency") {
+              badge.textContent = "AGENCY";
+              badge.style.background = "#fef3c7";
+              badge.style.color = "#92400e";
+            } else if (u.category === "bank") {
+              badge.textContent = "BANK";
+              badge.style.background = "#ecfccb";
+              badge.style.color = "#365314";
+            }
+
+            nameTd.appendChild(badge);
+          }
+
           tr.appendChild(nameTd);
 
           allWeeks.forEach(w => {
@@ -822,6 +887,9 @@
               const td = document.createElement("td");
               td.className = "cell" + (isWeekend ? " weekend" : "");
               td.dataset.userId = u.id;
+              if (u.is_non_staff && u.category === "student") {
+                td.dataset.isStudentNonStaff = "true";
+              }
               td.dataset.date = dateStr;
 
               // Get assignment
@@ -1051,18 +1119,55 @@
 
     // ========== GROUP USERS BY ROLE ==========
     function groupUsers(users) {
-      const buckets = { charge_nurse: [], staff_nurse: [], nursing_assistant: [] };
+      const buckets = {
+        charge_nurse: [],
+        staff_nurse: [],
+        nursing_assistant: [],
+        students: []
+      };
 
       users.forEach(u => {
-        const groupKey = getRoleGroupKey(u);
-        (buckets[groupKey] || buckets.staff_nurse).push(u);
+        // Students go into separate group
+        if (u.is_non_staff && u.category === 'student') {
+          buckets.students.push(u);
+        } else {
+          // Bank/agency and regular staff grouped by role
+          const groupKey = getRoleGroupKey(u);
+          (buckets[groupKey] || buckets.staff_nurse).push(u);
+        }
       });
 
-      return [
+      // Sort within buckets: primary by display_order (nulls last), secondary by name, and push non-staff to bottom within the bucket
+      const sortBucket = (arr) => {
+        arr.sort((a, b) => {
+          // Push non-staff to bottom of each group
+          if (a.is_non_staff && !b.is_non_staff) return 1;
+          if (!a.is_non_staff && b.is_non_staff) return -1;
+
+          const aOrder = a.display_order ?? 9999;
+          const bOrder = b.display_order ?? 9999;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return (a.name || "").localeCompare(b.name || "");
+        });
+      };
+
+      sortBucket(buckets.charge_nurse);
+      sortBucket(buckets.staff_nurse);
+      sortBucket(buckets.nursing_assistant);
+      sortBucket(buckets.students);
+
+      const groups = [
         { title: "Charge Nurses", className: "section-cn", items: buckets.charge_nurse },
         { title: "Staff Nurses", className: "section-sn", items: buckets.staff_nurse },
         { title: "Nursing Assistants", className: "section-na", items: buckets.nursing_assistant }
-      ].filter(g => g.items.length > 0);
+      ];
+
+      // Add students group if there are any
+      if (buckets.students.length > 0) {
+        groups.push({ title: "Students", className: "section-students", items: buckets.students });
+      }
+
+      return groups.filter(g => g.items.length > 0);
     }
 
     // ========== PATTERN WARNINGS ==========
@@ -1226,6 +1331,7 @@
               let total = 0;
               allUsers
                 .filter(u => rowDef.roleIds.includes(u.role_id))
+                .filter(u => !u.is_non_staff || u.counts_towards_staffing)
                 .forEach(u => {
                   const assignment = assignmentsMap.get(`${u.id}_${day.date}`);
                   if (assignment) {
@@ -2087,10 +2193,10 @@
           
           const { data: assignments, error: assignFetchErr } = await supabaseClient
             .from("rota_assignments")
-            .select("id, user_id, date, shift_id, shifts!shift_id(code), created_at")
+            .select("id, user_id, period_non_staff_id, date, shift_id, shifts!shift_id(code), created_at")
             .gte("date", periodData.start_date)
             .lte("date", periodData.end_date)
-            .order("user_id, date, created_at", { ascending: true });
+            .order("date, created_at", { ascending: true });
 
           console.log('[PUBLISH] Fetch assignments result:', { assignFetchErr, assignmentCount: assignments?.length });
           
@@ -2106,7 +2212,7 @@
             // Process in reverse chronological order and keep only the latest per user/date
             for (let i = assignments.length - 1; i >= 0; i--) {
               const a = assignments[i];
-              const key = `${a.user_id}_${a.date}`;
+              const key = `${a.user_id || a.period_non_staff_id}_${a.date}`;
               if (!seenUserDates.has(key)) {
                 seenUserDates.add(key);
                 uniqueAssignments.push(a);
@@ -2120,6 +2226,7 @@
               .map(a => ({
                 rota_assignment_id: a.id,
                 user_id: a.user_id,
+                period_non_staff_id: a.period_non_staff_id,
                 date: a.date,
                 old_shift_id: null,
                 old_shift_code: null,
@@ -2621,6 +2728,11 @@
               
               const key = `${userId}_${date}`;
               const newShift = draftShifts.find(s => s.id === shiftId);
+              const userMeta = getAllUsers().find(u => u.id === userId);
+              const isNonStaff = userMeta?.is_non_staff;
+              const historyAssignee = isNonStaff
+                ? { user_id: null, period_non_staff_id: userId }
+                : { user_id: userId, period_non_staff_id: null };
               
               // Optimistic update: update local map immediately
               const existing = assignmentsMap.get(key);
@@ -2632,7 +2744,13 @@
                 oldShiftCode = oldShift?.code || 'UNKNOWN';
                 existing.shift_id = shiftId;
               } else {
-                assignmentsMap.set(key, { user_id: userId, date, shift_id: shiftId, status: "draft" });
+                assignmentsMap.set(key, {
+                  user_id: isNonStaff ? null : userId,
+                  period_non_staff_id: isNonStaff ? userId : null,
+                  date,
+                  shift_id: shiftId,
+                  status: "draft"
+                });
               }
               
               // Re-render immediately
@@ -2642,7 +2760,7 @@
               const { data: existingDb, error: getErr } = await supabaseClient
                 .from("rota_assignments")
                 .select("id")
-                .eq("user_id", userId)
+                .eq(isNonStaff ? "period_non_staff_id" : "user_id", userId)
                 .eq("date", date)
                 .maybeSingle();
               
@@ -2668,7 +2786,7 @@
                         .from("rota_assignment_history")
                         .insert([{
                           rota_assignment_id: assignmentId,
-                          user_id: userId,
+                          ...historyAssignee,
                           date: date,
                           old_shift_id: oldShiftId || null,
                           old_shift_code: oldShiftCode || null,
@@ -2689,7 +2807,13 @@
                 } else {
                   const { data: newAssignment } = await supabaseClient
                     .from("rota_assignments")
-                    .insert([{ user_id: userId, date, shift_id: shiftId, status: currentEditContext === "published" ? "published" : "draft" }])
+                    .insert([{
+                      user_id: isNonStaff ? null : userId,
+                      period_non_staff_id: isNonStaff ? userId : null,
+                      date,
+                      shift_id: shiftId,
+                      status: currentEditContext === "published" ? "published" : "draft"
+                    }])
                     .select()
                     .single();
                   assignmentId = newAssignment?.id;
@@ -2704,7 +2828,7 @@
                       .from("rota_assignment_history")
                       .insert([{
                         rota_assignment_id: assignmentId,
-                        user_id: userId,
+                        ...historyAssignee,
                         date: date,
                         old_shift_id: null,
                         old_shift_code: null,
@@ -2818,6 +2942,11 @@
             },
             onClear: async (userId, date) => {
               const key = `${userId}_${date}`;
+              const userMeta = getAllUsers().find(u => u.id === userId);
+              const isNonStaff = userMeta?.is_non_staff;
+              const historyAssignee = isNonStaff
+                ? { user_id: null, period_non_staff_id: userId }
+                : { user_id: userId, period_non_staff_id: null };
               
               // Get the current shift info before deleting (for history)
               const existingAssignment = assignmentsMap.get(key);
@@ -2835,7 +2964,7 @@
               const { data: existing, error: getErr } = await supabaseClient
                 .from("rota_assignments")
                 .select("id")
-                .eq("user_id", userId)
+                .eq(isNonStaff ? "period_non_staff_id" : "user_id", userId)
                 .eq("date", date)
                 .maybeSingle();
               
@@ -2847,7 +2976,7 @@
                     .from("rota_assignment_history")
                     .insert([{
                       rota_assignment_id: existing.id,
-                      user_id: userId,
+                      ...historyAssignee,
                       date: date,
                       old_shift_id: oldShiftId,
                       old_shift_code: oldShiftCode || 'UNKNOWN',
