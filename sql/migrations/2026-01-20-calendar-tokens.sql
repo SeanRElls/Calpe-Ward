@@ -51,13 +51,13 @@ DECLARE
   v_existing_id uuid;
 BEGIN
   -- Authenticate and get user ID
-  v_uid := public.require_session_permissions(p_token);
+  v_uid := public.require_session_permissions(p_token::uuid);
   
   -- Generate cryptographically secure random token (32 bytes = 64 hex chars)
-  v_raw_token := encode(gen_random_bytes(32), 'hex');
+  v_raw_token := encode(extensions.gen_random_bytes(32), 'hex');
   
   -- Hash the token for storage (SHA-256)
-  v_token_hash := encode(digest(v_raw_token, 'sha256'), 'hex');
+  v_token_hash := encode(extensions.digest(v_raw_token, 'sha256'), 'hex');
   
   -- Check if user already has an active token
   SELECT id INTO v_existing_id
@@ -105,7 +105,7 @@ DECLARE
   v_revoked_count int;
 BEGIN
   -- Authenticate and get user ID
-  v_uid := public.require_session_permissions(p_token);
+  v_uid := public.require_session_permissions(p_token::uuid);
   
   -- Revoke all active tokens for this user
   UPDATE public.calendar_tokens
@@ -151,7 +151,7 @@ DECLARE
   v_token_record record;
 BEGIN
   -- Hash the incoming token
-  v_token_hash := encode(digest(p_calendar_token, 'sha256'), 'hex');
+  v_token_hash := encode(extensions.digest(p_calendar_token, 'sha256'), 'hex');
   
   -- Look up token and validate
   SELECT ct.user_id, ct.id INTO v_token_record

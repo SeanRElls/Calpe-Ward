@@ -352,54 +352,18 @@
 
     if (!statusEl) return;
 
-    try {
-      const supabase = typeof getSupabase === 'function' ? getSupabase() : window.supabaseClient;
-      if (!supabase || !window.currentUser?.id) return;
-
-      const { data, error } = await supabase
-        .from("calendar_tokens")
-        .select("created_at, last_used_at")
-        .eq("user_id", window.currentUser.id)
-        .is("revoked_at", null)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows
-        console.error("[CALENDAR] Error loading token status:", error);
-        return;
-      }
-
-      if (data) {
-        // Token exists
-        const created = new Date(data.created_at);
-        const lastUsed = data.last_used_at ? new Date(data.last_used_at) : null;
-        
-        statusEl.innerHTML = `
-          <div style="padding: 10px; background: #f0f9ff; border-radius: 6px; margin-bottom: 12px;">
-            <strong>✅ Active calendar subscription</strong><br>
-            <small>Created: ${created.toLocaleDateString()}</small><br>
-            ${lastUsed ? `<small>Last synced: ${lastUsed.toLocaleDateString()}</small>` : '<small>Not yet synced</small>'}
-          </div>
-        `;
-        
-        if (generateBtn) generateBtn.textContent = "Regenerate Link";
-        if (revokeBtn) revokeBtn.disabled = false;
-        if (linkDisplay) linkDisplay.style.display = "none"; // Hide until regenerated
-      } else {
-        // No token
-        statusEl.innerHTML = `
-          <div style="padding: 10px; background: #fef3c7; border-radius: 6px; margin-bottom: 12px;">
-            <strong>⚠️ No calendar subscription</strong><br>
-            <small>Generate a link to subscribe in your calendar app</small>
-          </div>
-        `;
-        
-        if (generateBtn) generateBtn.textContent = "Generate Calendar Link";
-        if (revokeBtn) revokeBtn.disabled = true;
-        if (linkDisplay) linkDisplay.style.display = "none";
-      }
-    } catch (err) {
-      console.error("[CALENDAR] Failed to load token status:", err);
-    }
+    // Simple status - don't query table (blocked by RLS)
+    // Users can generate/regenerate as needed
+    statusEl.innerHTML = `
+      <div style="padding: 10px; background: #f0f9ff; border-radius: 6px; margin-bottom: 12px;">
+        <strong>📅 Calendar Subscription</strong><br>
+        <small>Generate a secure link to subscribe to your published shifts in any calendar app</small>
+      </div>
+    `;
+    
+    if (generateBtn) generateBtn.textContent = "Generate Calendar Link";
+    if (revokeBtn) revokeBtn.disabled = false;
+    if (linkDisplay) linkDisplay.style.display = "none";
   }
 
   async function generateCalendarToken() {
@@ -440,12 +404,11 @@
 
       // Show success message
       if (okEl) {
-        okEl.textContent = "✅ Calendar link generated! Copy the URL below and add it to your calendar app.";
+        okEl.textContent = "✅ Calendar link generated! Copy the URL below and add it to your calendar app. Save this link - it won't be shown again.";
         okEl.style.display = "block";
       }
 
-      // Reload status
-      await loadCalendarTokenStatus();
+      // Don't reload status - keep the link visible
 
     } catch (error) {
       console.error("[CALENDAR] Error generating token:", error);
