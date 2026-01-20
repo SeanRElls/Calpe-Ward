@@ -358,6 +358,24 @@ function initDraftEditing({
     list.className = "shift-picker-list";
     const shifts = (getDraftShifts() || []).filter(shiftFilterFn);
     console.log("[SHIFT PICKER] getDraftShifts() returned:", shifts);
+
+    // Sort so role-group compatible shifts appear first, but still show all options (even for admins)
+    const userGroupCode = (() => {
+      if (user?.role_group === 'staff_nurse') return 'SN';
+      if (user?.role_group === 'nursing_assistant') return 'NA';
+      if (user?.role_id === 1) return 'CN';
+      if (user?.role_id === 2) return 'SN';
+      if (user?.role_id === 3) return 'NA';
+      return null;
+    })();
+
+    const sortedShifts = [...shifts].sort((a, b) => {
+      if (!userGroupCode) return (a.code || '').localeCompare(b.code || '');
+      const aAllowed = (a.allowed_staff_groups || '').includes(userGroupCode);
+      const bAllowed = (b.allowed_staff_groups || '').includes(userGroupCode);
+      if (aAllowed !== bAllowed) return aAllowed ? -1 : 1;
+      return (a.code || '').localeCompare(b.code || '');
+    });
     
     if (!shifts || shifts.length === 0) {
       list.innerHTML = `<div style="padding:12px; text-align:center; color:#999;">No shifts available.</div>`;
@@ -365,7 +383,7 @@ function initDraftEditing({
       return;
     }
     
-    shifts.forEach(shift => {
+    sortedShifts.forEach(shift => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "shift-card";

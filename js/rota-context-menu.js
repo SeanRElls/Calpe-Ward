@@ -60,8 +60,12 @@
   function onContextMenu(e) {
     const cell = e.target.closest('td.cell');
     if (!cell) return;
-    if (!window.currentUser?.is_admin) {
-      console.log('[CONTEXT MENU] User is not admin, skipping');
+
+    const isStudentNonStaff = cell.dataset.isStudentNonStaff === 'true';
+    const canMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+    const allowed = window.currentUser?.is_admin || (isStudentNonStaff && canMentor);
+    if (!allowed) {
+      console.log('[CONTEXT MENU] User lacks permission for this cell');
       return;
     }
 

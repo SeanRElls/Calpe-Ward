@@ -8,7 +8,8 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.rota_assignment_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   rota_assignment_id bigint NOT NULL,
-  user_id uuid NOT NULL,
+  user_id uuid,
+  period_non_staff_id uuid REFERENCES public.period_non_staff(id) ON DELETE CASCADE,
   date date NOT NULL,
   old_shift_id bigint,
   old_shift_code text,
@@ -17,12 +18,17 @@ CREATE TABLE IF NOT EXISTS public.rota_assignment_history (
   change_reason text,
   changed_by uuid,
   changed_by_name text,
-  changed_at timestamp with time zone DEFAULT now()
-  -- NO foreign key constraint - we want to preserve history even if assignments are deleted
+  changed_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT rota_assignment_history_one_assignee CHECK (
+    (user_id IS NOT NULL AND period_non_staff_id IS NULL) OR
+    (user_id IS NULL AND period_non_staff_id IS NOT NULL)
+  )
+  -- NO foreign key constraint on rota_assignment_id - we want to preserve history even if assignments are deleted
 );
 
 CREATE INDEX IF NOT EXISTS idx_assignment_history_assignment ON public.rota_assignment_history(rota_assignment_id);
-CREATE INDEX IF NOT EXISTS idx_assignment_history_user_date ON public.rota_assignment_history(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_assignment_history_user_date ON public.rota_assignment_history(user_id, date) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_assignment_history_non_staff_date ON public.rota_assignment_history(period_non_staff_id, date) WHERE period_non_staff_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_assignment_history_changed_at ON public.rota_assignment_history(changed_at DESC);
 
 -- ============================================================================
@@ -62,7 +68,7 @@ BEGIN
   SELECT
     history.id,
     history.rota_assignment_id,
-    users_table.name,
+    COALESCE(users_table.name, non_staff_people.name) AS user_name,
     history.date,
     history.old_shift_code,
     history.new_shift_code,
@@ -71,6 +77,8 @@ BEGIN
     history.changed_at
   FROM public.rota_assignment_history AS history
   LEFT JOIN public.users AS users_table ON users_table.id = history.user_id
+  LEFT JOIN public.period_non_staff AS pns ON pns.id = history.period_non_staff_id
+  LEFT JOIN public.non_staff_people AS non_staff_people ON non_staff_people.id = pns.non_staff_person_id
   WHERE history.rota_assignment_id = p_assignment_id
   ORDER BY history.changed_at DESC;
 END;
@@ -119,7 +127,7 @@ BEGIN
     history.changed_by_name,
     history.changed_at
   FROM public.rota_assignment_history AS history
-  WHERE history.user_id = p_user_id
+  WHERE (history.user_id = p_user_id OR history.period_non_staff_id = p_user_id)
     AND history.date = p_date
   ORDER BY history.changed_at DESC;
 END;
