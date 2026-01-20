@@ -457,6 +457,61 @@ BEGIN
 END;
 $$;
 
+-- RPC: List non-staff profiles (with mentor/admin gating)
+CREATE OR REPLACE FUNCTION public.rpc_list_non_staff_people(
+    p_token UUID,
+    p_category TEXT DEFAULT NULL,
+    p_role_group TEXT DEFAULT NULL,
+    p_query TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+    id UUID,
+    name TEXT,
+    category TEXT,
+    role_group TEXT,
+    notes TEXT,
+    is_active BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_is_mentor BOOLEAN;
+BEGIN
+    SELECT user_id INTO v_user_id
+    FROM public.sessions
+    WHERE token = p_token
+      AND expires_at > NOW()
+      AND revoked_at IS NULL;
+
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    SELECT is_admin INTO v_is_admin FROM public.users WHERE id = v_user_id;
+    SELECT EXISTS(
+        SELECT 1 FROM public.user_permission_groups upg
+        JOIN public.permission_groups pg ON upg.group_id = pg.id
+        WHERE upg.user_id = v_user_id AND pg.name = 'Mentor'
+    ) INTO v_is_mentor;
+
+    RETURN QUERY
+    SELECT
+        nsp.id, nsp.name, nsp.category, nsp.role_group, nsp.notes, nsp.is_active
+    FROM public.non_staff_people nsp
+    WHERE nsp.is_active = TRUE
+      AND (p_role_group IS NULL OR nsp.role_group = p_role_group)
+      AND (p_category IS NULL OR nsp.category = p_category)
+      AND (p_query IS NULL OR nsp.name ILIKE '%' || p_query || '%')
+      AND (
+          v_is_admin OR (v_is_mentor AND nsp.category = 'student')
+      )
+    ORDER BY nsp.name;
+END;
+$$;
+
 COMMIT;
 
 -- =====================================================

@@ -73,6 +73,7 @@
       <button id="unpublishBtn" class="btn" style="margin-left: 12px; display: none; background: #dc2626; color: white; padding: 10px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">⚠️ Unpublish</button>
       <button id="toggleEditingBtn" class="btn" style="margin-left: 8px;">🔒 Locked</button>
       <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: auto;">👁️ Show Requests</button>
+      <button type="button" id="addNonStaffBtn" class="btn" style="margin-left: 8px; display:none;">➕ Add Non‑Staff</button>
     </div>
 
     <!-- Metadata Display (shown when editing) -->
@@ -179,6 +180,52 @@
           <button id="shiftPickerSave" type="button" class="primary" style="display: none;">Save</button>
           <button id="shiftPickerClear" type="button">Clear</button>
           <button id="shiftPickerClose" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Non-Staff Modal -->
+    <div class="modal-backdrop" id="nonStaffModalBackdrop" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nonStaffModalTitle">
+        <h2 id="nonStaffModalTitle">Add Non‑Staff to Period</h2>
+        <p class="subtitle">Create or select a profile, then add to this period.</p>
+        <div class="modal-bubble" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div>
+            <label style="font-size:12px; color:#64748b;">Category</label>
+            <select id="nsCategory" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+              <option value="student">Student</option>
+              <option value="bank">Bank</option>
+              <option value="agency">Agency</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px; color:#64748b;">Role Group</label>
+            <select id="nsRoleGroup" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+              <option value="staff_nurse">Staff Nurse</option>
+              <option value="nursing_assistant">Nursing Assistant</option>
+            </select>
+          </div>
+          <div style="grid-column:1 / span 2; display:flex; gap:8px; align-items:center;">
+            <input id="nsSearch" placeholder="Search existing profiles..." style="flex:1; padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
+            <button id="nsSearchBtn" type="button">Search</button>
+          </div>
+          <div style="grid-column:1 / span 2; max-height:220px; overflow:auto; border:1px solid #e5e7eb; border-radius:6px; padding:8px;" id="nsResults"></div>
+        </div>
+        <div class="modal-bubble" style="margin-top:12px;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:center;">
+            <div>
+              <label style="font-size:12px; color:#64748b;">Or create new profile</label>
+              <input id="nsNewName" placeholder="Full name" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px;" />
+            </div>
+            <div>
+              <label style="font-size:12px; color:#64748b; display:block;">Counts towards staffing</label>
+              <input id="nsCounts" type="checkbox" />
+            </div>
+          </div>
+        </div>
+        <div class="btns">
+          <button id="nsAddBtn" type="button" class="primary">Add to Period</button>
+          <button id="nsCloseBtn" type="button">Close</button>
         </div>
       </div>
     </div>
@@ -447,6 +494,12 @@
       const viewAsBtn = document.getElementById("viewAsBtn");
       if (viewAsBtn) viewAsBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
 
+      // Show Add Non-Staff if admin or mentor
+      const addNsBtn = document.getElementById("addNonStaffBtn");
+      const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+      if (addNsBtn) addNsBtn.style.display = (currentUser.is_admin || isMentor) ? "inline-block" : "none";
+      if (addNsBtn) addNsBtn.onclick = openNonStaffModal;
+
       return currentUser;
     }
 
@@ -507,6 +560,126 @@
         await loadPeriod(data[0].id);
       }
     }
+
+    // ========== NON-STAFF MODAL LOGIC ==========
+    function openNonStaffModal() {
+      const backdrop = document.getElementById('nonStaffModalBackdrop');
+      if (!backdrop) return;
+      const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+      // Mentors default to students and lock categories
+      const categorySel = document.getElementById('nsCategory');
+      if (categorySel) {
+        categorySel.value = 'student';
+        categorySel.disabled = !window.currentUser?.is_admin && isMentor;
+      }
+      const counts = document.getElementById('nsCounts');
+      if (counts) counts.checked = false;
+      document.getElementById('nsSearch')?.setAttribute('value','');
+      document.getElementById('nsResults').innerHTML = '';
+      backdrop.setAttribute('aria-hidden','false');
+    }
+
+    function closeNonStaffModal() {
+      const backdrop = document.getElementById('nonStaffModalBackdrop');
+      if (backdrop) backdrop.setAttribute('aria-hidden','true');
+    }
+
+    async function searchNonStaff() {
+      const category = document.getElementById('nsCategory')?.value || null;
+      const roleGroup = document.getElementById('nsRoleGroup')?.value || null;
+      const query = document.getElementById('nsSearch')?.value || null;
+      const resultsEl = document.getElementById('nsResults');
+      if (!resultsEl) return;
+      resultsEl.innerHTML = '<div style="color:#64748b;">Searching...</div>';
+      try {
+        const { data, error } = await supabaseClient.rpc('rpc_list_non_staff_people', {
+          p_token: window.currentToken,
+          p_category: category,
+          p_role_group: roleGroup,
+          p_query: query
+        });
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          resultsEl.innerHTML = '<div style="color:#64748b;">No matches.</div>';
+          return;
+        }
+        resultsEl.innerHTML = '';
+        data.forEach(row => {
+          const line = document.createElement('div');
+          line.style.display = 'flex';
+          line.style.justifyContent = 'space-between';
+          line.style.alignItems = 'center';
+          line.style.padding = '6px 4px';
+          const left = document.createElement('div');
+          left.textContent = `${row.name} · ${row.category} · ${row.role_group}`;
+          const btn = document.createElement('button');
+          btn.textContent = 'Add';
+          btn.addEventListener('click', () => addExistingNonStaff(row.id, row.category));
+          line.appendChild(left);
+          line.appendChild(btn);
+          resultsEl.appendChild(line);
+        });
+      } catch (e) {
+        resultsEl.innerHTML = `<div style="color:#dc2626;">Error: ${e?.message || e}</div>`;
+      }
+    }
+
+    async function addExistingNonStaff(nonStaffPersonId, category) {
+      const counts = document.getElementById('nsCounts');
+      const countsVal = counts?.checked ?? (category !== 'student');
+      try {
+        const { data, error } = await supabaseClient.rpc('rpc_add_non_staff_to_period', {
+          p_token: window.currentToken,
+          p_period_id: currentPeriod,
+          p_non_staff_person_id: nonStaffPersonId,
+          p_counts_towards_staffing: countsVal,
+          p_display_order: 9999
+        });
+        if (error) throw error;
+        closeNonStaffModal();
+        await loadPeriod(currentPeriod);
+      } catch (e) {
+        alert('Failed to add: ' + (e?.message || e));
+      }
+    }
+
+    async function addNewNonStaff() {
+      const name = document.getElementById('nsNewName')?.value?.trim();
+      const category = document.getElementById('nsCategory')?.value;
+      const roleGroup = document.getElementById('nsRoleGroup')?.value;
+      const counts = document.getElementById('nsCounts')?.checked ?? (category !== 'student');
+      if (!name) {
+        alert('Enter a name for the new profile.');
+        return;
+      }
+      try {
+        const { data: created, error: addErr } = await supabaseClient.rpc('rpc_add_non_staff_person', {
+          p_token: window.currentToken,
+          p_name: name,
+          p_category: category,
+          p_role_group: roleGroup,
+          p_notes: null
+        });
+        if (addErr) throw addErr;
+        const newId = created?.id;
+        if (!newId) throw new Error('Create returned no id');
+        await addExistingNonStaff(newId, category);
+      } catch (e) {
+        alert('Failed to create/add: ' + (e?.message || e));
+      }
+    }
+
+    // Bind modal buttons after DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchBtn = document.getElementById('nsSearchBtn');
+      if (searchBtn) searchBtn.addEventListener('click', searchNonStaff);
+      const closeBtn = document.getElementById('nsCloseBtn');
+      if (closeBtn) closeBtn.addEventListener('click', closeNonStaffModal);
+      const addBtn = document.getElementById('nsAddBtn');
+      if (addBtn) addBtn.addEventListener('click', addNewNonStaff);
+      const backdrop = document.getElementById('nonStaffModalBackdrop');
+      if (backdrop) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeNonStaffModal(); });
+    });
 
     // ========== LOAD PERIOD DATA ==========
     async function loadPeriod(periodId) {
@@ -875,6 +1048,35 @@
             }
 
             nameTd.appendChild(badge);
+
+            // Remove from period (admins, or mentors for students)
+            const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+            if (window.currentUser?.is_admin || (isMentor && u.category === 'student')) {
+              const rmBtn = document.createElement('button');
+              rmBtn.textContent = 'Remove';
+              rmBtn.style.marginLeft = '8px';
+              rmBtn.style.fontSize = '11px';
+              rmBtn.style.padding = '2px 6px';
+              rmBtn.style.border = '1px solid #e5e7eb';
+              rmBtn.style.borderRadius = '6px';
+              rmBtn.style.background = '#fff';
+              rmBtn.addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                const confirmMsg = `Remove ${u.name} from this period?`;
+                if (!confirm(confirmMsg)) return;
+                try {
+                  const { error } = await supabaseClient.rpc('rpc_remove_non_staff_from_period', {
+                    p_token: window.currentToken,
+                    p_period_non_staff_id: u.id
+                  });
+                  if (error) throw error;
+                  await loadPeriod(currentPeriod);
+                } catch (e) {
+                  alert('Failed to remove: ' + (e?.message || e));
+                }
+              });
+              nameTd.appendChild(rmBtn);
+            }
           }
 
           tr.appendChild(nameTd);
