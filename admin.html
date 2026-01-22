@@ -664,12 +664,11 @@
         <a class="is-active" data-panel="overview" href="#overview">Status</a>
         <a href="preview.html">📊 Preview Generator</a>
         <a data-panel="users" href="#users">Users</a>
-        <a data-panel="non-staff" href="#non-staff">Non‑Staff</a>
+        <a data-panel="non-staff" href="#non-staff">Non-Staff</a>
         <a data-panel="bank-holidays" href="#bank-holidays">Bank Holidays</a>
         <a data-panel="permissions" href="#permissions">Permissions</a>
         <a data-panel="patterns" href="#patterns">Patterns</a>
         <a data-panel="rota-periods" href="#rota-periods">Rota Periods</a>
-        <a data-panel="drafting" href="#drafting">Draft Controls</a>
         <a data-panel="notices" href="#notices">Notices</a>
         <a data-panel="shift-swaps" href="#shift-swaps">Shift Swaps</a>
         <a data-panel="shift-catalogue" href="#shift-catalogue">Shift Catalogue</a>
@@ -687,33 +686,141 @@
 
       <div class="grid">
         <section id="overview" class="section panel">
-          <h2>Status</h2>
-          <p>Snapshot of the current period, publishing, and activity.</p>
-          <div class="row">
-            <div class="field">
-              <h3>Current Period</h3>
-              <p>Active: 25 Jan - 28 Feb 2026</p>
+          <h2>Status Dashboard</h2>
+          <p>Real-time snapshot of current period, publishing, and staffing.</p>
+          
+          <!-- CURRENT PERIOD SECTION -->
+          <div style="border-top:2px solid #e0e0e0; padding-top:12px; margin-top:12px;">
+            <h3 style="margin:0 0 12px 0; font-size:14px; color:var(--dim); text-transform:uppercase; font-weight:600;">
+              Current Period
+            </h3>
+            
+            <!-- Period & Publishing Status -->
+            <div class="row" style="gap:12px; margin-top:12px;">
+              <div class="field" style="background:#f5f5f5; padding:12px; border-radius:8px; flex:1;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">PERIOD</h3>
+                <p id="statusPeriodText" style="margin:0; font-size:14px; font-weight:600;">Loading...</p>
+                <div id="statusPeriodProgress" style="width:100%; height:4px; background:#e0e0e0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                  <div style="width:45%; height:100%; background:#2ecc71; border-radius:2px;"></div>
+                </div>
+              </div>
+              <div class="field" style="background:#f5f5f5; padding:12px; border-radius:8px; flex:1;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">STATUS</h3>
+                <p id="statusDraftText" style="margin:0; font-size:14px; font-weight:600;">
+                  <span id="draftBadge" style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; background:#fff3cd; color:#856404;">Loading</span>
+                </p>
+              </div>
             </div>
-            <div class="field">
-              <h3>Draft Status</h3>
-              <p>Draft open - not published</p>
+
+            <!-- Requests & Staffing -->
+            <div class="row" style="gap:12px; margin-top:12px;">
+              <div class="field" style="background:#f5f5f5; padding:12px; border-radius:8px; flex:1;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">REQUESTS WINDOW</h3>
+                <p id="statusRequestsText" style="margin:0; font-size:14px; font-weight:600;">Loading...</p>
+                <div style="font-size:12px; color:var(--dim); margin-top:4px;">
+                  <span id="daysUntilClose" style="font-weight:600;">-</span> days remaining
+                </div>
+              </div>
+              <div class="field" style="background:#f5f5f5; padding:12px; border-radius:8px; flex:1;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">COVERAGE</h3>
+                <p id="statusCoverageText" style="margin:0; font-size:14px; font-weight:600;">Loading...</p>
+                <div id="statusCoverageProgress" style="width:100%; height:4px; background:#e0e0e0; border-radius:2px; margin-top:8px; overflow:hidden;">
+                  <div id="coverageBar" style="width:0%; height:100%; background:#3498db; border-radius:2px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Stats Cards -->
+            <div class="row" style="gap:12px; margin-top:12px;">
+              <div class="field" style="background:#e8f4f8; padding:12px; border-radius:8px; flex:1; border-left:4px solid #3498db;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">SWAP REQUESTS</h3>
+                <p style="margin:0; font-size:18px; font-weight:700; color:#3498db;" id="swapCount">-</p>
+                <p style="margin:4px 0 0 0; font-size:12px; color:var(--dim);">pending approval</p>
+              </div>
+              <div class="field" style="background:#fef5e7; padding:12px; border-radius:8px; flex:1; border-left:4px solid #f39c12;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">TIME-OFF REQUESTS</h3>
+                <p style="margin:0; font-size:18px; font-weight:700; color:#f39c12;" id="timeoffCount">-</p>
+                <p style="margin:4px 0 0 0; font-size:12px; color:var(--dim);">awaiting decision</p>
+              </div>
+              <div class="field" style="background:#eafaf1; padding:12px; border-radius:8px; flex:1; border-left:4px solid #27ae60;">
+                <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">TOTAL STAFF</h3>
+                <p style="margin:0; font-size:18px; font-weight:700; color:#27ae60;" id="staffCount">-</p>
+                <p style="margin:4px 0 0 0; font-size:12px; color:var(--dim);">active this period</p>
+              </div>
+            </div>
+
+            <!-- Alerts Section -->
+            <div id="statusAlerts" style="margin-top:12px; display:none;">
+              <h4 style="margin:0 0 8px 0; font-size:12px; color:var(--dim); text-transform:uppercase; font-weight:600;">Alerts</h4>
+              <div id="alertsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+              <button class="btn" id="quickPublishBtn" type="button" style="font-size:13px;">Publish Period</button>
+              <button class="btn" id="quickSwapsBtn" type="button" style="font-size:13px;">View Swaps</button>
+              <button class="btn" id="quickTimeoffBtn" type="button" style="font-size:13px;">View Time-Off</button>
             </div>
           </div>
-          <div class="row" style="margin-top:12px;">
-            <div class="field">
-              <h3>Requests Window</h3>
-              <p>Closes: 09/01/2026, 23:59</p>
-            </div>
-            <div class="field">
-              <h3>Recent Activity</h3>
-              <p>2 notices updated, 1 week re-opened</p>
+
+          <!-- PREVIOUS PERIOD (COLLAPSIBLE) -->
+          <div style="border-top:2px solid #e0e0e0; padding-top:12px; margin-top:12px;">
+            <button id="prevPeriodToggle" type="button" style="
+              background:none;
+              border:none;
+              padding:0;
+              cursor:pointer;
+              display:flex;
+              align-items:center;
+              gap:8px;
+              font-size:14px;
+              font-weight:600;
+              color:var(--dim);
+              text-transform:uppercase;
+              width:100%;
+              justify-content:space-between;
+            ">
+              <span>Previous Period</span>
+              <span id="prevPeriodToggleIcon" style="font-size:12px; transition:transform 0.2s;">▶</span>
+            </button>
+            
+            <div id="prevPeriodContent" style="display:none; margin-top:12px;">
+              <!-- Previous Period & Publishing Status -->
+              <div class="row" style="gap:12px; margin-top:12px;">
+                <div class="field" style="background:#f9f9f9; padding:12px; border-radius:8px; flex:1;">
+                  <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">PERIOD</h3>
+                  <p id="prevPeriodText" style="margin:0; font-size:14px; font-weight:600;">No previous period</p>
+                </div>
+                <div class="field" style="background:#f9f9f9; padding:12px; border-radius:8px; flex:1;">
+                  <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">STATUS</h3>
+                  <p id="prevStatusText" style="margin:0; font-size:14px; font-weight:600;">
+                    <span id="prevDraftBadge" style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; background:#e0e0e0; color:#666;">-</span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Previous Period Stats -->
+              <div class="row" style="gap:12px; margin-top:12px;">
+                <div class="field" style="background:#f9f9f9; padding:12px; border-radius:8px; flex:1; border-left:4px solid #bbb;">
+                  <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">COVERAGE</h3>
+                  <p style="margin:0; font-size:16px; font-weight:700; color:#666;" id="prevCoverageText">-</p>
+                </div>
+                <div class="field" style="background:#f9f9f9; padding:12px; border-radius:8px; flex:1; border-left:4px solid #bbb;">
+                  <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">TOTAL STAFF</h3>
+                  <p style="margin:0; font-size:16px; font-weight:700; color:#666;" id="prevStaffCount">-</p>
+                </div>
+                <div class="field" style="background:#f9f9f9; padding:12px; border-radius:8px; flex:1; border-left:4px solid #bbb;">
+                  <h3 style="margin:0 0 4px 0; font-size:13px; color:var(--dim);">COMPLETED</h3>
+                  <p style="margin:0; font-size:16px; font-weight:700; color:#27ae60;" id="prevCompletedText">-</p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
         <section id="non-staff" class="section panel" style="display:none;">
-          <h2>Non‑Staff Profiles</h2>
-          <p>Create, edit, activate/deactivate non‑staff profiles (students, bank, agency).</p>
+          <h2>Non-Staff Profiles</h2>
+          <p>Create, edit, activate/deactivate non-staff profiles (students, bank, agency).</p>
 
           <div class="subtabs" role="tablist" aria-label="Non-staff management pages">
             <button class="subtab is-active" data-ns-page="view" type="button">View profiles</button>
@@ -723,7 +830,7 @@
 
           <!-- View -->
           <div id="nsPageView" class="ns-page">
-            <div class="accordion-sub">Search and manage non‑staff profiles.</div>
+            <div class="accordion-sub">Search and manage non-staff profiles.</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px;">
               <div style="font-weight:700;">Profiles</div>
               <label style="display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--muted);">
@@ -751,7 +858,7 @@
 
           <!-- Add -->
           <div id="nsPageAdd" class="ns-page" style="display:none;">
-            <div class="accordion-sub">Create a new non‑staff profile.</div>
+            <div class="accordion-sub">Create a new non-staff profile.</div>
             <div class="field" style="margin-top:10px;">
               <h3>New profile</h3>
               <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
@@ -1087,18 +1194,11 @@
             <div style="border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:16px; background:#fff;">
               <div style="font-weight:700; margin-bottom:10px;">Generate Next 5-Week Period</div>
               <div class="page-subtitle" id="adminGeneratePreview" style="margin-bottom:12px;">Preview will appear here.</div>
+              <div id="adminGenerateFutureList" style="font-size:13px; line-height:1.5; color:var(--muted); margin-bottom:12px; border-top:1px solid var(--line); padding-top:10px;">
+                Future periods will appear here.
+              </div>
               <button id="adminGenerateBtn" class="btn primary" type="button">Generate New Period</button>
             </div>
-          </div>
-        </section>
-
-        <section id="drafting" class="section panel" style="display:none;">
-          <h2>Draft Controls</h2>
-          <p>Unlock editing, publish, and approve weeks (annotation only).</p>
-          <div class="actions">
-            <button class="btn" type="button">Unlock Editing</button>
-            <button class="btn primary" type="button">Publish Period</button>
-            <button class="btn" type="button">Annotate CNM Approval</button>
           </div>
         </section>
 
@@ -1531,7 +1631,9 @@
               <option value="login">Login Events</option>
             </select>
             
-            <input id="auditFilterUser" class="control" placeholder="Filter by name or ID..." style="min-width:180px;" />
+            <input id="auditFilterActorUser" class="control" placeholder="Who actioned..." style="min-width:180px;" />
+            
+            <input id="auditFilterTargetUser" class="control" placeholder="Target user..." style="min-width:180px;" />
             
             <label style="font-size:12px; color:var(--dim);">From:</label>
             <input id="auditFilterStartDate" class="control" type="date" style="max-width:150px;" />
@@ -1567,6 +1669,7 @@
   <!-- config.js already loaded in <head>, removed duplicate -->
   <script src="js/notifications-shared.js" defer></script>
   <script src="js/view-as.js?v=8"></script>
+  <script src="js/admin-status-dashboard.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/audit-trail-enhanced.js"></script>
   <script src="js/admin-periods.js"></script>

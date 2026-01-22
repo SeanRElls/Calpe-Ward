@@ -34,9 +34,14 @@ function initAuditTrail() {
  */
 async function loadUsers() {
   try {
-    const { data: users, error } = await window.supabaseClient
-      .from("users")
-      .select("id, name, is_admin, role_id");
+    const token = window.currentToken || sessionStorage.getItem("calpe_ward_token");
+    if (!token) {
+      throw new Error("No session token available for audit user list.");
+    }
+    const { data: users, error } = await window.supabaseClient.rpc("admin_get_users", {
+      p_token: token,
+      p_include_inactive: true
+    });
     
     if (error) throw error;
     
@@ -60,7 +65,8 @@ async function loadUsers() {
  */
 function clearFilters() {
   document.getElementById("auditFilterAction").value = "";
-  document.getElementById("auditFilterUser").value = "";
+  document.getElementById("auditFilterActorUser").value = "";
+  document.getElementById("auditFilterTargetUser").value = "";
   
   const endDate = new Date();
   const startDate = new Date();
@@ -92,7 +98,8 @@ async function loadAuditLogs() {
   }
 
   const filterAction = document.getElementById("auditFilterAction")?.value?.trim() || null;
-  const filterUser = document.getElementById("auditFilterUser")?.value?.trim() || null;
+  const filterActorUser = document.getElementById("auditFilterActorUser")?.value?.trim() || null;
+  const filterTargetUser = document.getElementById("auditFilterTargetUser")?.value?.trim() || null;
   const startDate = document.getElementById("auditFilterStartDate")?.value || null;
   const endDate = document.getElementById("auditFilterEndDate")?.value || null;
 
@@ -115,9 +122,11 @@ async function loadAuditLogs() {
     // Use unified audit trail RPC
     const { data: logs, error } = await window.supabaseClient
       .rpc("get_unified_audit_trail", {
+        p_token: window.currentToken,
         p_days_back: Math.max(daysBack, 365), // Cap at 365 days
         p_action_filter: filterAction,
-        p_user_filter: filterUser
+        p_user_filter: filterActorUser,
+        p_target_user_filter: filterTargetUser
       });
 
     if (error) {
@@ -324,28 +333,28 @@ async function exportAuditLogsCSV() {
       return;
     }
 
+    const daysBack = Math.ceil((new Date() - new Date(startDate + "T00:00:00")) / (1000 * 60 * 60 * 24));
     const { data: logs, error } = await window.supabaseClient
-      .from("audit_logs")
-      .select("*")
-      .gte("created_at", startDate + "T00:00:00")
-      .lte("created_at", endDate + "T23:59:59")
-      .order("created_at", { ascending: false })
-      .limit(10000);
+      .rpc("get_unified_audit_trail", {
+        p_token: window.currentToken,
+        p_days_back: Math.max(daysBack, 365),
+        p_action_filter: null,
+        p_user_filter: null,
+        p_target_user_filter: null
+      });
 
     if (error) throw error;
 
     // Build CSV with name resolution
-    const headers = ["Timestamp", "Action", "User", "Impersonator", "Target User", "Resource Type", "Resource ID", "Status", "Error Message"];
+    const headers = ["Timestamp", "Action", "User", "Target User", "Resource Type", "Status", "Details"];
     const rows = logs.map((log) => [
       new Date(log.created_at).toLocaleString("en-GB"),
       log.action || "",
       getUserName(log.user_id),
-      log.impersonator_user_id ? getUserName(log.impersonator_user_id) : "",
       log.target_user_id ? getUserName(log.target_user_id) : "",
       log.resource_type || "",
-      log.resource_id || "",
       log.status || "",
-      log.error_message || ""
+      JSON.stringify(log.metadata || {})
     ]);
 
     const csv = [headers, ...rows].map(row => row.map(escapeCSV).join(",")).join("\n");

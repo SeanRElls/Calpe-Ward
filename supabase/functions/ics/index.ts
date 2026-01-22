@@ -29,6 +29,7 @@ interface ShiftRow {
   start_time: string | null;
   end_time: string | null;
   hours_value: number;
+  comments: string | null;
 }
 
 /**
@@ -139,11 +140,16 @@ function buildVEvent(shift: ShiftRow): string {
     vevent += foldLine(`DTSTART:${formatICSDateTime(dtStart)}`);
     vevent += foldLine(`DTEND:${formatICSDateTime(dtEnd)}`);
     
-    // Description with times
+    // Description: times + comments
     const startTimeDisplay = formatTimeDisplay(shift.start_time);
     const endTimeDisplay = formatTimeDisplay(shift.end_time);
-    const description = escapeICSText(`Hours: ${startTimeDisplay} – ${endTimeDisplay}`);
-    vevent += foldLine(`DESCRIPTION:${description}`);
+    let description = `Hours: ${startTimeDisplay} - ${endTimeDisplay}`;
+    
+    if (shift.comments && shift.comments.trim()) {
+      description += `\n\nNotes:\n${shift.comments}`;
+    }
+    
+    vevent += foldLine(`DESCRIPTION:${escapeICSText(description)}`);
   } else {
     // All-day event (e.g., Leave)
     const dtStart = new Date(year, month - 1, day);
@@ -151,7 +157,14 @@ function buildVEvent(shift: ShiftRow): string {
     
     vevent += foldLine(`DTSTART;VALUE=DATE:${formatICSDate(dtStart)}`);
     vevent += foldLine(`DTEND;VALUE=DATE:${formatICSDate(dtEnd)}`);
-    vevent += foldLine(`DESCRIPTION:All-day event`);
+    
+    // Description: event type + comments
+    let description = "All-day event";
+    if (shift.comments && shift.comments.trim()) {
+      description += `\n\nNotes:\n${shift.comments}`;
+    }
+    
+    vevent += foldLine(`DESCRIPTION:${escapeICSText(description)}`);
   }
   
   vevent += foldLine(`SUMMARY:${summary}`);
@@ -179,8 +192,12 @@ function buildVCalendar(shifts: ShiftRow[]): string {
   ics += foldLine("X-WR-CALDESC:Your published shift assignments");
   ics += foldLine("X-WR-TIMEZONE:Europe/Madrid");
   
-  // Add each shift as VEVENT
+  // Add each shift as VEVENT (skip O shifts - time off)
   for (const shift of shifts) {
+    // Skip shifts starting with "O" (time off)
+    if (shift.shift_code.startsWith("O")) {
+      continue;
+    }
     ics += buildVEvent(shift);
   }
   

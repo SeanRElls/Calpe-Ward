@@ -27,13 +27,21 @@ function initStaffingRequirements() {
   let currentStaffingPeriod = null;
   let staffingRequirementsData = new Map(); // date -> requirements
 
+  function getStaffingToken() {
+    const token = window.currentToken || sessionStorage.getItem("calpe_ward_token");
+    if (!token) {
+      throw new Error("No session token available for staffing requirements.");
+    }
+    return token;
+  }
+
   async function loadStaffingPeriods() {
     try {
       console.log("[STAFFING] Loading periods...");
-      const { data: periods, error } = await window.supabaseClient
-        .from("rota_periods")
-        .select("id, name, start_date, end_date")
-        .order("start_date", { ascending: false });
+      const token = getStaffingToken();
+      const { data: periods, error } = await window.supabaseClient.rpc("rpc_get_rota_periods", {
+        p_token: token
+      });
 
       if (error) throw error;
 
@@ -71,15 +79,16 @@ function initStaffingRequirements() {
   async function loadStaffingRequirements(periodId) {
     try {
       console.log("[STAFFING] Loading requirements for period", periodId);
+      const token = getStaffingToken();
       
       // Get period details
-      const { data: period, error: pErr } = await window.supabaseClient
-        .from("rota_periods")
-        .select("start_date, end_date")
-        .eq("id", periodId)
-        .single();
+      const { data: periods, error: pErr } = await window.supabaseClient.rpc("rpc_get_rota_periods", {
+        p_token: token
+      });
 
       if (pErr) throw pErr;
+      const period = (periods || []).find(p => p.id === periodId);
+      if (!period) throw new Error("Selected period not found.");
 
       // Get all dates in period
       const dates = [];
@@ -90,10 +99,10 @@ function initStaffingRequirements() {
       }
 
       // Load requirements
-      const { data: reqs, error: rErr } = await window.supabaseClient
-        .from("staffing_requirements")
-        .select("*")
-        .eq("period_id", periodId);
+      const { data: reqs, error: rErr } = await window.supabaseClient.rpc("admin_get_staffing_requirements", {
+        p_token: token,
+        p_period_id: periodId
+      });
 
       if (rErr) console.warn("[STAFFING] Load warning:", rErr);
       
@@ -156,21 +165,17 @@ function initStaffingRequirements() {
         const nightNa = parseFloat(staffingRequirementsContainer.querySelector(`input[data-date="${date}"][data-field="night_na_required"]`).value) || 2;
 
         try {
-          const req = staffingRequirementsData.get(date);
-          if (req && req.id) {
-            // Update
-            const { error } = await window.supabaseClient
-              .from("staffing_requirements")
-              .update({ day_sn_required: daySn, day_na_required: dayNa, night_sn_required: nightSn, night_na_required: nightNa })
-              .eq("id", req.id);
-            if (error) throw error;
-          } else {
-            // Insert
-            const { error } = await window.supabaseClient
-              .from("staffing_requirements")
-              .insert([{ period_id: periodId, date, day_sn_required: daySn, day_na_required: dayNa, night_sn_required: nightSn, night_na_required: nightNa }]);
-            if (error) throw error;
-          }
+          const token = getStaffingToken();
+          const { error } = await window.supabaseClient.rpc("admin_upsert_staffing_requirement", {
+            p_token: token,
+            p_period_id: periodId,
+            p_date: date,
+            p_day_sn_required: daySn,
+            p_day_na_required: dayNa,
+            p_night_sn_required: nightSn,
+            p_night_na_required: nightNa
+          });
+          if (error) throw error;
           alert("Staffing requirements saved!");
           await loadStaffingRequirements(periodId);
         } catch (err) {

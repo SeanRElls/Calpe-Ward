@@ -20,6 +20,8 @@
   <script src="js/notifications-shared.js" defer></script>
   <script src="js/shift-functions.js" defer></script>
   <script src="js/shift-editor.js" defer></script>
+  <script src="js/periods-shared.js" defer></script>
+  <script src="js/non-staff-modal-shared.js" defer></script>
 </head>
 
 <body>
@@ -59,6 +61,11 @@
         <!-- Bell -->
         <button class="badge" id="noticeBell" type="button" title="Notices & notifications">
           🔔 <span id="noticeBellDot" style="display:none;">•</span>
+        </button>
+
+        <!-- Print button (admin only) -->
+        <button class="badge" id="rotaPrintBtn" type="button" title="Print rota" style="display:none; cursor:pointer;">
+          🖨️ Print
         </button>
         
         <!-- Admin badge -->
@@ -453,6 +460,33 @@
       </div>
     </div>
 
+    <!-- Print Rota Modal -->
+    <div class="modal-backdrop" id="rotaPrintModal" aria-hidden="true" style="display:none;">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rotaPrintTitle">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2 id="rotaPrintTitle" style="margin:0;">Print Rota</h2>
+          <button id="rotaPrintCloseX" type="button" style="background:none; border:none; font-size:24px; cursor:pointer; color:#666;">&times;</button>
+        </div>
+        <p class="subtitle">Generate printouts for the rota schedule</p>
+
+        <!-- ADMIN OPTIONS -->
+        <div id="rotaPrintAdminOptions" style="display:none;">
+          <div class="card" style="padding:12px; margin-top:12px;">
+            <div style="font-weight:800; margin-bottom:12px;">Admin: Advanced Print Configuration</div>
+            <p style="font-size:13px; color:#666; margin:0 0 12px;">Configure detailed print options including status filters, role selection, staff filtering, and requests overlay.</p>
+            
+            <button type="button" onclick="openRotaAdminPrintConfig()" style="width:100%; padding:12px; background:#1976d2; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:600; font-size:14px;">
+              Open Advanced Print Configuration
+            </button>
+          </div>
+        </div>
+
+        <div class="btns" style="margin-top:12px;">
+          <button id="rotaPrintClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- User Account Modal -->
       <div class="modal-backdrop" id="userModal" aria-hidden="true" style="display:none;">
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="userTitle">
@@ -498,10 +532,13 @@
 
           <!-- PREFERENCES CARD -->
           <div class="card" style="padding:10px; margin:10px 0;" id="userPrefsCard">
-            <div style="font-weight:800; margin-bottom:6px;">Preferences (1–5)</div>
-            <div class="subtitle" style="margin:0 0 10px 0; font-size:12px; color:var(--text-muted, #666);">1 = avoid if possible, 3 = neutral, 5 = keen.</div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <div style="font-weight:800;">Preferences (1–5)</div>
+              <button id="userPrefsToggle" class="btn-collapse" style="background:none; border:none; padding:4px 8px; cursor:pointer; font-size:16px; color:var(--text-muted, #666);">▼</button>
+            </div>
+            <div class="subtitle" id="userPrefsSubtitle" style="display:none; margin:0 0 10px 0; font-size:12px; color:var(--text-muted, #666);">1 = avoid if possible, 3 = neutral, 5 = keen.</div>
 
-            <div class="row" style="gap:10px; flex-direction:column; align-items:stretch;">
+            <div class="row" id="userPrefsContent" style="display:none; gap:10px; flex-direction:column; align-items:stretch;">
               <label style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                 <span>Shift clustering</span>
                 <span id="prefShiftClusteringValue" style="font-weight:700;">3</span>
@@ -531,7 +568,7 @@
               <div class="subtitle" style="font-size:12px; color:var(--text-muted, #666);">Higher = prefers leave next to days off; lower = fine to separate.</div>
             </div>
 
-            <div class="btns" style="margin-top:12px; justify-content:flex-end; gap:8px;">
+            <div class="btns" id="userPrefsBtns" style="display:none; margin-top:12px; justify-content:flex-end; gap:8px;">
               <button id="userSavePrefs" class="primary" type="button">Save preferences</button>
             </div>
 
@@ -600,6 +637,7 @@
     let currentPeriod = null;
     let allUsers = [];
     let allWeeks = [];
+    let shifts = []; // shift_catalogue rows
     let shiftMap = new Map(); // id -> shift_catalogue row
     let assignmentsMap = new Map(); // user_id_date -> rota_assignment
     let overridesMap = new Map(); // rota_assignment_id -> rota_assignment_override
@@ -616,7 +654,6 @@
     let canEditDraft = false;
     let canEditPublished = false;
     let currentEditContext = "draft";
-    let lastPublishedCell = null;
 
     // Expose context for helper modules (context menu, history)
     window.currentEditContext = currentEditContext;
@@ -629,36 +666,277 @@
       return defaults;
     }
     
+    // ========== PERIOD LOADING ==========
+    /**
+     * Load all data for a specific rota period (dates, shifts, assignments, etc.)
+     */
+    async function loadPeriod(periodId) {
+      if (!periodId) return;
+      
+      console.log("[ROTA] loadPeriod starting for period:", periodId);
+      
+      try {
+        const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
+        if (!token) throw new Error('No session token');
+        
+        // Load all periods via RPC to get metadata for selected period
+        const { data: allPeriods, error: pErr } = await supabaseClient.rpc("rpc_get_rota_periods", {
+          p_token: token
+        });
 
+        if (pErr) throw new Error(`Periods load failed: ${pErr.message}`);
+        const period = (allPeriods || []).find(p => p.id === periodId);
+        if (!period) throw new Error("Period not found");
+        
+        currentPeriod = period;
+        periodData = period;
+        window.currentPeriod = currentPeriod;
+        window.periodData = periodData;
+        
+        console.log("[ROTA] Generating dates for period...");
+        
+        // Helper functions for date generation
+        function generateDatesForPeriod(startDate, endDate) {
+          const dates = [];
+          const d = new Date(startDate);
+          while (d <= new Date(endDate)) {
+            dates.push(new Date(d).toISOString().split('T')[0]);
+            d.setDate(d.getDate() + 1);
+          }
+          return dates;
+        }
+        
+        function groupDatesIntoWeeks(dates) {
+          const weeks = [];
+          const grouped = {};
+          dates.forEach(dateStr => {
+            const d = new Date(dateStr + 'T00:00:00Z');
+            const dayOfWeek = d.getUTCDay();
+            const weekStart = new Date(d);
+            weekStart.setUTCDate(d.getUTCDate() - dayOfWeek);
+            const weekStartStr = weekStart.toISOString().split('T')[0];
+            if (!grouped[weekStartStr]) grouped[weekStartStr] = [];
+            grouped[weekStartStr].push(dateStr);
+          });
+          Object.entries(grouped).forEach(([weekStartStr, dates]) => {
+            const weekStartDate = new Date(weekStartStr + 'T00:00:00Z');
+            weeks.push({ 
+              weekStart: weekStartDate,
+              days: dates.map(d => ({ date: d }))
+            });
+          });
+          return weeks;
+        }
+        
+        const dates = generateDatesForPeriod(period.start_date, period.end_date);
+        allWeeks = groupDatesIntoWeeks(dates);
+
+        // Load users via RPC (active only)
+        console.log("[ROTA] Loading users via RPC...");
+        const { data: users, error: uErr } = await supabaseClient.rpc("rpc_get_users_basic", {
+          p_token: token,
+          p_include_inactive: false
+        });
+
+        if (uErr) throw new Error(`Users load failed: ${uErr.message}`);
+        allUsers = (users || []).map(u => ({ ...u, is_non_staff: false }));
+
+        // Load non-staff for this period
+        console.log("[ROTA] Loading period non-staff...");
+        try {
+          const { data: nonStaff, error: nsErr } = await supabaseClient.rpc("rpc_get_period_non_staff", {
+            p_token: token,
+            p_period_id: periodId
+          });
+
+          if (nsErr) {
+            console.warn("[ROTA] Non-staff load failed:", nsErr);
+          } else if (nonStaff && nonStaff.length > 0) {
+            console.log("[ROTA] Loaded", nonStaff.length, "non-staff");
+            nonStaff.forEach(ns => {
+              allUsers.push({
+                id: ns.period_non_staff_id,
+                period_non_staff_id: ns.period_non_staff_id,
+                name: ns.name,
+                role_id: ns.role_group === 'staff_nurse' ? 2 : 3,
+                category: ns.category,
+                is_admin: false,
+                is_non_staff: true,
+                counts_towards_staffing: ns.counts_towards_staffing,
+                display_order: ns.display_order
+              });
+            });
+          }
+        } catch (e) {
+          console.warn("[ROTA] Failed to load non-staff:", e.message);
+        }
+
+        // Load shift catalogue via RPC
+        console.log("[ROTA] Loading shifts via RPC...");
+        const { data: shiftsData, error: sErr } = await supabaseClient.rpc("rpc_get_shifts", {
+          p_token: token
+        });
+
+        if (sErr) throw new Error(`Shifts load failed: ${sErr.message}`);
+        shifts = shiftsData || [];
+        shiftMap.clear();
+        (shifts || []).forEach(s => shiftMap.set(s.id, s));
+        console.log("[ROTA] Loaded", shiftMap.size, "shifts");
+
+        // Load assignments via RPC
+        console.log("[ROTA] Loading assignments via RPC...");
+        const canViewDraft = window.PermissionsModule?.hasPermission("rota.view_draft");
+        const isPeriodPublished = period.status === "published";
+
+        assignmentsMap.clear();
+        overridesMap.clear();
+        commentsMap.clear();
+        
+        if (canViewDraft || isPeriodPublished) {
+          const { data: assignments, error: aErr } = await supabaseClient.rpc("rpc_get_rota_assignments", {
+            p_token: token,
+            p_period_id: periodId,
+            p_include_draft: canViewDraft || !isPeriodPublished
+          });
+
+          if (aErr) throw new Error(`Assignments load failed: ${aErr.message}`);
+
+          const assignmentIds = [];
+          (assignments || []).forEach(a => {
+            const userId = a.user_id || a.period_non_staff_id;
+            const key = `${userId}_${a.date}`;
+            assignmentsMap.set(key, a);
+            if (a.id) assignmentIds.push(a.id);
+          });
+          
+          console.log("[ROTA] Loaded", assignmentsMap.size, "assignments");
+
+          // Load overrides for published periods via RPC
+          if (isPeriodPublished && assignmentIds.length > 0) {
+            const { data: overrides, error: oErr } = await supabaseClient.rpc("rpc_get_rota_assignment_overrides", {
+              p_token: token,
+              p_assignment_ids: assignmentIds
+            });
+
+            if (oErr) console.warn("[ROTA] Error loading overrides:", oErr.message);
+            else {
+              (overrides || []).forEach(o => {
+                overridesMap.set(o.rota_assignment_id, o);
+              });
+              console.log("[ROTA] Loaded", overridesMap.size, "overrides");
+            }
+          }
+
+          // Load comments via RPC
+          if (assignmentIds.length > 0) {
+            const { data: comments, error: cErr } = await supabaseClient.rpc("rpc_get_rota_assignment_comments", {
+              p_token: token,
+              p_assignment_ids: assignmentIds
+            });
+
+            if (cErr) {
+              console.warn("[ROTA] Error loading comments:", cErr.message);
+            } else {
+              (comments || []).forEach(c => {
+                if (!commentsMap.has(c.rota_assignment_id)) {
+                  commentsMap.set(c.rota_assignment_id, []);
+                }
+                commentsMap.get(c.rota_assignment_id).push(c);
+              });
+              console.log("[ROTA] Loaded comments for", commentsMap.size, "assignments");
+            }
+          }
+        }
+
+        // Load requests for this period via RPC
+        console.log("[ROTA] Loading requests via RPC...");
+        try {
+          const { data: requests, error: rErr } = await supabaseClient.rpc("get_requests_for_period", {
+            p_token: token,
+            p_start_date: period.start_date,
+            p_end_date: period.end_date,
+            p_force_view_all: canViewAllRequests
+          });
+
+          if (rErr) {
+            console.warn("[ROTA] Failed to load requests:", rErr.message);
+          } else {
+            requestsMap.clear();
+            (requests || []).forEach(r => {
+              const key = `${r.user_id}_${r.date}`;
+              requestsMap.set(key, r);
+            });
+            console.log("[ROTA] Loaded", requestsMap.size, "requests");
+          }
+        } catch (err) {
+          console.warn("[ROTA] Failed to load requests:", err.message);
+        }
+
+        // Load user patterns via RPC
+        console.log("[ROTA] Loading user patterns via RPC...");
+        try {
+          const { data: patternsData, error: patErr } = await supabaseClient.rpc("rpc_get_user_patterns", {
+            p_token: token
+          });
+
+          if (patErr) {
+            console.warn("[ROTA] Failed to load user patterns:", patErr.message);
+          } else {
+            userPatterns.clear();
+            (patternsData || []).forEach(p => {
+              userPatterns.set(p.user_id, p);
+            });
+            console.log("[ROTA] Loaded", userPatterns.size, "user patterns");
+          }
+        } catch (err) {
+          console.warn("[ROTA] Failed to load user patterns:", err.message);
+        }
+
+        console.log("[ROTA] Period data loaded successfully");
+        
+        // Display period status and configure editing controls
+        displayPeriodStatus(period);
+        updateEditingControls(period);
+        
+        // Render the rota with loaded data
+        if (typeof renderRota === 'function') {
+          renderRota();
+          console.log("[ROTA] Rota rendered");
+        } else {
+          console.warn("[ROTA] renderRota function not available");
+        }
+        
+      } catch (err) {
+        console.error("[ROTA] loadPeriod error:", err);
+        throw err;
+      }
+    }
 
     // ========== AUTH ==========
     async function checkAuth() {
-      console.log("[ROTA DEBUG] checkAuth starting...");
-
-      console.log("[ROTA DEBUG] STORAGE_KEY getter returns", getStorageKey());
-      console.log("[ROTA DEBUG] localStorage userId", localStorage.getItem(getStorageKey()));
-      console.log("[ROTA DEBUG] supabaseClient available?", !!getSupabase());
-
+      console.log("[ROTA] checkAuth starting...");
+      
       if (!window.PermissionsModule || typeof window.PermissionsModule.loadCurrentUserPermissions !== "function") {
-        console.error("[ROTA DEBUG] PermissionsModule not available");
+        console.error("[ROTA] PermissionsModule not available");
         window.location.href = "index.html";
         return null;
       }
 
-      console.log("[ROTA DEBUG] Calling PermissionsModule.loadCurrentUserPermissions...");
+      console.log("[ROTA] Calling PermissionsModule.loadCurrentUserPermissions...");
       await window.PermissionsModule.loadCurrentUserPermissions();
       const currentUser = window.PermissionsModule.getCurrentUser();
-      console.log("[ROTA DEBUG] PermissionsModule currentUser:", currentUser);
+      console.log("[ROTA] After permissions load, currentUser:", currentUser);
 
       if (!currentUser) {
-        console.warn("[ROTA DEBUG] No current user after permissions load; redirecting");
+        console.warn("[ROTA] No current user - redirecting to login");
         window.location.href = "index.html";
         return null;
       }
+
+      console.log("[ROTA] User authenticated:", currentUser.name);
 
       // Store globally for rota.html and other scripts
       window.currentUser = currentUser;
-      console.log("[ROTA DEBUG] User loaded:", currentUser.name);
       
       // Update loginBadge with user name
       const loginBadge = document.getElementById("loginBadge");
@@ -686,8 +964,14 @@
       // Show Add Non-Staff if admin or mentor
       const addNsBtn = document.getElementById("addNonStaffBtn");
       const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
-      if (addNsBtn) addNsBtn.style.display = (currentUser.is_admin || isMentor) ? "inline-block" : "none";
-      if (addNsBtn) addNsBtn.onclick = openNonStaffModal;
+      if (addNsBtn) {
+        addNsBtn.style.display = (currentUser.is_admin || isMentor) ? "inline-block" : "none";
+        addNsBtn.onclick = openNonStaffModal;
+      }
+
+      // Show Print button only for admins
+      const rotaPrintBtn = document.getElementById("rotaPrintBtn");
+      if (rotaPrintBtn) rotaPrintBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
 
       return currentUser;
     }
@@ -704,1421 +988,108 @@
     // User modal is now handled by js/user-modal.js
 
     // ========== HELPERS ==========
-    let selectedNonStaffForDelete = null; // Track which person is selected for deletion
+    // selectedNonStaffForDelete is declared in non-staff-modal-shared.js
     let bankHolidaysByDate = {}; // Cache bank holidays by date string (YYYY-MM-DD)
     
-    // Load bank holidays for the current and next few years
-    async function loadBankHolidays() {
-      try {
-        const currentYear = new Date().getFullYear();
-        const { data, error } = await supabaseClient.rpc('rpc_get_all_bank_holidays', {
-          p_start_year: currentYear,
-          p_end_year: currentYear + 3
-        });
-        if (error) throw error;
-        if (data) {
-          data.forEach(holiday => {
-            const dateStr = holiday.holiday_date; // YYYY-MM-DD format from DB
-            bankHolidaysByDate[dateStr] = holiday.name;
-          });
-        }
-      } catch (e) {
-        console.warn('Failed to load bank holidays:', e);
-      }
-    }
-    
-    function isBankHoliday(date) {
-      if (!date) return false;
-      const dateStr = date.toISOString().split('T')[0]; // Convert to YYYY-MM-DD
-      return bankHolidaysByDate.hasOwnProperty(dateStr);
-    }
-    
-    function getBankHolidayName(date) {
-      if (!date) return null;
-      const dateStr = date.toISOString().split('T')[0];
-      return bankHolidaysByDate[dateStr] || null;
-    }
-    
-    function getWeekStart(date) {
-      const d = new Date(date);
-      const day = d.getDay(); // 0 = Sunday
-      d.setDate(d.getDate() - day);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-
-    function fmt(date) {
-      const d = new Date(date);
-      return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    }
-
-    // ========== LOAD PERIODS ==========
-    async function loadPeriods() {
-      const { data, error } = await supabaseClient
-        .from("rota_periods")
-        .select("*")
-        .order("start_date", { ascending: false });
-
-      if (error) {
-        console.error("Error loading periods:", error);
-        alert("Failed to load rota periods: " + error.message);
-        return;
-      }
-
-      const select = document.getElementById("periodSelect");
-      select.innerHTML = '<option value="">Select period...</option>';
-      
-      if (!data || data.length === 0) {
-        select.innerHTML = '<option value="">No periods available</option>';
-        console.warn("No rota periods found in database");
-        return;
-      }
-      
-      data.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = `${fmt(new Date(p.start_date))} – ${fmt(new Date(p.end_date))}`;
-        select.appendChild(opt);
-      });
-
-      if (data.length > 0) {
-        // Find period containing today's date, or fall back to most recent
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD in local timezone
-        const currentPeriod = data.find(p => {
-          // Compare date strings directly to avoid timezone issues
-          return todayStr >= p.start_date && todayStr <= p.end_date;
-        });
-        const periodToLoad = currentPeriod || data[0];
-        select.value = periodToLoad.id;
-        await loadPeriod(periodToLoad.id);
-      }
-    }
-
-    // ========== NON-STAFF MODAL LOGIC ==========
-    function openNonStaffModal() {
-      const backdrop = document.getElementById('nonStaffModalBackdrop');
-      if (!backdrop) return;
-      const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
-      // Mentors default to students and lock categories
-      const categorySel = document.getElementById('nsCategory');
-      const categorySelCreate = document.getElementById('nsCategoryCreate');
-      if (categorySel) {
-        categorySel.value = 'student';
-        categorySel.disabled = !window.currentUser?.is_admin && isMentor;
-      }
-      if (categorySelCreate) {
-        categorySelCreate.value = 'student';
-        categorySelCreate.disabled = !window.currentUser?.is_admin && isMentor;
-      }
-      // Initialize role group + counts UI for default (student)
-      updateNonStaffModalFields();
-      updateNonStaffModalFieldsCreate();
-      document.getElementById('nsSearch')?.setAttribute('value','');
-      document.getElementById('nsResults').innerHTML = '';
-      document.getElementById('nsNewName').value = '';
-      // Switch to Select tab by default
-      switchNonStaffTab('select');
-      backdrop.setAttribute('aria-hidden','false');
-    }
-
-    function closeNonStaffModal() {
-      const backdrop = document.getElementById('nonStaffModalBackdrop');
-      if (backdrop) backdrop.setAttribute('aria-hidden','true');
-    }
-
-    async function searchNonStaff() {
-      const category = document.getElementById('nsCategory')?.value || null;
-      const roleGroup = (category === 'student') ? null : (document.getElementById('nsRoleGroup')?.value || null);
-      const query = document.getElementById('nsSearch')?.value || null;
-      const resultsEl = document.getElementById('nsResults');
-      if (!resultsEl) return;
-      resultsEl.innerHTML = '<div style="color:#64748b;">Searching...</div>';
-      try {
-        const { data, error } = await supabaseClient.rpc('rpc_list_non_staff_people', {
-          p_token: window.currentToken,
-          p_category: category,
-          p_role_group: roleGroup,
-          p_query: query
-        });
-        if (error) throw error;
-        if (!data || data.length === 0) {
-          resultsEl.innerHTML = '<div style="color:#64748b;">No matches.</div>';
-          return;
-        }
-        resultsEl.innerHTML = '';
-        data.forEach(row => {
-          const line = document.createElement('div');
-          line.style.display = 'flex';
-          line.style.justifyContent = 'space-between';
-          line.style.alignItems = 'center';
-          line.style.padding = '8px 6px';
-          line.style.cursor = 'pointer';
-          line.style.borderRadius = '4px';
-          line.style.transition = 'background 200ms';
-          
-          line.addEventListener('mouseenter', () => { line.style.background = '#f1f5f9'; });
-          line.addEventListener('mouseleave', () => { line.style.background = ''; });
-          line.addEventListener('click', () => {
-            selectedNonStaffForDelete = row;
-            showDeleteSection(row);
-          });
-          
-          const left = document.createElement('div');
-          left.textContent = `${row.name} · ${row.category}${row.role_group ? ' · ' + row.role_group : ''}`;
-          const btn = document.createElement('button');
-          btn.textContent = 'Add';
-          btn.style.whiteSpace = 'nowrap';
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            addExistingNonStaff(row.id, row.category);
-          });
-          line.appendChild(left);
-          line.appendChild(btn);
-          resultsEl.appendChild(line);
-        });
-      } catch (e) {
-        resultsEl.innerHTML = `<div style="color:#dc2626;">Error: ${e?.message || e}</div>`;
-      }
-    }
-
-    async function addExistingNonStaff(nonStaffPersonId, category) {
-      const counts = document.getElementById('nsCounts');
-      const countsVal = counts?.checked ?? (category !== 'student');
-      try {
-        const { data, error } = await supabaseClient.rpc('rpc_add_non_staff_to_period', {
-          p_token: window.currentToken,
-          p_period_id: currentPeriod,
-          p_non_staff_person_id: nonStaffPersonId,
-          p_counts_towards_staffing: countsVal,
-          p_display_order: 9999
-        });
-        if (error) throw error;
-        closeNonStaffModal();
-        await loadPeriod(currentPeriod);
-      } catch (e) {
-        alert('Failed to add: ' + (e?.message || e));
-      }
-    }
-
-    async function addNewNonStaff() {
-      const name = document.getElementById('nsNewName')?.value?.trim();
-      const category = document.getElementById('nsCategoryCreate')?.value;
-      const roleGroup = category === 'student' ? null : document.getElementById('nsRoleGroupCreate')?.value;
-      const counts = (category === 'student') ? false : true;
-      if (!name) {
-        alert('Enter a name for the new profile.');
-        return;
-      }
-      try {
-        const { data: created, error: addErr } = await supabaseClient.rpc('rpc_add_non_staff_person', {
-          p_token: window.currentToken,
-          p_name: name,
-          p_category: category,
-          p_role_group: roleGroup,
-          p_notes: null
-        });
-        if (addErr) throw addErr;
-        const newId = created?.id;
-        if (!newId) throw new Error('Create returned no id');
-        await addExistingNonStaff(newId, category);
-      } catch (e) {
-        alert('Failed to create/add: ' + (e?.message || e));
-      }
-    }
-
-    function showDeleteSection(item) {
-      const deleteSection = document.getElementById('nsDeleteSection');
-      const deleteItemName = document.getElementById('nsDeleteItemName');
-      const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
-      
-      // Only show delete if admin or mentor (for students)
-      const canDelete = window.currentUser?.is_admin || (isMentor && item.category === 'student');
-      if (!canDelete) {
-        deleteSection.style.display = 'none';
-        return;
-      }
-      
-      deleteItemName.textContent = `${item.name} (${item.category})`;
-      deleteSection.style.display = 'block';
-    }
-
-    async function deleteSelectedNonStaff() {
-      if (!selectedNonStaffForDelete || !selectedNonStaffForDelete.id) {
-        alert('No item selected for deletion');
-        return;
-      }
-      
-      const confirmMsg = `Remove ${selectedNonStaffForDelete.name} from this period?`;
-      if (!confirm(confirmMsg)) return;
-      
-      try {
-        const { error } = await supabaseClient.rpc('rpc_remove_non_staff_from_period', {
-          p_token: window.currentToken,
-          p_period_non_staff_id: selectedNonStaffForDelete.id
-        });
-        if (error) throw error;
-        selectedNonStaffForDelete = null;
-        document.getElementById('nsDeleteSection').style.display = 'none';
-        await loadPeriod(currentPeriod);
-      } catch (e) {
-        alert('Failed to remove: ' + (e?.message || e));
-      }
-    }
-
-    // Tab switching for Select vs Create sections
-    function switchNonStaffTab(tab) {
-      const selectSection = document.getElementById('nsSelectSection');
-      const createSection = document.getElementById('nsCreateSection');
-      const tabSelect = document.getElementById('nsTabSelect');
-      const tabCreate = document.getElementById('nsTabCreate');
-      
-      if (tab === 'select') {
-        if (selectSection) selectSection.style.display = 'block';
-        if (createSection) createSection.style.display = 'none';
-        if (tabSelect) {
-          tabSelect.style.color = '#0f172a';
-          tabSelect.style.borderBottomColor = '#3b82f6';
-        }
-        if (tabCreate) {
-          tabCreate.style.color = '#94a3b8';
-          tabCreate.style.borderBottomColor = 'transparent';
-        }
-      } else {
-        if (selectSection) selectSection.style.display = 'none';
-        if (createSection) createSection.style.display = 'block';
-        if (tabSelect) {
-          tabSelect.style.color = '#94a3b8';
-          tabSelect.style.borderBottomColor = 'transparent';
-        }
-        if (tabCreate) {
-          tabCreate.style.color = '#0f172a';
-          tabCreate.style.borderBottomColor = '#3b82f6';
-        }
-      }
-    }
-
-    // Bind modal buttons after DOM ready
-    document.addEventListener('DOMContentLoaded', () => {
-      const searchBtn = document.getElementById('nsSearchBtn');
-      if (searchBtn) searchBtn.addEventListener('click', searchNonStaff);
-      const closeBtn = document.getElementById('nsCloseBtn');
-      if (closeBtn) closeBtn.addEventListener('click', closeNonStaffModal);
-      const addBtn = document.getElementById('nsAddBtn');
-      if (addBtn) addBtn.addEventListener('click', addNewNonStaff);
-      const deleteBtn = document.getElementById('nsDeleteBtn');
-      if (deleteBtn) deleteBtn.addEventListener('click', deleteSelectedNonStaff);
-      const categorySel = document.getElementById('nsCategory');
-      if (categorySel) categorySel.addEventListener('change', updateNonStaffModalFields);
-      const categorySelCreate = document.getElementById('nsCategoryCreate');
-      if (categorySelCreate) categorySelCreate.addEventListener('change', updateNonStaffModalFieldsCreate);
-      const backdrop = document.getElementById('nonStaffModalBackdrop');
-      if (backdrop) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeNonStaffModal(); });
-      
-      // Tab switching
-      const tabSelect = document.getElementById('nsTabSelect');
-      if (tabSelect) tabSelect.addEventListener('click', () => switchNonStaffTab('select'));
-      const tabCreate = document.getElementById('nsTabCreate');
-      if (tabCreate) tabCreate.addEventListener('click', () => switchNonStaffTab('create'));
-    });
-
-    function updateNonStaffModalFields(){
-      const category = document.getElementById('nsCategory')?.value;
-      const roleWrap = document.getElementById('nsRoleGroupWrap');
-      const countsWrap = document.getElementById('nsCountsWrap');
-      const counts = document.getElementById('nsCounts');
-      if (!category) return;
-      if (category === 'student'){
-        if (roleWrap) roleWrap.style.display = 'none';
-        if (countsWrap) countsWrap.style.display = 'none';
-        if (counts) { counts.checked = false; counts.disabled = true; }
-      } else if (category === 'agency') {
-        if (roleWrap) roleWrap.style.display = '';
-        if (countsWrap) countsWrap.style.display = '';
-        if (counts) { counts.checked = true; counts.disabled = true; }
-      } else {
-        // bank: allow toggle
-        if (roleWrap) roleWrap.style.display = '';
-        if (countsWrap) countsWrap.style.display = '';
-        if (counts) { counts.disabled = false; }
-      }
-    }
-
-    function updateNonStaffModalFieldsCreate(){
-      const category = document.getElementById('nsCategoryCreate')?.value;
-      const roleWrap = document.getElementById('nsRoleGroupCreateWrap');
-      const countsWrap = document.getElementById('nsCountsWrap');
-      const counts = document.getElementById('nsCounts');
-      if (!category) return;
-      if (category === 'student'){
-        if (roleWrap) roleWrap.style.display = 'none';
-        if (countsWrap) countsWrap.style.display = 'none';
-        if (counts) { counts.checked = false; counts.disabled = true; }
-      } else if (category === 'agency') {
-        if (roleWrap) roleWrap.style.display = '';
-        if (countsWrap) countsWrap.style.display = '';
-        if (counts) { counts.checked = true; counts.disabled = true; }
-      } else {
-        // bank: allow toggle
-        if (roleWrap) roleWrap.style.display = '';
-        if (countsWrap) countsWrap.style.display = '';
-        if (counts) { counts.disabled = false; }
-      }
-    }
-
-    // ========== LOAD PERIOD DATA ==========
-    async function loadPeriod(periodId) {
-      if (!periodId) return;
-      const periodIdNum = Number(periodId);
-      const periodKey = Number.isFinite(periodIdNum) ? periodIdNum : periodId;
-      currentPeriod = periodKey;
-      // Expose to window for swap-functions/admin operations
-      window.currentPeriod = { id: periodKey };
-
-      try {
-        // Load period info
-        console.log("[LOAD] Loading period...");
-        const { data: period, error: pErr } = await supabaseClient
-          .from("rota_periods")
-          .select("*")
-          .eq("id", periodId)
-          .single();
-
-        if (pErr) throw new Error(`Period load failed: ${pErr.message}`);
-        if (!period) throw new Error("Period not found");
-        periodData = period;
-        window.periodData = periodData;
-        displayPeriodStatus(period);
-
-        // Generate dates from period start_date to end_date
-        const dates = generateDatesForPeriod(period.start_date, period.end_date);
-        allWeeks = groupDatesIntoWeeks(dates);
-
-        // Load users (active only) using same ordering as main app (role -> display_order -> created_at)
-        console.log("[LOAD] Loading users...");
-        const { data: users, error: uErr } = await supabaseClient
-          .from("users")
-          .select("id, name, role_id, is_admin, display_order")
-          .eq("is_active", true)
-          .order("role_id", { ascending: true })
-          .order("display_order", { ascending: true })
-          .order("created_at", { ascending: true });
-
-        if (uErr) throw new Error(`Users load failed: ${uErr.message}`);
-        allUsers = (users || []).map(u => ({ ...u, name: u.name, is_non_staff: false }));
-
-        // Load non-staff for this period
-        console.log("[LOAD] Loading period non-staff...");
-        try {
-          const { data: nonStaff, error: nsErr } = await supabaseClient.rpc("rpc_get_period_non_staff", {
-            p_token: window.currentToken,
-            p_period_id: periodId
-          });
-
-          if (nsErr) {
-            console.error("Non-staff load failed:", nsErr);
-          } else if (nonStaff && nonStaff.length > 0) {
-            console.log("[LOAD] Loaded", nonStaff.length, "non-staff");
-            
-            // Merge non-staff into allUsers with special flags
-            nonStaff.forEach(ns => {
-              // Use period_non_staff_id as the primary identifier so assignments map aligns
-              allUsers.push({
-                id: ns.period_non_staff_id,
-                non_staff_person_id: ns.id,
-                period_non_staff_id: ns.period_non_staff_id,
-                name: ns.name,
-                role_id: ns.role_group === 'staff_nurse' ? 2 : 3, // Map to SN or NA for grouping
-                is_admin: false,
-                display_order: ns.display_order,
-                is_non_staff: true,
-                category: ns.category, // 'student', 'bank', 'agency'
-                role_group: ns.role_group, // 'staff_nurse', 'nursing_assistant'
-                counts_towards_staffing: ns.counts_towards_staffing,
-                notes: ns.notes
-              });
-            });
-          }
-        } catch (e) {
-          console.error("Failed to load non-staff:", e);
-        }
-
-        // Load shift catalogue
-        console.log("[LOAD] Loading shifts...");
-        const { data: shifts, error: sErr } = await supabaseClient
-          .from("shifts")
-          .select("*");
-
-        if (sErr) throw new Error(`Shifts load failed: ${sErr.message}`);
-        shiftMap.clear();
-        (shifts || []).forEach(s => shiftMap.set(s.id, s));
-
-        // Load assignments for this date range
-        // Only show assignments if user has draft permission OR period is published
-        console.log("[LOAD] Loading assignments...");
-        const canViewDraft = window.PermissionsModule.hasPermission("rota.view_draft");
-        const isPeriodPublished = period.status === "published";
-        
-        assignmentsMap.clear();
-        overridesMap.clear();
-        if (canViewDraft || isPeriodPublished) {
-          const { data: assignments, error: aErr } = await supabaseClient
-            .from("rota_assignments")
-            .select("*")
-            .gte("date", period.start_date)
-            .lte("date", period.end_date);
-
-          if (aErr) throw new Error(`Assignments load failed: ${aErr.message}`);
-          
-          const assignmentIds = [];
-          (assignments || []).forEach(a => {
-            // Handle both regular users and non-staff assignments
-            const key = a.user_id ? `${a.user_id}_${a.date}` : `${a.period_non_staff_id}_${a.date}`;
-            assignmentsMap.set(key, a);
-            if (a.id) assignmentIds.push(a.id);
-          });
-          
-          // Load overrides ONLY for published periods
-          if (isPeriodPublished && assignmentIds.length > 0) {
-            const { data: overrides, error: oErr } = await supabaseClient
-              .from("rota_assignment_overrides")
-              .select("*")
-              .in("rota_assignment_id", assignmentIds);
-
-            if (oErr) console.error("Error loading overrides:", oErr);
-            else {
-              (overrides || []).forEach(o => {
-                overridesMap.set(o.rota_assignment_id, o);
-              });
-            }
-          }
-        }
-
-        // Load requests for this date range using RPC function (respects RLS policies)
-        console.log("[LOAD] Loading requests via RPC...");
-        const { data: requests, error: rErr } = await supabaseClient.rpc("get_requests_for_period", {
-          p_token: window.currentToken,
-          p_start_date: period.start_date,
-          p_end_date: period.end_date,
-          p_force_view_all: false
-        });
-
-        if (rErr) throw new Error(`Requests load failed: ${rErr.message}`);
-        requestsMap.clear();
-        (requests || []).forEach(r => {
-          requestsMap.set(`${r.user_id}_${r.date}`, r);
-        });
-        console.log("[LOAD] requestsMap populated with", requestsMap.size, "entries");
-
-        // Load assignment comments (for published periods only)
-        console.log("[LOAD] Loading comments...");
-        commentsMap.clear();
-        if (isPeriodPublished) {
-          const { data: comments, error: cErr } = await supabaseClient
-            .from("rota_assignment_comments")
-            .select("*");
-
-          if (cErr) throw new Error(`Comments load failed: ${cErr.message}`);
-          (comments || []).forEach(c => {
-            const existing = commentsMap.get(c.rota_assignment_id) || [];
-            existing.push(c);
-            commentsMap.set(c.rota_assignment_id, existing);
-          });
-          console.log('[LOAD] CommentsMap populated:', commentsMap.size, 'assignments with comments');
-        }
-
-        // Load patterns
-        console.log("[LOAD] Loading patterns...");
-        const { data: pats, error: patErr } = await supabaseClient
-          .from("pattern_definitions")
-          .select("*");
-
-        if (patErr) throw new Error(`Patterns load failed: ${patErr.message}`);
-        patterns.clear();
-        (pats || []).forEach(p => patterns.set(p.id, p));
-
-        console.log("[LOAD] Loading user patterns...");
-        const { data: upats, error: upatErr } = await supabaseClient
-          .from("user_patterns")
-          .select("*");
-
-        if (upatErr) throw new Error(`User patterns load failed: ${upatErr.message}`);
-        userPatterns.clear();
-        (upats || []).forEach(up => userPatterns.set(up.user_id, up));
-
-        // Load all shifts for admin editing from the shifts table
-        console.log("[LOAD] Loading draft shifts...");
-        const { data: draftShiftsData, error: dsErr } = await supabaseClient
-          .from("shifts")
-          .select("*")
-          .order("code", { ascending: true });
-
-        if (dsErr) throw new Error(`Draft shifts load failed: ${dsErr.message}`);
-        draftShifts = draftShiftsData || [];
-        console.log("[ROTA] Loaded draftShifts:", draftShifts);
-        console.log("[ROTA] Sample shift object:", draftShifts[0]);
-
-        // Configure editing context for this period
-        updateEditingControls(period);
-
-        // Render
-        if (allWeeks.length) {
-          const periodText = `${fmt(allWeeks[0].weekStart)} – ${fmt(allWeeks[allWeeks.length - 1].weekEnd)}`;
-          // Don't set periodLabel here anymore since it's part of the header controls
-          // Update page title with period dates
-          const pageTitle = document.querySelector("title");
-          if (pageTitle) {
-            pageTitle.textContent = `Calpe Ward - ${periodText}`;
-          }
-        }
-
-        renderRota();
-        generatePatternWarnings();
-
-      } catch (err) {
-        console.error("[LOAD] Fatal error:", err);
-        alert("Error loading rota: " + err.message);
-      }
-    }
-
-    // ========== GENERATE DATES FOR PERIOD ==========
-    function generateDatesForPeriod(startDateStr, endDateStr) {
-      const start = new Date(startDateStr);
-      const end = new Date(endDateStr);
-      const dates = [];
-
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        dates.push({ date: dateStr });
-      }
-
-      return dates;
-    }
-
-    // ========== GROUP DATES INTO WEEKS ==========
-    function groupDatesIntoWeeks(dates) {
-      const weekMap = new Map();
-      
-      dates.forEach(d => {
-        const dt = new Date(d.date);
-        const sun = getWeekStart(dt);
-        const key = sun.toISOString().split('T')[0];
-        
-        if (!weekMap.has(key)) {
-          weekMap.set(key, {
-            weekStart: sun,
-            weekEnd: new Date(sun.getTime() + 6 * 24 * 60 * 60 * 1000),
-            days: []
-          });
-        }
-        
-        weekMap.get(key).days.push(d);
-      });
-      
-      return Array.from(weekMap.values()).sort((a, b) => a.weekStart - b.weekStart);
-    }
-
-    // ========== RENDER ROTA ==========
-    function renderRota() {
-      const table = document.getElementById("rota");
-      table.innerHTML = "";
-
-      const thead = document.createElement("thead");
-      const tbody = document.createElement("tbody");
-      table.appendChild(thead);
-      table.appendChild(tbody);
-
-      // Row 1: Week labels
-      const r1 = document.createElement("tr");
-      const h1 = document.createElement("th");
-      h1.className = "name-col";
-      h1.textContent = "Name";
-      r1.appendChild(h1);
-
-      allWeeks.forEach(w => {
-        const th = document.createElement("th");
-        th.className = "week-head";
-        th.colSpan = 7;
-        th.innerHTML = `<span class="week-label">${fmt(w.weekStart)} – ${fmt(w.weekEnd)}</span>`;
-        r1.appendChild(th);
-
-        const sep = document.createElement("th");
-        sep.className = "week-sep";
-        r1.appendChild(sep);
-      });
-      thead.appendChild(r1);
-
-      // Row 2: Day letters
-      const r2 = document.createElement("tr");
-      const h2 = document.createElement("th");
-      h2.className = "name-col";
-      r2.appendChild(h2);
-
-      const dayLetters = ["S", "M", "T", "W", "T", "F", "S"];
-      allWeeks.forEach(w => {
-        for (let i = 0; i < 7; i++) {
-          const th = document.createElement("th");
-          th.className = "day";
-          th.textContent = dayLetters[i];
-          r2.appendChild(th);
-        }
-        const sep = document.createElement("th");
-        sep.className = "week-sep";
-        r2.appendChild(sep);
-      });
-      thead.appendChild(r2);
-
-      // Row 3: Dates
-      const r3 = document.createElement("tr");
-      const h3 = document.createElement("th");
-      h3.className = "name-col";
-      r3.appendChild(h3);
-
-      allWeeks.forEach(w => {
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(w.days[i].date);
-          const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
-          const isBankHol = isBankHoliday(d);
-          const th = document.createElement("th");
-          th.className = "date" + (isWeekend ? " weekend" : "") + (isBankHol ? " bank-holiday" : "");
-          th.textContent = d.getDate();
-          r3.appendChild(th);
-        }
-        const sep = document.createElement("th");
-        sep.className = "week-sep";
-        r3.appendChild(sep);
-      });
-      thead.appendChild(r3);
-
-      // Body: group by role
-      const groups = groupUsers(allUsers);
-
-      for (const g of groups) {
-        // Section header
-        const sectionTr = document.createElement("tr");
-        sectionTr.className = "section-row";
-        const sectionTd = document.createElement("td");
-        sectionTd.className = `name-col ${g.className}`;
-        sectionTd.colSpan = 1 + (allWeeks.length * 7) + allWeeks.length;
-        sectionTd.innerHTML = `<span>${g.title}</span>`;
-        sectionTr.appendChild(sectionTd);
-        tbody.appendChild(sectionTr);
-
-        // User rows
-        for (const u of g.items) {
-          const tr = document.createElement("tr");
-          tr.dataset.userId = u.id;
-
-          const nameTd = document.createElement("td");
-          nameTd.className = "name-col";
-          nameTd.textContent = u.name;
-
-          // Badge for non-staff categories
-          if (u.is_non_staff) {
-            const badge = document.createElement("span");
-            badge.className = "badge pill";
-            badge.style.marginLeft = "8px";
-            badge.style.fontSize = "11px";
-            badge.style.padding = "2px 6px";
-            badge.style.borderRadius = "999px";
-
-            // Only show badges for non-student non-staff
-            if (u.category !== "student") {
-              if (u.category === "agency") {
-                badge.textContent = "AGENCY";
-                badge.style.background = "#fef3c7";
-                badge.style.color = "#92400e";
-              } else if (u.category === "bank") {
-                badge.textContent = "BANK";
-                badge.style.background = "#ecfccb";
-                badge.style.color = "#365314";
-              }
-              nameTd.appendChild(badge);
-            }
-          }
-
-          tr.appendChild(nameTd);
-
-          allWeeks.forEach(w => {
-            w.days.forEach(day => {
-              const dateObj = day.date ? new Date(day.date) : null;
-              const isWeekend = dateObj && (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-              const dateStr = day.date;
-
-              const td = document.createElement("td");
-              td.className = "cell" + (isWeekend ? " weekend" : "");
-              td.dataset.userId = u.id;
-              if (u.is_non_staff && u.category === "student") {
-                td.dataset.isStudentNonStaff = "true";
-              }
-              td.dataset.date = dateStr;
-
-              // Get assignment
-              const key = `${u.id}_${dateStr}`;
-              const assignment = assignmentsMap.get(key);
-              
-              if (assignment) {
-                td.dataset.assignmentId = assignment.id;
-                const shift = shiftMap.get(assignment.shift_id);
-                const override = (periodData?.status === "published" && assignment.id) ? overridesMap.get(assignment.id) : null;
-                
-                if (shift) {
-                  console.log('[ROTA RENDER] Cell:', shift.code, 'assignmentId:', assignment.id, 'override:', override);
-                  
-                  // Wrap cell content in a container for positioning badges
-                  const wrapper = document.createElement("div");
-                  wrapper.style.position = "relative";
-                  wrapper.style.width = "100%";
-                  wrapper.style.height = "100%";
-                  wrapper.style.display = "flex";
-                  wrapper.style.flexDirection = "column";
-                  wrapper.style.alignItems = "stretch";
-                  wrapper.style.justifyContent = "flex-start";
-                  wrapper.style.padding = "4px 2px";
-                  wrapper.style.boxSizing = "border-box";
-                  wrapper.style.rowGap = "2px";
-
-                  const shiftBlock = document.createElement("div");
-                  shiftBlock.className = "shift-block";
-                  const codeSpan = document.createElement("span");
-                  codeSpan.textContent = shift.code;
-                  shiftBlock.appendChild(codeSpan);
-                  wrapper.appendChild(shiftBlock);
-                  
-                  // Add badges container (for published periods only)
-                  if (periodData?.status === "published" && assignment.id) {
-                    const badges = document.createElement("div");
-                    badges.style.position = "absolute";
-                    badges.style.top = "2px";
-                    badges.style.right = "2px";
-                    badges.style.display = "flex";
-                    badges.style.gap = "2px";
-                    
-                    // Override indicator (red dot) - show if ANY override field is set
-                    if (override) {
-                      const hasOverride = override.override_start_time || override.override_end_time || override.override_hours;
-                      if (hasOverride) {
-                        const overrideBadge = document.createElement("span");
-                        overrideBadge.style.width = "6px";
-                        overrideBadge.style.height = "6px";
-                        overrideBadge.style.borderRadius = "50%";
-                        overrideBadge.style.backgroundColor = "#dc2626";
-                        overrideBadge.title = "Actual times/hours differ from scheduled";
-                        badges.appendChild(overrideBadge);
-                      }
-                    }
-                    
-                    // Comment indicator (blue dot) - show if there are any comments for this assignment
-                    const assignmentComments = commentsMap.get(assignment.id);
-                    console.log('[BADGE DEBUG] Assignment ID:', assignment.id, 'Comments:', assignmentComments);
-                    if (assignmentComments && assignmentComments.length > 0) {
-                      // Filter comments based on visibility
-                      const visibleComments = assignmentComments.filter(c => {
-                        const visibility = c.comment_visibility || (c.is_admin_only ? 'admin_only' : 'all_staff');
-                        if (visibility === 'admin_only') return window.currentUser?.is_admin;
-                        if (visibility === 'all_staff') return true;
-                        if (visibility === 'user_only') return window.currentUser?.id === userId;
-                        return false;
-                      });
-                      console.log('[BADGE DEBUG] Visible comments:', visibleComments.length);
-                      
-                      if (visibleComments.length > 0) {
-                        const commentBadge = document.createElement("span");
-                        commentBadge.style.width = "6px";
-                        commentBadge.style.height = "6px";
-                        commentBadge.style.borderRadius = "50%";
-                        commentBadge.style.backgroundColor = "#3b82f6";
-                        commentBadge.title = "Has comments";
-                        badges.appendChild(commentBadge);
-                      }
-                    }
-                    
-                    if (badges.children.length > 0) {
-                      wrapper.appendChild(badges);
-                    }
-                  }
-                  
-                  td.appendChild(wrapper);
-
-                  console.log('[ROTA] Applying shift metadata for', shift.code, ':', {
-                    text_bold: shift.text_bold,
-                    text_italic: shift.text_italic,
-                    text_color: shift.text_color,
-                    fill_color: shift.fill_color
-                  });
-
-                  // Apply shift metadata styling from catalogue
-                  if (shift.text_bold) {
-                    shiftBlock.style.fontWeight = "700";
-                  }
-                  if (shift.text_italic) {
-                    shiftBlock.style.fontStyle = "italic";
-                  }
-                  if (shift.text_color) {
-                    shiftBlock.style.color = shift.text_color;
-                  }
-                  if (shift.fill_color) {
-                    td.style.backgroundColor = shift.fill_color; // color the whole cell like before
-                  }
-
-                  // Add request hint if exists (only if showRequests is enabled)
-                  if (showRequests) {
-                    const request = requestsMap.get(key);
-                    if (request) {
-                      const hint = document.createElement("div");
-                      const requestValue = (request.value || "").trim();
-                      const isImportant = request.important_rank && (request.important_rank === 1 || request.important_rank === 2);
-
-                      hint.className = "request-hint";
-                      hint.classList.add(isImportant ? "important" : "normal");
-                      hint.textContent = isImportant
-                        ? `${requestValue}${request.important_rank === 1 ? "¹" : "²"}`
-                        : requestValue;
-
-                      // Stack under the shift inside wrapper so it always shows beneath
-                      wrapper.appendChild(hint);
-                    }
-                  }
-                }
-              } else {
-                // Show requests only when toggle is on
-                if (showRequests) {
-                  const request = requestsMap.get(key);
-                  if (request) {
-                    const requestValue = request.value?.trim();
-                    const isImportant = request.important_rank && (request.important_rank === 1 || request.important_rank === 2);
-
-                    if (isImportant) {
-                      // Important requests (O¹/O²) show in RED (not bold)
-                      const superscript = request.important_rank === 1 ? "¹" : "²";
-                      td.textContent = `${requestValue}${superscript}`;
-                      td.style.color = "#e57373"; // paler red to mirror lighter gray emphasis
-                    } else {
-                      // Other requests show in faint gray italic
-                      td.textContent = requestValue || "";
-                      td.style.color = "#d1d5db";
-                      td.style.fontStyle = "italic";
-                    }
-                  }
-                }
-              }
-
-              tr.appendChild(td);
-              // Event delegation handled by shift-editor.js
-            });
-
-            // Week separator (pattern target)
-            const sep = document.createElement("td");
-            sep.className = "week-sep";
-            sep.dataset.userId = u.id;
-            sep.dataset.weekStart = w.weekStart.toISOString().split('T')[0];
-
-            // Pattern-first separator display
-            // 1) If the user has an assigned pattern, prefer using it.
-            //    - Anchored patterns: show `weekly_targets` aligned from the user's anchor.
-            //    - Non-anchored patterns: show flexible baseline for that pattern (e.g., nurses baseline 3),
-            //      and highlight weeks where assigned shifts exceed baseline.
-            // 2) If no pattern is assigned, leave the separator blank (no assumptions).
-            const upat = userPatterns.get(u.id);
-            // Count only non-time-off shifts for the weekly count
-            const assignedCount = w.days.reduce((acc, d) => {
-              const assignment = assignmentsMap.get(`${u.id}_${d.date}`);
-              if (!assignment) return acc;
-              const shift = shiftMap.get(assignment.shift_id);
-              // Only count if it's not a time-off shift
-              if (shift && shift.is_time_off !== true) {
-                return acc + 1;
-              }
-              return acc;
-            }, 0);
-
-            if (upat && upat.pattern_id) {
-              const pat = patterns.get(upat.pattern_id);
-              if (pat && pat.requires_anchor && upat.anchor_week_start_date && Array.isArray(pat.weekly_targets) && pat.weekly_targets.length) {
-                // Anchored pattern: compute target based on cycle and anchor
-                const weekStart = new Date(sep.dataset.weekStart);
-                const anchorDateRaw = new Date(upat.anchor_week_start_date);
-                const anchorDate = getWeekStart(anchorDateRaw);
-                const weeksDiff = Math.floor((weekStart - anchorDate) / (7 * 24 * 60 * 60 * 1000));
-                const cycleLen = pat.weekly_targets.length;
-                const weekInCycle = ((weeksDiff % cycleLen) + cycleLen) % cycleLen;
-                const target = pat.weekly_targets[weekInCycle];
-                sep.textContent = String(target);
-                const baseline = Math.min(...pat.weekly_targets);
-                
-                // Green when target is met, red when exceeded
-                if (assignedCount >= target && assignedCount <= target) {
-                  // Exactly meeting the target - green
-                  sep.style.backgroundColor = "#c1ffc1";
-                  sep.style.color = "#1a5c1a";
-                  sep.style.fontWeight = "700";
-                } else if (assignedCount > target || target > baseline) {
-                  // Exceeding target OR higher than baseline week - red
-                  sep.style.color = "#dc2626";
-                  sep.style.fontWeight = "700";
-                }
-              } else {
-                // Non-anchored or undefined weekly targets: treat as flexible
-                // Use pattern weekly_targets (if present) to infer baseline, else fallback for nurses
-                const baselineCandidates = Array.isArray(pat?.weekly_targets) && pat.weekly_targets.length ? pat.weekly_targets : [];
-                let baseline = baselineCandidates.length ? Math.min(...baselineCandidates) : null;
-                if (baseline == null && (u.role_id === 1 || u.role_id === 2)) baseline = 3; // nurse baseline if pattern implies flexibility
-                // Display assigned count if any, otherwise show baseline where known
-                sep.textContent = String(assignedCount > 0 ? assignedCount : (baseline ?? ""));
-                
-                // Green when target is met or exceeded, red when exceeded
-                if (baseline != null) {
-                  if (assignedCount >= baseline && assignedCount <= baseline) {
-                    // Exactly meeting the target - green
-                    sep.style.backgroundColor = "#c1ffc1";
-                    sep.style.color = "#1a5c1a";
-                    sep.style.fontWeight = "700";
-                  } else if (assignedCount > baseline) {
-                    // Exceeding the target - red
-                    sep.style.color = "#dc2626";
-                    sep.style.fontWeight = "700";
-                  }
-                }
-              }
-            } else {
-              // No pattern assigned: do not apply role defaults; leave blank
-              sep.textContent = "";
-            }
-            
-            tr.appendChild(sep);
-          });
-
-          tbody.appendChild(tr);
-        }
-      }
-      
-      // Render totals at the end
-      renderTotals();
-    }
-
-    // ========== GET ROLE GROUP KEY (resilient mapping) ==========
-    function getRoleGroupKey(user) {
-      // Deterministic mapping from role_id to canonical group key
-      const roleId = user.role_id;
-      if (roleId === 1) return "charge_nurse";
-      if (roleId === 2) return "staff_nurse";
-      if (roleId === 3) return "nursing_assistant";
-      return "staff_nurse"; // fallback
-    }
-
-    // ========== GROUP USERS BY ROLE ==========
-    function groupUsers(users) {
-      const buckets = {
-        charge_nurse: [],
-        staff_nurse: [],
-        nursing_assistant: [],
-        students: []
-      };
-
-      users.forEach(u => {
-        // Students go into separate group
-        if (u.is_non_staff && u.category === 'student') {
-          buckets.students.push(u);
-        } else {
-          // Bank/agency and regular staff grouped by role
-          const groupKey = getRoleGroupKey(u);
-          (buckets[groupKey] || buckets.staff_nurse).push(u);
-        }
-      });
-
-      // Sort within buckets: primary by display_order (nulls last), secondary by name, and push non-staff to bottom within the bucket
-      const sortBucket = (arr) => {
-        arr.sort((a, b) => {
-          // Push non-staff to bottom of each group
-          if (a.is_non_staff && !b.is_non_staff) return 1;
-          if (!a.is_non_staff && b.is_non_staff) return -1;
-
-          const aOrder = a.display_order ?? 9999;
-          const bOrder = b.display_order ?? 9999;
-          if (aOrder !== bOrder) return aOrder - bOrder;
-          return (a.name || "").localeCompare(b.name || "");
-        });
-      };
-
-      sortBucket(buckets.charge_nurse);
-      sortBucket(buckets.staff_nurse);
-      sortBucket(buckets.nursing_assistant);
-      sortBucket(buckets.students);
-
-      const groups = [
-        { title: "Charge Nurses", className: "section-cn", items: buckets.charge_nurse },
-        { title: "Staff Nurses", className: "section-sn", items: buckets.staff_nurse }
-      ];
-
-      // Add students group if there are any (between Staff Nurses and Nursing Assistants)
-      if (buckets.students.length > 0) {
-        groups.push({ title: "Students", className: "section-students", items: buckets.students });
-      }
-
-      groups.push({ title: "Nursing Assistants", className: "section-na", items: buckets.nursing_assistant });
-
-      return groups.filter(g => g.items.length > 0);
-    }
-
-    // ========== PATTERN WARNINGS ==========
-    function generatePatternWarnings() {
-      if (!window.currentUser?.is_admin) return;
-
-      const warnings = [];
-
-      allUsers.forEach(u => {
-        const upat = userPatterns.get(u.id);
-        if (!upat || !upat.pattern_id) return; // Only validate users with an assigned pattern
-
-        const pat = patterns.get(upat.pattern_id);
-        if (!pat) return;
-
-        // Compute total assigned shifts in the 5-week period
-        const totalAssigned = allWeeks.reduce((acc, w) => {
-          const wkCount = w.days.reduce((c, d) => c + (assignmentsMap.get(`${u.id}_${d.date}`) ? 1 : 0), 0);
-          return acc + wkCount;
-        }, 0);
-
-        // Determine expected total based on the assigned pattern
-        let expectedTotal = null;
-        if (pat.requires_anchor && upat.anchor_week_start_date && Array.isArray(pat.weekly_targets) && pat.weekly_targets.length) {
-          // Anchored cycle: sum targets over the 5 weeks using anchor alignment
-          expectedTotal = allWeeks.reduce((sum, w) => {
-            const weekStart = getWeekStart(w.weekStart);
-            const anchorDate = getWeekStart(new Date(upat.anchor_week_start_date));
-            const weeksDiff = Math.floor((weekStart - anchorDate) / (7 * 24 * 60 * 60 * 1000));
-            const cycleLen = pat.weekly_targets.length;
-            const weekInCycle = ((weeksDiff % cycleLen) + cycleLen) % cycleLen;
-            const target = Number(pat.weekly_targets[weekInCycle]) || 0;
-            return sum + target;
-          }, 0);
-        } else {
-          // Non-anchored or flexible patterns: infer baseline from weekly_targets if present
-          const baselineCandidates = Array.isArray(pat.weekly_targets) && pat.weekly_targets.length ? pat.weekly_targets : [];
-          const baseline = baselineCandidates.length ? Math.min(...baselineCandidates) : null;
-          if (baseline != null) {
-            expectedTotal = baseline * allWeeks.length; // baseline across 5 weeks
-          }
-          // Recognize nurse flexible 16 pattern explicitly by type
-          if (String(pat.pattern_type || "").includes("nurse_flexible_16")) {
-            expectedTotal = 16;
-          }
-          // If still unknown and user is CN/SN, default to 16 as flexible guidance
-          if (expectedTotal == null && (u.role_id === 1 || u.role_id === 2)) {
-            expectedTotal = 16; // CN/SN flexible pattern: total 16 across 5 weeks
-          }
-        }
-
-        if (expectedTotal != null) {
-          if (totalAssigned < expectedTotal) {
-            warnings.push({ level: "error", user: u.name, msg: `Assigned ${totalAssigned} shifts; require ${expectedTotal}` });
-          } else if (totalAssigned > expectedTotal) {
-            warnings.push({ level: "warning", user: u.name, msg: `Assigned ${totalAssigned} (> ${expectedTotal})` });
-          }
-        }
-      });
-
-      if (warnings.length === 0) {
-        document.getElementById("patternWarnings").classList.remove("visible");
-        return;
-      }
-
-      const list = document.getElementById("warningsList");
-      list.innerHTML = "";
-      warnings.forEach(w => {
-        const div = document.createElement("div");
-        div.className = `warning-item ${w.level === "error" ? "error" : ""}`;
-        div.textContent = `${w.user}: ${w.msg}`;
-        list.appendChild(div);
-      });
-
-      document.getElementById("patternWarnings").classList.add("visible");
-    }
-
-    // ========== TOTALS ==========
-    function renderTotals() {
-      const table = document.getElementById("rota");
-      const existingTfoot = table.querySelector("tfoot");
-      if (existingTfoot) existingTfoot.remove();
-      
-      const tfoot = document.createElement("tfoot");
-      const STAFFING_DEFAULTS = getStaffingDefaults();
-
-      // Calculate staffing count: 0 for time-off, 1 for full shifts (12+ hrs), 0.5 for part shifts
-      function getStaffingCount(shiftObj) {
-        if (!shiftObj) return 0;
-        // Time-off doesn't count toward staffing
-        if (shiftObj.is_time_off === true) return 0;
-        // Full day shifts (12+ hours) count as 1 person
-        const hours = Number(shiftObj.hours_value) || 0;
-        if (hours >= 12) return 1;
-        // Part day shifts count as 0.5 person
-        return 0.5;
-      }
-
-      // Check if shift is a time-off code (should be excluded from staffing totals)
-      function isTimeOff(shiftObj) {
-        if (!shiftObj) return false;
-        return shiftObj.is_time_off === true;
-      }
-
-      function isNightShift(shiftCode) {
-        if (!shiftCode) return false;
-        return shiftCode.toUpperCase().trim() === "N";
-      }
-
-      // Add separator
-      const separatorTr = document.createElement("tr");
-      separatorTr.className = "totals-separator";
-      const separatorTd = document.createElement("td");
-      separatorTd.className = "name-col";
-      separatorTd.colSpan = 1 + (allWeeks.length * 7) + allWeeks.length;
-      separatorTd.style.background = "#e0e0e0";
-      separatorTd.style.height = "8px";
-      separatorTr.appendChild(separatorTd);
-      tfoot.appendChild(separatorTr);
-
-      // Row grouping: Day Shift, Night Shift
-      const sections = [
-        {
-          sectionLabel: "Day Shift",
-          rows: [
-            { label: "Staff Nurse", roleIds: [1, 2], isNight: false, reqField: "day_sn_required" },
-            { label: "Nursing Assistant", roleIds: [3], isNight: false, reqField: "day_na_required" }
-          ]
-        },
-        {
-          sectionLabel: "Night Shift",
-          rows: [
-            { label: "Staff Nurse", roleIds: [1, 2], isNight: true, reqField: "night_sn_required" },
-            { label: "Nursing Assistant", roleIds: [3], isNight: true, reqField: "night_na_required" }
-          ]
-        }
-      ];
-
-      sections.forEach(section => {
-        // Section header
-        const sectionTr = document.createElement("tr");
-        sectionTr.className = "totals-section-row";
-        const sectionTd = document.createElement("td");
-        sectionTd.className = "name-col";
-        sectionTd.colSpan = 1 + (allWeeks.length * 7) + allWeeks.length;
-        sectionTd.textContent = section.sectionLabel;
-        sectionTr.appendChild(sectionTd);
-        tfoot.appendChild(sectionTr);
-
-        // Each row in section
-        section.rows.forEach(rowDef => {
-          const tr = document.createElement("tr");
-          tr.className = "totals-row";
-
-          const labelTd = document.createElement("td");
-          labelTd.className = "name-col";
-          labelTd.textContent = rowDef.label;
-          labelTd.style.fontWeight = "600";
-          labelTd.style.paddingLeft = "16px";
-          tr.appendChild(labelTd);
-
-          allWeeks.forEach(w => {
-            w.days.forEach(day => {
-              const cell = document.createElement("td");
-              cell.className = "totals-cell";
-
-              // Calculate total for this role and shift type
-              let total = 0;
-              allUsers
-                .filter(u => rowDef.roleIds.includes(u.role_id))
-                .filter(u => !u.is_non_staff || u.counts_towards_staffing)
-                .forEach(u => {
-                  const assignment = assignmentsMap.get(`${u.id}_${day.date}`);
-                  if (assignment) {
-                    const shift = shiftMap.get(assignment.shift_id);
-                    if (shift) {
-                      const shiftNight = isNightShift(shift.code);
-                      if (shiftNight === rowDef.isNight) {
-                        total += getStaffingCount(shift);
-                      }
-                    }
-                  }
-                });
-
-              // Get required (from defaults)
-              const required = STAFFING_DEFAULTS[rowDef.reqField];
-
-              // Display total (handle decimals for part-day shifts)
-              const displayValue = total % 1 === 0 ? total.toString() : total.toFixed(1);
-              cell.textContent = displayValue;
-
-              // Softer orange if short
-              if (total < required) {
-                cell.style.backgroundColor = "#ffc599";
-                cell.style.color = "#5d3e1f";
-                cell.style.fontWeight = "600";
-              }
-
-              cell.style.textAlign = "center";
-              tr.appendChild(cell);
-            });
-
-            // Week separator
-            const sep = document.createElement("td");
-            sep.className = "week-sep";
-            tr.appendChild(sep);
-          });
-
-          tfoot.appendChild(tr);
-        });
-      });
-
-      table.appendChild(tfoot);
-    }
-
-    // ========== DISPLAY & EVENT HANDLERS ==========
-
-    function describeAssignment(userId, date) {
-      const assignment = assignmentsMap.get(`${userId}_${date}`);
-      if (!assignment) return { text: "No planned shift", shift: null };
-      const shift = shiftMap.get(assignment.shift_id);
-      if (!shift) return { text: "Planned shift", shift: null };
-      const label = shift.label ? ` ${shift.label}` : "";
-      return { text: `${shift.code}${label}`, shift };
-    }
-
-    function openPublishedDetails({ userId, date }) {
-      if (!periodData || periodData.status !== "published") return;
-      lastPublishedCell = { userId, date };
-      // Expose as activeCell so swap-functions can operate
-      window.activeCell = { userId, date };
-
+    function closePublishedDetails() {
       const modal = document.getElementById("publishedDetailsModal");
+      if (modal) modal.setAttribute("aria-hidden", "true");
+    }
+
+    window.openPublishedDetails = function openPublishedDetails(context) {
+      console.log("[OPEN PUBLISHED DETAILS] Called with context:", context);
+      window.currentPublishedContext = context;
+      window.lastPublishedCell = context;
+      const { userId, date } = context;
+      
+      const user = allUsers?.find(u => u.id === userId);
+      const assignment = assignmentsMap?.get(`${userId}_${date}`);
+      const shift = assignment ? shiftMap?.get(assignment.shift_id) : null;
+      
+      // Populate modal header
+      const titleEl = document.getElementById("publishedDetailsTitle");
       const subtitleEl = document.getElementById("publishedDetailsSubtitle");
+      if (titleEl) titleEl.textContent = user?.name || "Shift Details";
+      const dateObj = new Date(date);
+      if (subtitleEl) subtitleEl.textContent = dateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      
+      // Populate shift details
       const codeEl = document.getElementById("publishedShiftCode");
       const nameEl = document.getElementById("publishedShiftName");
+      const restDayLabel = document.getElementById("restDayLabel");
+      
+      if (shift?.code === "O") {
+        // Rest day
+        if (codeEl) codeEl.textContent = "OFF";
+        if (nameEl) nameEl.textContent = "Rest day";
+        if (restDayLabel) restDayLabel.style.display = "";
+      } else if (shift) {
+        if (codeEl) codeEl.textContent = shift.code || "";
+        if (nameEl) nameEl.textContent = shift.shift_name || shift.code || "";
+        if (restDayLabel) restDayLabel.style.display = "none";
+      } else {
+        if (codeEl) codeEl.textContent = "—";
+        if (nameEl) nameEl.textContent = "No shift assigned";
+        if (restDayLabel) restDayLabel.style.display = "none";
+      }
+      
+      // Populate times and hours
+      const override = assignment ? overridesMap?.get(assignment.id) : null;
+      
       const scheduledTimesRow = document.getElementById("scheduledTimesRow");
       const scheduledTimes = document.getElementById("scheduledTimes");
       const actualTimesRow = document.getElementById("actualTimesRow");
       const actualTimes = document.getElementById("actualTimes");
-      const hoursEl = document.getElementById("publishedShiftHours");
       const hoursRow = document.getElementById("hoursRow");
-      const restDayLabel = document.getElementById("restDayLabel");
+      const hoursEl = document.getElementById("publishedShiftHours");
+      
+      if (shift && shift.code !== "O") {
+        // Show scheduled times
+        const startTime = shift.start_time ? shift.start_time.slice(0, 5) : "—";
+        const endTime = shift.end_time ? shift.end_time.slice(0, 5) : "—";
+        if (scheduledTimes) scheduledTimes.textContent = `${startTime} – ${endTime}`;
+        if (scheduledTimesRow) scheduledTimesRow.style.display = "";
+        if (hoursEl) hoursEl.textContent = shift.hours_value || "—";
+        if (hoursRow) hoursRow.style.display = "";
+      } else {
+        if (scheduledTimesRow) scheduledTimesRow.style.display = "none";
+        if (hoursRow) hoursRow.style.display = "none";
+      }
+      
+      // Show override if present
+      if (override && (override.override_start_time || override.override_end_time)) {
+        const overrideStart = override.override_start_time || "—";
+        const overrideEnd = override.override_end_time || "—";
+        if (actualTimes) actualTimes.textContent = `${overrideStart} – ${overrideEnd}`;
+        if (actualTimesRow) actualTimesRow.style.display = "";
+        if (hoursEl && override.override_hours) hoursEl.textContent = override.override_hours;
+      } else {
+        if (actualTimesRow) actualTimesRow.style.display = "none";
+      }
+      
+      // Populate comments if visible
       const commentDisplay = document.getElementById("commentDisplay");
       const commentText = document.getElementById("commentText");
-
-      const btnChange = document.getElementById("publishedChangeBtn");
-      const btnComments = document.getElementById("publishedCommentsBtn");
-      const btnSwap = document.getElementById("publishedSwapBtn");
-      const btnHistory = document.getElementById("publishedHistoryBtn");
-
-      const user = allUsers.find(u => u.id === userId);
-      const assignmentInfo = describeAssignment(userId, date);
-      const assignment = assignmentsMap.get(`${userId}_${date}`);
-      const override = assignment?.id ? overridesMap.get(assignment.id) : null;
-
-      const dateStr = new Date(date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-      subtitleEl.textContent = `${user?.name || "Staff"} — ${dateStr}`;
+      const comments = assignment ? commentsMap?.get(assignment.id) : null;
+      const isAdmin = window.currentUser?.is_admin;
+      const visibleComments = (comments || []).filter(c => {
+        const vis = c.comment_visibility || (c.is_admin_only ? 'admin_only' : 'all_staff');
+        if (vis === 'admin_only') return isAdmin;
+        if (vis === 'user_only') return window.currentUser?.id === userId;
+        return true;
+      });
       
-      // Build shift display with metadata styling
-      if (assignmentInfo.shift) {
-        const s = assignmentInfo.shift;
-        
-        // Apply code with metadata styling
-        codeEl.textContent = s.code || '';
-        if (s.fill_color) {
-          codeEl.style.backgroundColor = s.fill_color;
-        }
-        if (s.text_color) {
-          codeEl.style.color = s.text_color;
-        }
-        
-        // Show label as shift name
-        nameEl.textContent = s.label ? ` ${s.label}` : '';
-        
-        // Build time display with override support
-        if (s.start_time && s.end_time) {
-          restDayLabel.style.display = 'none';
-          
-          if (override && override.override_start_time && override.override_end_time) {
-            // Show both scheduled and actual
-            scheduledTimes.textContent = `${s.start_time}–${s.end_time}`;
-            scheduledTimesRow.style.display = '';
-            actualTimes.textContent = `${override.override_start_time}–${override.override_end_time}`;
-            actualTimesRow.style.display = '';
-          } else {
-            // Show only scheduled
-            scheduledTimes.textContent = `${s.start_time}–${s.end_time}`;
-            scheduledTimesRow.style.display = '';
-            actualTimesRow.style.display = 'none';
-          }
-        } else {
-          scheduledTimesRow.style.display = 'none';
-          actualTimesRow.style.display = 'none';
-          restDayLabel.style.display = '';
-        }
-        
-        // Show hours (override takes precedence)
-        const displayHours = override?.override_hours ?? s.hours_value;
-        if (displayHours) {
-          hoursEl.textContent = `${displayHours} hours`;
-          if (override?.override_hours) {
-            hoursEl.style.color = '#dc2626';
-            hoursEl.style.fontWeight = '600';
-          } else {
-            hoursEl.style.color = '';
-            hoursEl.style.fontWeight = '';
-          }
-          hoursRow.style.display = '';
-        } else {
-          hoursRow.style.display = 'none';
-        }
+      if (visibleComments.length > 0) {
+        const firstComment = visibleComments[0];
+        if (commentText) commentText.textContent = firstComment.comment || "";
+        if (commentDisplay) commentDisplay.style.display = "";
       } else {
-        codeEl.textContent = assignmentInfo.text;
-        codeEl.style.backgroundColor = '';
-        codeEl.style.color = '';
-        nameEl.textContent = '';
-        scheduledTimesRow.style.display = 'none';
-        actualTimesRow.style.display = 'none';
-        hoursRow.style.display = 'none';
+        if (commentDisplay) commentDisplay.style.display = "none";
       }
       
-      // Show comment if exists AND user has permission to see it
-      const isAdmin = !!window.currentUser?.is_admin;
-      let canSeeComment = false;
-      
-      if (override?.comment) {
-        const visibility = override.comment_visibility || 'admin_only';
-        if (visibility === 'admin_only') {
-          canSeeComment = isAdmin;
-        } else if (visibility === 'all_staff') {
-          canSeeComment = true;
-        } else if (visibility === 'user_only') {
-          canSeeComment = (window.currentUser?.id === userId);
-        }
-      }
-      
-      if (override?.comment && canSeeComment) {
-        commentText.textContent = override.comment;
-        commentDisplay.style.display = '';
-      } else {
-        commentDisplay.style.display = 'none';
-      }
-
-      const canHistory = isAdmin || window.PermissionsModule?.hasPermission("rota.view_history");
-      const isOwnCell = (window.currentUser?.id === userId);
-
-      if (btnChange) btnChange.style.display = canEditPublished ? "" : "none";
-      // View comments always visible; comments filter by visibility flag internally
-      if (btnComments) btnComments.style.display = "";
-      // Swap shift: admin can swap any shift; staff can only swap their own
-      if (btnSwap) btnSwap.style.display = (isAdmin || isOwnCell) ? "" : "none";
-      if (btnHistory) btnHistory.style.display = canHistory ? "" : "none";
-
-      modal.setAttribute("aria-hidden", "false");
-    }
-
-    function closePublishedDetails() {
+      // Open modal
       const modal = document.getElementById("publishedDetailsModal");
-      if (modal) modal.setAttribute("aria-hidden", "true");
+      if (modal) modal.setAttribute("aria-hidden", "false");
     }
 
     function handlePublishedChange() {
@@ -2129,10 +1100,15 @@
         return;
       }
       closePublishedDetails();
+      
+      // Try to open shift picker
       if (typeof window.openShiftPickerForPublished === "function") {
+        console.log("[ROTA] openShiftPickerForPublished is available, calling it");
         window.openShiftPickerForPublished(cell.userId, cell.date);
       } else {
-        alert("Editor not ready yet. Try again.");
+        console.error("[ROTA] openShiftPickerForPublished not available. Checking shift-editor status...");
+        console.log("[ROTA] window.initDraftEditing available?", typeof window.initDraftEditing === "function");
+        alert("Shift editor not ready. Please try again or refresh the page.");
       }
     }
 
@@ -2156,25 +1132,25 @@
         const endTimeInput = document.getElementById("amendmentEndTime");
         const hoursInput = document.getElementById("amendmentHours");
         const reasonInput = document.getElementById("amendmentReason");
-        
+
         if (!backdrop) {
           console.error("[OVERRIDE AMENDMENT] Modal backdrop not found");
           alert("Modal not initialized");
           return;
         }
-        
+
         const assignment = (typeof getAssignment === "function"
           ? getAssignment(userId, date)
           : window.getAssignment?.(userId, date))
           || assignmentsMap?.get(`${userId}_${date}`);
         const user = allUsers?.find(u => u.id === userId);
         const dateObj = new Date(date);
-        
+
         console.log("[OVERRIDE AMENDMENT] Opening modal for assignment:", assignment);
-        
+
         if (title) title.textContent = user ? `${user.name} - Override Shift Times` : "Override Shift Times";
         if (subtitle) subtitle.textContent = dateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-        
+
         // Load existing override if any
         if (assignment?.id) {
           const override = overridesMap?.get(assignment.id);
@@ -2207,10 +1183,10 @@
             if (reasonInput) reasonInput.value = "";
           }
         }
-        
+
         // Store context for save
         window.overrideAmendmentContext = { userId, date, assignmentId: assignment?.id };
-        
+
         console.log("[OVERRIDE AMENDMENT] Opening modal, context:", window.overrideAmendmentContext);
         backdrop.setAttribute("aria-hidden", "false");
       } catch (err) {
@@ -2219,164 +1195,253 @@
       }
     }
 
-    // Keep hours in sync if start/end change in the override amendment modal
-    function attachAmendmentHourAutoCalc() {
-      const startInput = document.getElementById("amendmentStartTime");
-      const endInput = document.getElementById("amendmentEndTime");
-      const hoursInput = document.getElementById("amendmentHours");
-      if (!startInput || !endInput || !hoursInput) return;
-
-      const recompute = () => {
-        if (!startInput.value || !endInput.value) return;
-        const [sh, sm] = startInput.value.split(":").map(Number);
-        const [eh, em] = endInput.value.split(":").map(Number);
-        let minutes = (eh * 60 + em) - (sh * 60 + sm);
-        if (minutes < 0) minutes += 24 * 60; // handle overnight
-        const hrs = Math.round((minutes / 60) * 4) / 4; // nearest 0.25
-        hoursInput.value = hrs;
-      };
-
-      startInput.addEventListener("change", recompute);
-      endInput.addEventListener("change", recompute);
-    }
-
-    function closeOverrideAmendmentModal() {
-      const backdrop = document.getElementById("overrideAmendmentModalBackdrop");
-      if (backdrop) backdrop.setAttribute("aria-hidden", "true");
-      window.overrideAmendmentContext = null;
-    }
-
-    function saveOverrideAmendment() {
-      const context = window.overrideAmendmentContext;
-      if (!context) {
-        alert("No amendment context.");
-        return;
-      }
-
-      const startTime = document.getElementById("amendmentStartTime")?.value || "";
-      const endTime = document.getElementById("amendmentEndTime")?.value || "";
-      const hours = parseFloat(document.getElementById("amendmentHours")?.value || 0);
-      const reason = document.getElementById("amendmentReason")?.value || "";
-
-      if (!startTime || !endTime) {
-        alert("Please enter both start and end times.");
-        return;
-      }
-
-      // Call the direct save function
-      console.log("[OVERRIDE AMENDMENT] Calling saveOverrideAmendmentDirect with:", {
-        assignmentId: context.assignmentId,
-        startTime,
-        endTime,
-        hours,
-        reason
-      });
-      window.saveOverrideAmendmentDirect(context.assignmentId, startTime, endTime, hours, reason);
-    }
-
-    // Simplified implementation: direct Supabase update
-    window.saveOverrideAmendmentDirect = async function(assignmentId, startTime, endTime, hours, reason) {
-      console.log("[OVERRIDE AMENDMENT DIRECT] Received parameters:", {
-        assignmentId,
-        assignmentIdType: typeof assignmentId,
-        startTime,
-        endTime,
-        hours,
-        reason
-      });
-      try {
-        if (!window.supabaseClient) {
-          alert("Database client not initialized.");
-          return;
-        }
-
-        const { data, error } = await window.supabaseClient
-          .from("rota_assignment_overrides")
-          .upsert({
-            rota_assignment_id: assignmentId,
-            override_start_time: startTime,
-            override_end_time: endTime,
-            override_hours: hours,
-            comment: reason,
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'rota_assignment_id'
-          })
-          .select();
-
-        if (error) {
-          console.error("[OVERRIDE AMENDMENT] Error:", error);
-          alert(`Failed to save override: ${error.message}`);
-          return;
-        }
-
-          console.log("[OVERRIDE AMENDMENT] Override saved successfully", data);
-          
-          // Update overridesMap with the new/updated override
-          if (data && data[0]) {
-            overridesMap.set(assignmentId, data[0]);
-          }
-
-          // Record override action in history so it shows in View History
-          try {
-            const context = window.overrideAmendmentContext || {};
-            const userId = context.userId;
-            const date = context.date;
-            const userMeta = allUsers.find(u => u.id === userId);
-            const isNonStaff = userMeta?.is_non_staff;
-            const historyAssignee = isNonStaff
-              ? { user_id: null, period_non_staff_id: userId }
-              : { user_id: userId, period_non_staff_id: null };
-            const assignment = assignmentsMap.get(`${userId}_${date}`);
-            const currentShift = assignment ? shiftMap.get(assignment.shift_id) : null;
-            const shiftCode = currentShift?.code || null;
-
-            const { error: histErr } = await window.supabaseClient
-              .from("rota_assignment_history")
-              .insert([{
-                rota_assignment_id: assignmentId,
-                ...historyAssignee,
-                date: date,
-                old_shift_id: assignment?.shift_id || null,
-                old_shift_code: shiftCode,
-                new_shift_id: assignment?.shift_id || null,
-                new_shift_code: shiftCode,
-                change_reason: 'Shift override',
-                changed_by: window.currentUser?.id,
-                changed_by_name: window.currentUser?.name,
-                changed_at: new Date().toISOString()
-              }]);
-
-            if (histErr) {
-              console.error("[OVERRIDE AMENDMENT] Error recording history:", histErr);
-            }
-          } catch (historyErr) {
-            console.error("[OVERRIDE AMENDMENT] Unexpected history error:", historyErr);
-          }
-          
-          alert("Override amended successfully.");
-          closeOverrideAmendmentModal();
-        
-        // Reload the rota to show changes
-        if (typeof renderRota === "function") {
-          renderRota();
-        }
-      } catch (err) {
-        console.error("[OVERRIDE AMENDMENT] Unexpected error:", err);
-        alert("Unexpected error saving override.");
-      }
-    };
-
     function handlePublishedHistory() {
       const cell = window.lastPublishedCell || lastPublishedCell;
       if (!cell) return;
-      
+
       if (window.AssignmentHistoryModule?.loadAssignmentHistory) {
         closePublishedDetails();
         window.AssignmentHistoryModule.loadAssignmentHistory(cell.userId, cell.date);
       } else {
         alert("History module not loaded.");
       }
+    }
+
+    async function handlePublishedComments() {
+      console.log("[COMMENTS DEBUG] handlePublishedComments called");
+      console.log("[COMMENTS DEBUG] window.lastPublishedCell:", window.lastPublishedCell);
+      if (!window.lastPublishedCell) {
+        console.log("[COMMENTS DEBUG] ERROR: window.lastPublishedCell not set!");
+        alert("Please select a shift first.");
+        return;
+      }
+
+      const { userId, date } = window.lastPublishedCell;
+      const user = allUsers.find(u => u.id === userId);
+      const assignment = assignmentsMap.get(`${userId}_${date}`);
+
+      console.log("[COMMENTS DEBUG] Looking up assignment for key:", `${userId}_${date}`);
+      console.log("[COMMENTS DEBUG] Found assignment:", assignment);
+
+      if (!assignment) {
+        console.log("[COMMENTS DEBUG] ERROR: No assignment found!");
+        alert("No assignment for this date.");
+        return;
+      }
+
+      // Load comments via RPC instead of direct query
+      console.log("[COMMENTS DEBUG] Loading comments for assignment ID:", assignment.id);
+      const token = sessionStorage.getItem('calpe_ward_token');
+      const { data: comments, error } = await supabaseClient
+        .rpc("rpc_get_rota_assignment_comments", { p_assignment_ids: [assignment.id], p_token: token });
+
+      if (error) {
+        console.error("Error loading comments:", error);
+        alert("Failed to load comments.");
+        return;
+      }
+
+      console.log("[COMMENTS DEBUG] Loaded comments:", comments);
+
+      // The RPC returns comments for the assignment(s), filter for this specific assignment if needed
+      let assignmentComments = comments || [];
+      if (assignmentComments.length > 0 && assignmentComments[0].assignment_id !== undefined) {
+        // If response includes assignment_id field, filter to just this assignment
+        assignmentComments = assignmentComments.filter(c => c.assignment_id === assignment.id);
+      }
+
+      // Filter comments based on visibility
+      const isAdmin = window.currentUser?.is_admin;
+      const visibleComments = assignmentComments.filter(c => {
+        const visibility = c.comment_visibility || (c.is_admin_only ? 'admin_only' : 'all_staff');
+        if (visibility === 'admin_only') return isAdmin;
+        if (visibility === 'all_staff') return true;
+        if (visibility === 'user_only') return window.currentUser?.id === userId;
+        return false;
+      });
+
+      // Populate modal
+      const modal = document.getElementById("commentsModalBackdrop");
+      const subtitle = document.getElementById("commentsModalSubtitle");
+      const commentsList = document.getElementById("commentsList");
+      const newCommentText = document.getElementById("newCommentText");
+      const isAdminCheckbox = document.getElementById("isAdminOnlyCheckbox");
+      const addBtn = document.getElementById("addCommentBtn");
+
+      const dateStr = new Date(date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      subtitle.textContent = `${user?.name || "Staff"} – ${dateStr}`;
+
+      // Render comments
+      commentsList.innerHTML = "";
+      if (visibleComments.length === 0) {
+        const empty = document.createElement("p");
+        empty.style.color = "#9ca3af";
+        empty.style.fontSize = "13px";
+        empty.textContent = "No comments yet.";
+        commentsList.appendChild(empty);
+      } else {
+        visibleComments.forEach(comment => {
+          const div = document.createElement("div");
+          div.style.padding = "12px";
+          div.style.borderLeft = "3px solid #3b82f6";
+          div.style.backgroundColor = "#f0f9ff";
+          div.style.borderRadius = "4px";
+          div.style.position = "relative";
+
+          // User info
+          const header = document.createElement("div");
+          header.style.fontSize = "12px";
+          header.style.color = "#64748b";
+          header.style.marginBottom = "6px";
+          header.style.display = "flex";
+          header.style.justifyContent = "space-between";
+          header.style.alignItems = "center";
+
+          const userTime = document.createElement("span");
+          const createdUser = allUsers.find(u => u.id === comment.created_by);
+          console.log("[COMMENTS RENDER] comment.created_by:", comment.created_by, "createdUser found:", createdUser, "allUsers:", allUsers);
+          const createdAt = new Date(comment.created_at).toLocaleString("en-GB");
+          userTime.textContent = `${createdUser?.name || "Unknown"} • ${createdAt}`;
+          header.appendChild(userTime);
+
+          // Delete button (discreet, only visible on hover)
+          const canDelete = window.currentUser?.id === comment.created_by || window.currentUser?.is_admin;
+          if (canDelete) {
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.innerHTML = "×";
+            deleteBtn.style.background = "none";
+            deleteBtn.style.border = "none";
+            deleteBtn.style.fontSize = "18px";
+            deleteBtn.style.color = "#94a3b8";
+            deleteBtn.style.cursor = "pointer";
+            deleteBtn.style.padding = "0 4px";
+            deleteBtn.style.opacity = "0";
+            deleteBtn.style.transition = "opacity 0.2s, color 0.2s";
+            deleteBtn.title = "Delete comment";
+
+            deleteBtn.addEventListener("mouseenter", () => {
+              deleteBtn.style.color = "#dc2626";
+            });
+            deleteBtn.addEventListener("mouseleave", () => {
+              deleteBtn.style.color = "#94a3b8";
+            });
+
+            deleteBtn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              if (!confirm("Delete this comment?")) return;
+
+              try {
+                const token = sessionStorage.getItem('calpe_ward_token');
+                const { error } = await supabaseClient
+                  .rpc("rpc_delete_rota_assignment_comment", { p_comment_id: comment.id, p_token: token });
+
+                if (error) throw error;
+
+                // Reload comments
+                await handlePublishedComments();
+              } catch (err) {
+                console.error("[COMMENTS] Delete failed:", err);
+                alert("Failed to delete comment.");
+              }
+            });
+
+            header.appendChild(deleteBtn);
+
+            // Show delete button on hover
+            div.addEventListener("mouseenter", () => {
+              deleteBtn.style.opacity = "1";
+            });
+            div.addEventListener("mouseleave", () => {
+              deleteBtn.style.opacity = "0";
+            });
+          }
+
+          // Show visibility badge
+          const visibility = comment.comment_visibility || (comment.is_admin_only ? 'admin_only' : 'all_staff');
+          if (visibility !== 'all_staff') {
+            const badge = document.createElement("span");
+            badge.style.fontSize = "11px";
+            badge.style.fontWeight = "600";
+            if (visibility === 'admin_only') {
+              badge.style.color = "#dc2626";
+              badge.textContent = "ADMIN ONLY";
+            } else if (visibility === 'user_only') {
+              badge.style.color = "#2563eb";
+              badge.textContent = "USER ONLY";
+            }
+            header.appendChild(badge);
+          }
+
+          div.appendChild(header);
+
+          // Comment text
+          const text = document.createElement("div");
+          text.style.fontSize = "13px";
+          text.style.color = "#0f172a";
+          text.style.whiteSpace = "pre-wrap";
+          text.textContent = comment.comment;
+          div.appendChild(text);
+
+          commentsList.appendChild(div);
+        });
+      }
+
+      // Clear form
+      newCommentText.value = "";
+      const visibilityDropdown = document.getElementById("commentVisibilityDropdown");
+      if (visibilityDropdown) visibilityDropdown.value = 'all_staff';
+
+      // Store current cell for add handler
+      window._commentsModalCell = { userId, assignmentId: assignment.id, date };
+
+      // Clear old listeners and attach new
+      addBtn.onclick = null;
+      addBtn.addEventListener("click", async () => {
+        const commentText = newCommentText.value.trim();
+        if (!commentText) {
+          alert("Comment cannot be empty.");
+          return;
+        }
+
+        console.log("[COMMENTS] window.currentUser:", window.currentUser);
+        console.log("[COMMENTS] window.currentUser?.id:", window.currentUser?.id);
+
+        const visibilityDropdown = document.getElementById("commentVisibilityDropdown");
+        const commentVisibility = visibilityDropdown?.value || 'all_staff';
+
+        console.log("[COMMENTS] Saving comment:", { assignmentId: assignment.id, commentText, commentVisibility, userId: window.currentUser?.id });
+
+        const token = sessionStorage.getItem('calpe_ward_token');
+        const { error: insertErr, data: newComment } = await supabaseClient
+          .rpc("rpc_add_rota_assignment_comment", {
+            p_assignment_id: assignment.id,
+            p_comment_text: commentText,
+            p_comment_visibility: commentVisibility,
+            p_token: token
+          });
+
+        if (insertErr) {
+          console.error("[COMMENTS] Error saving:", insertErr);
+          alert("Failed to save comment.");
+          return;
+        }
+
+        console.log("[COMMENTS] Comment saved successfully");
+
+        // Update commentsMap with the new comment
+        if (newComment) {
+          const existing = commentsMap.get(assignment.id) || [];
+          existing.push(newComment);
+          commentsMap.set(assignment.id, existing);
+          renderRota(); // Re-render to show blue dot
+        }
+
+        // Reload comments in modal
+        await handlePublishedComments();
+      });
+
+      modal.setAttribute("aria-hidden", "false");
     }
 
     async function handlePublishedSwap() {
@@ -2392,7 +1457,7 @@
       const initiatorUser = allUsers.find(u => u.id === userId);
       const initiatorAssignment = assignmentsMap.get(`${userId}_${date}`);
       const initiatorShift = shiftMap.get(initiatorAssignment?.shift_id);
-      
+
       if (!initiatorUser || !initiatorShift) {
         alert("Could not load your shift details.");
         return;
@@ -2428,15 +1493,18 @@
               if (!shift || shift.code === "O") return false;
 
               const shiftDate = key.split("_")[1];
-              
-              // Nursing Assistants (role_id 3) can only swap within same week and with same role
-              if (initiatorRoleId === 3 || u.role_id === 3) {
-                // Must be same week
-                if (!isSameWeek(date, shiftDate)) return false;
-                
-                // Both must be Nursing Assistants
-                if (initiatorRoleId !== 3 || u.role_id !== 3) return false;
-              }
+
+              // Swap must be within roles (RN↔RN or NA↔NA only)
+              const initiatorRole = initiatorRoleId; // 1 or 2 = RN, 3 = NA
+              const counterpartyRole = u.role_id;
+              const isInitiatorRN = initiatorRole === 1 || initiatorRole === 2;
+              const isCounterpartyRN = counterpartyRole === 1 || counterpartyRole === 2;
+
+              // Must be within same role group (RN with RN, NA with NA)
+              if (isInitiatorRN !== isCounterpartyRN) return false;
+
+              // Must be same week
+              if (!isSameWeek(date, shiftDate)) return false;
 
               return true;
             })
@@ -2505,205 +1573,78 @@
       closePublishedDetails();
     }
 
-    async function handlePublishedComments() {
-      if (!lastPublishedCell) return;
-      
-      const { userId, date } = lastPublishedCell;
-      const user = allUsers.find(u => u.id === userId);
-      const assignment = assignmentsMap.get(`${userId}_${date}`);
-      
-      console.log("[COMMENTS DEBUG] lastPublishedCell:", lastPublishedCell);
-      console.log("[COMMENTS DEBUG] Looking up assignment for key:", `${userId}_${date}`);
-      console.log("[COMMENTS DEBUG] Found assignment:", assignment);
-      
-      if (!assignment) {
-        alert("No assignment for this date.");
-        return;
-      }
-      
-      // Load comments for this assignment
-      console.log("[COMMENTS DEBUG] Loading comments for assignment ID:", assignment.id);
-      const { data: comments, error } = await supabaseClient
-        .from("rota_assignment_comments")
-        .select("*")
-        .eq("rota_assignment_id", assignment.id)
-        .order("created_at", { ascending: false });
-      
-      if (error) {
-        console.error("Error loading comments:", error);
-        alert("Failed to load comments.");
-        return;
-      }
-      
-      console.log("[COMMENTS DEBUG] Loaded comments:", comments);
-      
-      // Filter comments based on visibility
-      const isAdmin = window.currentUser?.is_admin;
-      const visibleComments = (comments || []).filter(c => {
-        const visibility = c.comment_visibility || (c.is_admin_only ? 'admin_only' : 'all_staff');
-        if (visibility === 'admin_only') return isAdmin;
-        if (visibility === 'all_staff') return true;
-        if (visibility === 'user_only') return window.currentUser?.id === userId;
-        return false;
-      });
-      
-      // Populate modal
-      const modal = document.getElementById("commentsModalBackdrop");
-      const subtitle = document.getElementById("commentsModalSubtitle");
-      const commentsList = document.getElementById("commentsList");
-      const newCommentText = document.getElementById("newCommentText");
-      const isAdminCheckbox = document.getElementById("isAdminOnlyCheckbox");
-      const addBtn = document.getElementById("addCommentBtn");
-      
-      const dateStr = new Date(date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-      subtitle.textContent = `${user?.name || "Staff"} — ${dateStr}`;
-      
-      // Render comments
-      commentsList.innerHTML = "";
-      if (visibleComments.length === 0) {
-        const empty = document.createElement("p");
-        empty.style.color = "#9ca3af";
-        empty.style.fontSize = "13px";
-        empty.textContent = "No comments yet.";
-        commentsList.appendChild(empty);
-      } else {
-        visibleComments.forEach(comment => {
-          const div = document.createElement("div");
-          div.style.padding = "12px";
-          div.style.borderLeft = "3px solid #3b82f6";
-          div.style.backgroundColor = "#f0f9ff";
-          div.style.borderRadius = "4px";
-          
-          // User info
-          const header = document.createElement("div");
-          header.style.fontSize = "12px";
-          header.style.color = "#64748b";
-          header.style.marginBottom = "6px";
-          header.style.display = "flex";
-          header.style.justifyContent = "space-between";
-          header.style.alignItems = "center";
-          
-          const userTime = document.createElement("span");
-          const createdUser = allUsers.find(u => u.id === comment.created_by);
-          console.log("[COMMENTS RENDER] comment.created_by:", comment.created_by, "createdUser found:", createdUser, "allUsers:", allUsers);
-          const createdAt = new Date(comment.created_at).toLocaleString("en-GB");
-          userTime.textContent = `${createdUser?.name || "Unknown"} • ${createdAt}`;
-          header.appendChild(userTime);
-          
-          // Show visibility badge
-          const visibility = comment.comment_visibility || (comment.is_admin_only ? 'admin_only' : 'all_staff');
-          if (visibility !== 'all_staff') {
-            const badge = document.createElement("span");
-            badge.style.fontSize = "11px";
-            badge.style.fontWeight = "600";
-            if (visibility === 'admin_only') {
-              badge.style.color = "#dc2626";
-              badge.textContent = "ADMIN ONLY";
-            } else if (visibility === 'user_only') {
-              badge.style.color = "#2563eb";
-              badge.textContent = "USER ONLY";
-            }
-            header.appendChild(badge);
-          }
-          
-          div.appendChild(header);
-          
-          // Comment text
-          const text = document.createElement("div");
-          text.style.fontSize = "13px";
-          text.style.color = "#0f172a";
-          text.style.whiteSpace = "pre-wrap";
-          text.textContent = comment.comment;
-          div.appendChild(text);
-          
-          commentsList.appendChild(div);
-        });
-      }
-      
-      // Clear form
-      newCommentText.value = "";
-      const visibilityDropdown = document.getElementById("commentVisibilityDropdown");
-      if (visibilityDropdown) visibilityDropdown.value = 'all_staff';
-      
-      // Store current cell for add handler
-      window._commentsModalCell = { userId, assignmentId: assignment.id, date };
-      
-      // Clear old listeners and attach new
-      addBtn.onclick = null;
-      addBtn.addEventListener("click", async () => {
-        const commentText = newCommentText.value.trim();
-        if (!commentText) {
-          alert("Comment cannot be empty.");
-          return;
-        }
-        
-        console.log("[COMMENTS] window.currentUser:", window.currentUser);
-        console.log("[COMMENTS] window.currentUser?.id:", window.currentUser?.id);
-        
-        const visibilityDropdown = document.getElementById("commentVisibilityDropdown");
-        const commentVisibility = visibilityDropdown?.value || 'all_staff';
-        
-        console.log("[COMMENTS] Saving comment:", { assignmentId: assignment.id, commentText, commentVisibility, userId: window.currentUser?.id });
-        
-        const { error: insertErr, data: newComment } = await supabaseClient
-          .from("rota_assignment_comments")
-          .insert([{
-            rota_assignment_id: assignment.id,
-            comment: commentText,
-            comment_visibility: commentVisibility,
-            created_by: window.currentUser?.id,
-            updated_by: window.currentUser?.id
-          }])
-          .select()
-          .single();
-        
-        if (insertErr) {
-          console.error("[COMMENTS] Error saving:", insertErr);
-          alert("Failed to save comment.");
-          return;
-        }
-        
-        console.log("[COMMENTS] Comment saved successfully");
-        
-        // Update commentsMap with the new comment
-        if (newComment) {
-          const existing = commentsMap.get(assignment.id) || [];
-          existing.push(newComment);
-          commentsMap.set(assignment.id, existing);
-          renderRota(); // Re-render to show blue dot
-        }
-        
-        // Reload comments in modal
-        await handlePublishedComments();
-      });
-      
-      modal.setAttribute("aria-hidden", "false");
+    function saveOverrideAmendment() {
+      const modal = document.getElementById("overrideAmendmentModalBackdrop");
+      if (modal) modal.setAttribute("aria-hidden", "true");
+      alert("Override amendment saved (placeholder).");
     }
 
+    function closeOverrideAmendmentModal() {
+      const modal = document.getElementById("overrideAmendmentModalBackdrop");
+      if (modal) modal.setAttribute("aria-hidden", "true");
+    }
 
+    function attachAmendmentHourAutoCalc() {
+      const start = document.getElementById("amendmentStartTime");
+      const end = document.getElementById("amendmentEndTime");
+      const hours = document.getElementById("amendmentHours");
+      const update = () => {
+        if (!start?.value || !end?.value) return;
+        const [sh, sm] = start.value.split(":").map(Number);
+        const [eh, em] = end.value.split(":").map(Number);
+        let mins = (eh * 60 + em) - (sh * 60 + sm);
+        if (mins < 0) mins += 24 * 60;
+        const decimal = Math.round((mins / 60) * 4) / 4;
+        if (hours) hours.value = decimal.toString();
+      };
+      if (start) start.addEventListener("change", update);
+      if (end) end.addEventListener("change", update);
+    }
+
+    // Load bank holidays for the current and next few years
+    async function loadBankHolidays() {
+      bankHolidaysByDate = {};
+      try {
+        const currentYear = new Date().getFullYear();
+        const years = [currentYear, currentYear + 1];
+        for (const year of years) {
+          const { data: holidays, error } = await supabaseClient.rpc("rpc_list_bank_holidays", {
+            p_year: year
+          });
+          if (error) throw error;
+          (holidays || []).forEach(row => {
+            if (row?.holiday_date) {
+              bankHolidaysByDate[row.holiday_date] = row;
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load bank holidays:", e);
+      }
+    }
+
+    // ========== PERIOD STATUS DISPLAY ==========
+    
     function displayPeriodStatus(period) {
       const status = document.getElementById("periodStatus");
       const badge = document.getElementById("statusBadge");
       const text = document.getElementById("statusText");
 
-      // Normalize status (treat null/unknown as draft)
       const rawStatus = (period?.status || "draft").toString().toLowerCase();
       const isPublished = rawStatus === "published";
 
       badge.textContent = isPublished ? "Published" : "Draft";
       badge.className = `status-badge status-${isPublished ? "published" : "draft"}`;
-      
-      // Format dates
+
       const start = new Date(period.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
       const end = new Date(period.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      text.textContent = `${period.label || 'Period'} (${start} - ${end})`;
+      text.textContent = `${period.label || period.name || 'Period'} (${start} - ${end})`;
 
       status.style.display = "flex";
-      
-      // Show publish/unpublish buttons based on status and permission
+
       const publishBtn = document.getElementById("publishBtn");
       const unpublishBtn = document.getElementById("unpublishBtn");
-      const canPublish = window.PermissionsModule.hasPermission("rota.publish");
+      const canPublish = window.PermissionsModule?.hasPermission("rota.publish") || window.currentUser?.is_admin;
       if (canPublish) {
         publishBtn.style.display = isPublished ? "none" : "inline-block";
         unpublishBtn.style.display = isPublished ? "inline-block" : "none";
@@ -2723,7 +1664,6 @@
 
       if (toggleEditingBtn) {
         if (isPublished) {
-          // No global toggle in published mode; actions go through Change Shift
           toggleEditingBtn.style.display = "none";
         } else {
           toggleEditingBtn.style.display = canEditCurrent ? "inline-block" : "none";
@@ -2732,14 +1672,21 @@
         }
       }
 
-      // Show Add Non-Staff only in published mode (non-staff are post-publish only)
       if (addNsBtn) {
         const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
         const canShowNonStaff = isPublished && (window.currentUser?.is_admin || isMentor);
         addNsBtn.style.display = canShowNonStaff ? "inline-block" : "none";
       }
 
-      // Configure shift editor context (falls back silently if shift-editor not ready yet)
+      // Show published edit banner when period is published
+      if (publishedBanner) {
+        if (isPublished) {
+          publishedBanner.style.display = canEditCurrent ? "block" : "none";
+        } else {
+          publishedBanner.style.display = "none";
+        }
+      }
+
       if (typeof window.setShiftEditContext === "function") {
         if (isPublished) {
           window.setShiftEditContext({
@@ -2765,161 +1712,32 @@
           window.currentEditContext = currentEditContext;
         }
       }
-
-      if (typeof window.resetEditingLock === "function") {
-        window.resetEditingLock();
-      }
-
-      // Banner for draft editing only
-      if (metadataDisplay) metadataDisplay.style.display = "none";
     }
 
     async function publishPeriod() {
-      if (!window.PermissionsModule.hasPermission("rota.publish")) {
-        alert("You don't have permission to publish periods.");
+      if (!periodData?.id) return;
+      if (!window.currentUser?.is_admin) {
+        alert("Admin access required.");
         return;
       }
-      
-      if (!periodData) {
-        alert("No period selected.");
-        return;
-      }
+      if (!confirm(`Publish "${periodData.name}"? This will make the rota visible to staff.`)) return;
 
-      if (!periodData.id) {
-        alert("Period ID missing; reload and try again.");
-        return;
-      }
-      
-      const confirmed = confirm(
-        `Publish ${periodData.label}?\n\n` +
-        `This will make the rota visible to all staff. Draft assignments will become final.\n\n` +
-        `Are you sure you want to publish?`
-      );
-      
-      if (!confirmed) return;
-      
       try {
-        const nowIso = new Date().toISOString();
-        const publishedBy = window.currentUser?.id || null;
+        const { data: published, error } = await supabaseClient.rpc("admin_publish_rota_period", {
+          p_token: window.currentToken,
+          p_period_id: periodData.id
+        });
 
-        // Update period status
-        const { error: updErr } = await supabaseClient
-          .from("rota_periods")
-          .update({
-            status: "published",
-            published_at: nowIso,
-            published_by: publishedBy,
-            published_version: (periodData.published_version || 0) + 1
-          })
-          .eq("id", periodData.id);
+        if (error) throw error;
+        const publishedRow = Array.isArray(published) ? published[0] : published;
+        if (!publishedRow) throw new Error("Publish succeeded but no period returned (check RLS)");
 
-        if (updErr) throw updErr;
-
-        // Update all rota_assignments for this period from draft to published
-        const { error: assignErr } = await supabaseClient
-          .from("rota_assignments")
-          .update({ status: "published" })
-          .gte("date", periodData.start_date)
-          .lte("date", periodData.end_date)
-          .eq("status", "draft");
-
-        if (assignErr) {
-          console.error("Error updating assignment status:", assignErr);
-          // Don't throw - period is already published, this is just cleanup
-        }
-
-        // Create history records for all assignments at publication time
-        // Note: Only create ONE history record per unique user/date combination to avoid duplicates
-        try {
-          console.log('[PUBLISH] Creating history records for assignments in date range:', periodData.start_date, 'to', periodData.end_date);
-          
-          const { data: assignments, error: assignFetchErr } = await supabaseClient
-            .from("rota_assignments")
-            .select("id, user_id, period_non_staff_id, date, shift_id, shifts!shift_id(code), created_at")
-            .gte("date", periodData.start_date)
-            .lte("date", periodData.end_date)
-            .order("date, created_at", { ascending: true });
-
-          console.log('[PUBLISH] Fetch assignments result:', { assignFetchErr, assignmentCount: assignments?.length });
-          
-          if (assignFetchErr) throw assignFetchErr;
-
-          if (assignments && assignments.length > 0) {
-            console.log('[PUBLISH] Sample assignment:', assignments[0]);
-            
-            // Remove duplicates by keeping only the most recent assignment per user/date
-            const seenUserDates = new Set();
-            const uniqueAssignments = [];
-            
-            // Process in reverse chronological order and keep only the latest per user/date
-            for (let i = assignments.length - 1; i >= 0; i--) {
-              const a = assignments[i];
-              const key = `${a.user_id || a.period_non_staff_id}_${a.date}`;
-              if (!seenUserDates.has(key)) {
-                seenUserDates.add(key);
-                uniqueAssignments.push(a);
-              } else {
-                console.log('[PUBLISH] Skipping duplicate assignment for', key);
-              }
-            }
-            
-            const historyRecords = uniqueAssignments
-              .filter(a => a.shifts) // Only include if shift data exists
-              .map(a => ({
-                rota_assignment_id: a.id,
-                user_id: a.user_id,
-                period_non_staff_id: a.period_non_staff_id,
-                date: a.date,
-                old_shift_id: null,
-                old_shift_code: null,
-                new_shift_id: a.shift_id,
-                new_shift_code: a.shifts.code,
-                change_reason: 'Rota published',
-                changed_by: publishedBy,
-                changed_by_name: window.currentUser?.name || "System",
-                changed_at: nowIso
-              }));
-
-            console.log('[PUBLISH] Created', historyRecords.length, 'history records from', assignments.length, 'assignments (', seenUserDates.size, 'unique user/dates)');
-            
-            if (historyRecords.length > 0) {
-              const { error: histErr } = await supabaseClient
-                .from("rota_assignment_history")
-                .insert(historyRecords);
-
-              console.log('[PUBLISH] History insert result:', { histErr, recordCount: historyRecords.length });
-
-              if (histErr) {
-                console.error("Error creating history records:", histErr);
-                // Don't throw - publication was successful, just history recording failed
-              } else {
-                console.log('[PUBLISH] Successfully created history records');
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Error recording publication history:", e);
-          // Don't throw - publication was successful, just history recording failed
-        }
-
-        // Re-fetch to confirm state and update UI
-        const { data: refreshed, error: fetchErr } = await supabaseClient
-          .from("rota_periods")
-          .select("*")
-          .eq("id", periodData.id)
-          .maybeSingle();
-
-        if (fetchErr) throw fetchErr;
-        if (!refreshed) throw new Error("Publish succeeded but refetch returned no row (check RLS)");
-
-        periodData = refreshed;
+        periodData = publishedRow;
         displayPeriodStatus(periodData);
         updateEditingControls(periodData);
-        
-        // Reload the rota to show published assignments
         await loadPeriod(periodData.id);
-        
-        alert("Period published successfully!");
+
+        alert("Period published.");
       } catch (e) {
         console.error("Error publishing period:", e);
         alert("Failed to publish period: " + e.message);
@@ -2927,206 +1745,28 @@
     }
 
     async function unpublishPeriod() {
-      if (!window.PermissionsModule.hasPermission("rota.publish")) {
-        alert("You don't have permission to unpublish periods.");
+      if (!periodData?.id) return;
+      if (!window.currentUser?.is_admin) {
+        alert("Admin access required.");
         return;
       }
-      
-      if (!periodData) {
-        alert("No period selected.");
-        return;
-      }
+      if (!confirm(`Unpublish "${periodData.name}"? Staff will only see the last published rota.`)) return;
 
-      if (!periodData.id) {
-        alert("Period ID missing; reload and try again.");
-        return;
-      }
-      
-      // Format period display (matching what's shown in the UI)
-      const start = new Date(periodData.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      const end = new Date(periodData.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      const periodLabel = `${start} - ${end}`;
-      
-      const confirmed = confirm(
-        `⚠️ WARNING: Unpublish period (${periodLabel})?\n\n` +
-        `This will REVERT the period back to draft status.\n\n` +
-        `⚠️ IMPORTANT:\n` +
-        `• Only use this if you need to make changes BEFORE staff see the rota\n` +
-        `• DO NOT use this once the rota is in active use\n` +
-        `• For changes to published rotas, use post-publish editing instead\n\n` +
-        `Are you absolutely sure you want to unpublish?`
-      );
-      
-      if (!confirmed) return;
-      
-      // Second confirmation
-      const doubleCheck = confirm(
-        `Final confirmation:\n\n` +
-        `You are about to unpublish the period (${periodLabel}).\n` +
-        `This should only be used for testing or emergency corrections.\n\n` +
-        `Proceed?`
-      );
-      
-      if (!doubleCheck) return;
-      
       try {
-        // Update period status
-        const { error: updErr } = await supabaseClient
-          .from("rota_periods")
-          .update({
-            status: "draft",
-            published_at: null,
-            published_by: null
-          })
-          .eq("id", periodData.id);
+        const { data: unpublished, error } = await supabaseClient.rpc("admin_unpublish_rota_period", {
+          p_token: window.currentToken,
+          p_period_id: periodData.id
+        });
 
-        if (updErr) throw updErr;
+        if (error) throw error;
+        const unpublishedRow = Array.isArray(unpublished) ? unpublished[0] : unpublished;
+        if (!unpublishedRow) throw new Error("Unpublish succeeded but no period returned (check RLS)");
 
-        // Update all rota_assignments for this period from published back to draft
-        const { error: assignErr } = await supabaseClient
-          .from("rota_assignments")
-          .update({ status: "draft" })
-          .gte("date", periodData.start_date)
-          .lte("date", periodData.end_date)
-          .eq("status", "published");
-
-        if (assignErr) {
-          console.error("Error updating assignment status:", assignErr);
-          // Don't throw - period is already unpublished, this is just cleanup
-        }
-
-        // Delete all history records for this period (since we're reverting to draft)
-        try {
-          const { error: histErr } = await supabaseClient
-            .from("rota_assignment_history")
-            .delete()
-            .gte("date", periodData.start_date)
-            .lte("date", periodData.end_date);
-          
-          if (histErr) {
-            console.error("Error deleting history records:", histErr);
-          } else {
-            console.log("History records cleared for unpublished period");
-          }
-        } catch (e) {
-          console.error("Error clearing history:", e);
-        }
-
-        // Delete all swap requests for this period (by date range)
-        try {
-          const { error: swapReqErr } = await supabaseClient
-            .from("swap_requests")
-            .delete()
-            .or(`initiator_shift_date.gte.${periodData.start_date},initiator_shift_date.lte.${periodData.end_date},counterparty_shift_date.gte.${periodData.start_date},counterparty_shift_date.lte.${periodData.end_date}`);
-          
-          if (swapReqErr) {
-            console.error("Error deleting swap requests:", swapReqErr);
-          } else {
-            console.log("Swap requests cleared for unpublished period");
-          }
-        } catch (e) {
-          console.error("Error clearing swap requests:", e);
-        }
-
-        // Delete all swap executions for this period (by date range)
-        try {
-          const { error: swapExecErr } = await supabaseClient
-            .from("swap_executions")
-            .delete()
-            .or(`initiator_old_shift_date.gte.${periodData.start_date},initiator_old_shift_date.lte.${periodData.end_date},initiator_new_shift_date.gte.${periodData.start_date},initiator_new_shift_date.lte.${periodData.end_date},counterparty_old_shift_date.gte.${periodData.start_date},counterparty_old_shift_date.lte.${periodData.end_date},counterparty_new_shift_date.gte.${periodData.start_date},counterparty_new_shift_date.lte.${periodData.end_date}`);
-          
-          if (swapExecErr) {
-            console.error("Error deleting swap executions:", swapExecErr);
-          } else {
-            console.log("Swap executions cleared for unpublished period");
-          }
-        } catch (e) {
-          console.error("Error clearing swap executions:", e);
-        }
-
-        // Delete all comments on assignments in this period
-        try {
-          // First, get all assignment IDs for this period
-          const { data: assignments, error: assignListErr } = await supabaseClient
-            .from("rota_assignments")
-            .select("id")
-            .gte("date", periodData.start_date)
-            .lte("date", periodData.end_date);
-          
-          if (assignListErr) {
-            console.error("Error fetching assignments:", assignListErr);
-          } else if (assignments && assignments.length > 0) {
-            const assignmentIds = assignments.map(a => a.id);
-            
-            // Delete comments for these assignments
-            const { error: commErr } = await supabaseClient
-              .from("rota_assignment_comments")
-              .delete()
-              .in("rota_assignment_id", assignmentIds);
-            
-            if (commErr) {
-              console.error("Error deleting comments:", commErr);
-            } else {
-              console.log("Comments cleared for unpublished period");
-            }
-          }
-        } catch (e) {
-          console.error("Error clearing comments:", e);
-        }
-
-        // Delete all notifications related to swap requests in this period
-        try {
-          // Delete notifications of type 'swap_request' created during this period
-          // These are tied to swap operations in the period
-          const { error: notifErr } = await supabaseClient
-            .from("notifications")
-            .delete()
-            .eq("type", "swap_request")
-            .gte("created_at", new Date(periodData.start_date).toISOString())
-            .lte("created_at", new Date(periodData.end_date).toISOString() + "T23:59:59Z");
-          
-          if (notifErr) {
-            console.error("Error deleting swap notifications:", notifErr);
-          } else {
-            console.log("Swap notifications cleared for unpublished period");
-          }
-        } catch (e) {
-          console.error("Error clearing swap notifications:", e);
-        }
-
-        // Remove all non-staff from this period (since non-staff are only for published rotas)
-        try {
-          const { error: nsErr } = await supabaseClient
-            .from("period_non_staff")
-            .update({ removed_at: new Date().toISOString(), removed_by: window.currentUser?.id })
-            .eq("period_id", periodData.id)
-            .is("removed_at", null);
-          
-          if (nsErr) {
-            console.error("Error removing non-staff from period:", nsErr);
-          } else {
-            console.log("Non-staff removed from unpublished period");
-          }
-        } catch (e) {
-          console.error("Error clearing non-staff:", e);
-        }
-
-        const { data: refreshed, error: fetchErr } = await supabaseClient
-          .from("rota_periods")
-          .select("*")
-          .eq("id", periodData.id)
-          .maybeSingle();
-
-        if (fetchErr) throw fetchErr;
-        if (!refreshed) throw new Error("Unpublish succeeded but refetch returned no row (check RLS)");
-
-        periodData = refreshed;
+        periodData = unpublishedRow;
         displayPeriodStatus(periodData);
         updateEditingControls(periodData);
-        
-        // Reload the rota
         await loadPeriod(periodData.id);
-        
+
         alert("Period unpublished. Status reverted to draft.");
       } catch (e) {
         console.error("Error unpublishing period:", e);
@@ -3184,6 +1824,624 @@
     }
 
 
+
+    // ========== HELPER FUNCTIONS ==========
+    
+    function fmt(date) {
+      const d = new Date(date);
+      return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    }
+
+    function isBankHoliday(date) {
+      if (!date) return false;
+      const dateStr = date.toISOString().split('T')[0];
+      return bankHolidaysByDate.hasOwnProperty(dateStr);
+    }
+
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function getRoleGroupKey(user) {
+      if (!user) return "staff_nurse";
+      const roleIdNum = Number(user.role_id);
+      if (roleIdNum === 1) return "charge_nurse";
+      if (roleIdNum === 2) return "staff_nurse";
+      if (roleIdNum === 3) return "nursing_assistant";
+      return "staff_nurse";
+    }
+
+    function groupUsers(users) {
+      const buckets = {
+        charge_nurse: [],
+        staff_nurse: [],
+        nursing_assistant: [],
+        students: []
+      };
+
+      users.forEach(u => {
+        if (u.is_non_staff && u.category === 'student') {
+          buckets.students.push(u);
+        } else {
+          const groupKey = getRoleGroupKey(u);
+          (buckets[groupKey] || buckets.staff_nurse).push(u);
+        }
+      });
+
+      const sortBucket = (arr) => {
+        arr.sort((a, b) => {
+          if (a.is_non_staff && !b.is_non_staff) return 1;
+          if (!a.is_non_staff && b.is_non_staff) return -1;
+
+          const aOrder = a.display_order ?? 9999;
+          const bOrder = b.display_order ?? 9999;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return (a.name || "").localeCompare(b.name || "");
+        });
+      };
+
+      sortBucket(buckets.charge_nurse);
+      sortBucket(buckets.staff_nurse);
+      sortBucket(buckets.nursing_assistant);
+      sortBucket(buckets.students);
+
+      const groups = [
+        { title: "Charge Nurses", className: "section-cn", items: buckets.charge_nurse },
+        { title: "Staff Nurses", className: "section-sn", items: buckets.staff_nurse }
+      ];
+
+      if (buckets.students.length > 0) {
+        groups.push({ title: "Students", className: "section-students", items: buckets.students });
+      }
+
+      groups.push({ title: "Nursing Assistants", className: "section-na", items: buckets.nursing_assistant });
+
+      return groups.filter(g => g.items.length > 0);
+    }
+
+    function getStaffingDefaults() {
+      return {
+        day_sn_required: 3,
+        day_na_required: 1,
+        night_sn_required: 2,
+        night_na_required: 1
+      };
+    }
+
+    function renderTotals() {
+      const table = document.getElementById("rota");
+      const existingTfoot = table.querySelector("tfoot");
+      if (existingTfoot) existingTfoot.remove();
+
+      const tfoot = document.createElement("tfoot");
+      const STAFFING_DEFAULTS = getStaffingDefaults();
+
+      function getStaffingCount(shiftObj) {
+        if (!shiftObj) return 0;
+        if (shiftObj.is_time_off === true) return 0;
+        const hours = Number(shiftObj.hours_value) || 0;
+        if (hours >= 12) return 1;
+        return 0.5;
+      }
+
+      function isNightShift(shiftCode) {
+        if (!shiftCode) return false;
+        return shiftCode.toUpperCase().trim() === "N";
+      }
+
+      const separatorTr = document.createElement("tr");
+      separatorTr.className = "totals-separator";
+      const separatorTd = document.createElement("td");
+      separatorTd.className = "name-col";
+      separatorTd.colSpan = 1 + (allWeeks.length * 7) + allWeeks.length;
+      separatorTd.style.background = "#e0e0e0";
+      separatorTd.style.height = "8px";
+      separatorTr.appendChild(separatorTd);
+      tfoot.appendChild(separatorTr);
+
+      const sections = [
+        {
+          sectionLabel: "Day Shift",
+          rows: [
+            { label: "Staff Nurse", roleIds: [1, 2], isNight: false, reqField: "day_sn_required" },
+            { label: "Nursing Assistant", roleIds: [3], isNight: false, reqField: "day_na_required" }
+          ]
+        },
+        {
+          sectionLabel: "Night Shift",
+          rows: [
+            { label: "Staff Nurse", roleIds: [1, 2], isNight: true, reqField: "night_sn_required" },
+            { label: "Nursing Assistant", roleIds: [3], isNight: true, reqField: "night_na_required" }
+          ]
+        }
+      ];
+
+      sections.forEach(section => {
+        const sectionTr = document.createElement("tr");
+        sectionTr.className = "totals-section-row";
+        const sectionTd = document.createElement("td");
+        sectionTd.className = "name-col";
+        sectionTd.colSpan = 1 + (allWeeks.length * 7) + allWeeks.length;
+        sectionTd.textContent = section.sectionLabel;
+        sectionTr.appendChild(sectionTd);
+        tfoot.appendChild(sectionTr);
+
+        section.rows.forEach(rowDef => {
+          const tr = document.createElement("tr");
+          tr.className = "totals-row";
+
+          const labelTd = document.createElement("td");
+          labelTd.className = "name-col";
+          labelTd.textContent = rowDef.label;
+          labelTd.style.fontWeight = "600";
+          labelTd.style.paddingLeft = "16px";
+          tr.appendChild(labelTd);
+
+          allWeeks.forEach(w => {
+            w.days.forEach(day => {
+              const cell = document.createElement("td");
+              cell.className = "totals-cell";
+
+              let total = 0;
+              allUsers
+                .filter(u => rowDef.roleIds.includes(u.role_id))
+                .filter(u => !u.is_non_staff || u.counts_towards_staffing)
+                .forEach(u => {
+                  const assignment = assignmentsMap.get(`${u.id}_${day.date}`);
+                  if (assignment) {
+                    const shift = shiftMap.get(assignment.shift_id);
+                    if (shift) {
+                      const shiftNight = isNightShift(shift.code);
+                      if (shiftNight === rowDef.isNight) {
+                        total += getStaffingCount(shift);
+                      }
+                    }
+                  }
+                });
+
+              const required = STAFFING_DEFAULTS[rowDef.reqField];
+              const displayValue = total % 1 === 0 ? total.toString() : total.toFixed(1);
+              cell.textContent = displayValue;
+
+              if (total < required) {
+                cell.style.backgroundColor = "#ffc599";
+                cell.style.color = "#5d3e1f";
+                cell.style.fontWeight = "600";
+              }
+
+              cell.style.textAlign = "center";
+              tr.appendChild(cell);
+            });
+
+            const sep = document.createElement("td");
+            sep.className = "week-sep";
+            tr.appendChild(sep);
+          });
+
+          tfoot.appendChild(tr);
+        });
+      });
+
+      table.appendChild(tfoot);
+    }
+
+    function renderRota() {
+      const table = document.getElementById("rota");
+      table.innerHTML = "";
+
+      const thead = document.createElement("thead");
+      const tbody = document.createElement("tbody");
+      table.appendChild(thead);
+      table.appendChild(tbody);
+
+      const r1 = document.createElement("tr");
+      const h1 = document.createElement("th");
+      h1.className = "name-col";
+      h1.textContent = "Name";
+      r1.appendChild(h1);
+
+      allWeeks.forEach(w => {
+        const th = document.createElement("th");
+        th.className = "week-head";
+        th.colSpan = 7;
+        const weekEnd = new Date(w.weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        th.innerHTML = `<span class="week-label">${fmt(w.weekStart)} — ${fmt(weekEnd)}</span>`;
+        r1.appendChild(th);
+
+        const sep = document.createElement("th");
+        sep.className = "week-sep";
+        r1.appendChild(sep);
+      });
+      thead.appendChild(r1);
+
+      const r2 = document.createElement("tr");
+      const h2 = document.createElement("th");
+      h2.className = "name-col";
+      r2.appendChild(h2);
+
+      const dayLetters = ["S", "M", "T", "W", "T", "F", "S"];
+      allWeeks.forEach(w => {
+        for (let i = 0; i < 7; i++) {
+          const th = document.createElement("th");
+          th.className = "day";
+          th.textContent = dayLetters[i];
+          r2.appendChild(th);
+        }
+        const sep = document.createElement("th");
+        sep.className = "week-sep";
+        r2.appendChild(sep);
+      });
+      thead.appendChild(r2);
+
+      const r3 = document.createElement("tr");
+      const h3 = document.createElement("th");
+      h3.className = "name-col";
+      r3.appendChild(h3);
+
+      allWeeks.forEach(w => {
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(w.weekStart);
+          d.setDate(d.getDate() + i);
+          const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+          const isBankHol = isBankHoliday(d);
+          const th = document.createElement("th");
+          th.className = "date" + (isWeekend ? " weekend" : "") + (isBankHol ? " bank-holiday" : "");
+          th.textContent = d.getDate();
+          r3.appendChild(th);
+        }
+        const sep = document.createElement("th");
+        sep.className = "week-sep";
+        r3.appendChild(sep);
+      });
+      thead.appendChild(r3);
+
+      const groups = groupUsers(allUsers);
+
+      for (const g of groups) {
+        const sectionTr = document.createElement("tr");
+        sectionTr.className = "section-row";
+        const sectionTd = document.createElement("td");
+        sectionTd.className = `name-col ${g.className}`;
+        sectionTd.colSpan = 1 + (allWeeks.length * 7) + allWeeks.length;
+        sectionTd.innerHTML = `<span>${g.title}</span>`;
+        sectionTr.appendChild(sectionTd);
+        tbody.appendChild(sectionTr);
+
+        for (const u of g.items) {
+          const tr = document.createElement("tr");
+          tr.dataset.userId = u.id;
+
+          const nameTd = document.createElement("td");
+          nameTd.className = "name-col";
+          nameTd.textContent = u.name;
+
+          if (u.is_non_staff) {
+            const badge = document.createElement("span");
+            badge.className = "badge pill";
+            badge.style.marginLeft = "8px";
+            badge.style.fontSize = "11px";
+            badge.style.padding = "2px 6px";
+            badge.style.borderRadius = "999px";
+
+            if (u.category !== "student") {
+              if (u.category === "agency") {
+                badge.textContent = "AGENCY";
+                badge.style.background = "#fef3c7";
+                badge.style.color = "#92400e";
+              } else if (u.category === "bank") {
+                badge.textContent = "BANK";
+                badge.style.background = "#ecfccb";
+                badge.style.color = "#365314";
+              }
+              nameTd.appendChild(badge);
+            }
+          }
+
+          tr.appendChild(nameTd);
+
+          allWeeks.forEach(w => {
+            for (let i = 0; i < 7; i++) {
+              const dayDate = new Date(w.weekStart);
+              dayDate.setDate(dayDate.getDate() + i);
+              const dateStr = dayDate.toISOString().split('T')[0];
+              const isWeekend = (dayDate.getDay() === 0 || dayDate.getDay() === 6);
+
+              const td = document.createElement("td");
+              td.className = "cell" + (isWeekend ? " weekend" : "");
+              td.dataset.userId = u.id;
+              if (u.is_non_staff && u.category === "student") {
+                td.dataset.isStudentNonStaff = "true";
+              }
+              td.dataset.date = dateStr;
+
+              const key = `${u.id}_${dateStr}`;
+              const assignment = assignmentsMap.get(key);
+
+              if (assignment) {
+                td.dataset.assignmentId = assignment.id;
+                const shift = shiftMap.get(assignment.shift_id);
+                const override = (periodData?.status === "published" && assignment.id) ? overridesMap.get(assignment.id) : null;
+
+                if (shift) {
+                  const wrapper = document.createElement("div");
+                  wrapper.style.position = "relative";
+                  wrapper.style.width = "100%";
+                  wrapper.style.height = "100%";
+                  wrapper.style.display = "flex";
+                  wrapper.style.flexDirection = "column";
+                  wrapper.style.alignItems = "stretch";
+                  wrapper.style.justifyContent = "flex-start";
+                  wrapper.style.padding = "4px 2px";
+                  wrapper.style.boxSizing = "border-box";
+                  wrapper.style.rowGap = "2px";
+
+                  const shiftBlock = document.createElement("div");
+                  shiftBlock.className = "shift-block";
+                  const codeSpan = document.createElement("span");
+                  codeSpan.textContent = shift.code;
+                  shiftBlock.appendChild(codeSpan);
+                  wrapper.appendChild(shiftBlock);
+
+                  if (periodData?.status === "published" && assignment.id) {
+                    const badges = document.createElement("div");
+                    badges.style.position = "absolute";
+                    badges.style.top = "2px";
+                    badges.style.right = "2px";
+                    badges.style.display = "flex";
+                    badges.style.gap = "2px";
+
+                    if (override) {
+                      const hasOverride = override.override_start_time || override.override_end_time || override.override_hours;
+                      if (hasOverride) {
+                        const overrideBadge = document.createElement("span");
+                        overrideBadge.style.width = "6px";
+                        overrideBadge.style.height = "6px";
+                        overrideBadge.style.borderRadius = "50%";
+                        overrideBadge.style.backgroundColor = "#dc2626";
+                        overrideBadge.title = "Actual times/hours differ from scheduled";
+                        badges.appendChild(overrideBadge);
+                      }
+                    }
+
+                    const assignmentComments = commentsMap.get(assignment.id);
+                    if (assignmentComments && assignmentComments.length > 0) {
+                      const visibleComments = assignmentComments.filter(c => {
+                        const visibility = c.comment_visibility || (c.is_admin_only ? 'admin_only' : 'all_staff');
+                        if (visibility === 'admin_only') return window.currentUser?.is_admin;
+                        if (visibility === 'all_staff') return true;
+                        if (visibility === 'user_only') return window.currentUser?.id === u.id;
+                        return false;
+                      });
+
+                      if (visibleComments.length > 0) {
+                        const commentBadge = document.createElement("span");
+                        commentBadge.style.width = "6px";
+                        commentBadge.style.height = "6px";
+                        commentBadge.style.borderRadius = "50%";
+                        commentBadge.style.backgroundColor = "#3b82f6";
+                        commentBadge.title = "Has comments";
+                        badges.appendChild(commentBadge);
+                      }
+                    }
+
+                    if (badges.children.length > 0) {
+                      wrapper.appendChild(badges);
+                    }
+                  }
+
+                  td.appendChild(wrapper);
+
+                  if (shift.text_bold) {
+                    shiftBlock.style.fontWeight = "700";
+                  }
+                  if (shift.text_italic) {
+                    shiftBlock.style.fontStyle = "italic";
+                  }
+                  if (shift.text_color) {
+                    shiftBlock.style.color = shift.text_color;
+                  }
+                  if (shift.fill_color) {
+                    td.style.backgroundColor = shift.fill_color;
+                  }
+
+                  if (showRequests) {
+                    const request = requestsMap.get(key);
+                    if (request) {
+                      const hint = document.createElement("div");
+                      const requestValue = (request.value || "").trim();
+                      const isImportant = request.important_rank && (request.important_rank === 1 || request.important_rank === 2);
+
+                      hint.className = "request-hint";
+                      hint.classList.add(isImportant ? "important" : "normal");
+                      hint.textContent = isImportant
+                        ? `${requestValue}${request.important_rank === 1 ? "¹" : "²"}`
+                        : requestValue;
+
+                      wrapper.appendChild(hint);
+                    }
+                  }
+                }
+              } else {
+                if (showRequests) {
+                  const request = requestsMap.get(key);
+                  if (request) {
+                    const requestValue = request.value?.trim();
+                    const isImportant = request.important_rank && (request.important_rank === 1 || request.important_rank === 2);
+
+                    if (isImportant) {
+                      const superscript = request.important_rank === 1 ? "¹" : "²";
+                      td.textContent = `${requestValue}${superscript}`;
+                      td.style.color = "#e57373";
+                    } else {
+                      td.textContent = requestValue || "";
+                      td.style.color = "#d1d5db";
+                      td.style.fontStyle = "italic";
+                    }
+                  }
+                }
+              }
+
+              tr.appendChild(td);
+            }
+
+            const sep = document.createElement("td");
+            sep.className = "week-sep";
+            sep.dataset.userId = u.id;
+            sep.dataset.weekStart = w.weekStart.toISOString().split('T')[0];
+
+            const upat = userPatterns.get(u.id);
+            let assignedCount = 0;
+            for (let i = 0; i < 7; i++) {
+              const dayDate = new Date(w.weekStart);
+              dayDate.setDate(dayDate.getDate() + i);
+              const dateStr = dayDate.toISOString().split('T')[0];
+              const assignment = assignmentsMap.get(`${u.id}_${dateStr}`);
+              if (assignment) {
+                const shift = shiftMap.get(assignment.shift_id);
+                if (shift && shift.is_time_off !== true) {
+                  assignedCount++;
+                }
+              }
+            }
+
+            if (upat && upat.pattern_id) {
+              const pat = patterns.get(upat.pattern_id);
+              if (pat && pat.requires_anchor && upat.anchor_week_start_date && Array.isArray(pat.weekly_targets) && pat.weekly_targets.length) {
+                const weekStart = new Date(sep.dataset.weekStart);
+                const anchorDateRaw = new Date(upat.anchor_week_start_date);
+                const anchorDate = getWeekStart(anchorDateRaw);
+                const weeksDiff = Math.floor((weekStart - anchorDate) / (7 * 24 * 60 * 60 * 1000));
+                const cycleLen = pat.weekly_targets.length;
+                const weekInCycle = ((weeksDiff % cycleLen) + cycleLen) % cycleLen;
+                const target = pat.weekly_targets[weekInCycle];
+                sep.textContent = String(target);
+                const baseline = Math.min(...pat.weekly_targets);
+
+                if (assignedCount >= target && assignedCount <= target) {
+                  sep.style.backgroundColor = "#c1ffc1";
+                  sep.style.color = "#1a5c1a";
+                  sep.style.fontWeight = "700";
+                } else if (assignedCount > target || target > baseline) {
+                  sep.style.color = "#dc2626";
+                  sep.style.fontWeight = "700";
+                }
+              } else {
+                const baselineCandidates = Array.isArray(pat?.weekly_targets) && pat.weekly_targets.length ? pat.weekly_targets : [];
+                let baseline = baselineCandidates.length ? Math.min(...baselineCandidates) : null;
+                if (baseline == null && (u.role_id === 1 || u.role_id === 2)) baseline = 3;
+                sep.textContent = String(assignedCount > 0 ? assignedCount : (baseline ?? ""));
+
+                if (baseline != null) {
+                  if (assignedCount >= baseline && assignedCount <= baseline) {
+                    sep.style.backgroundColor = "#c1ffc1";
+                    sep.style.color = "#1a5c1a";
+                    sep.style.fontWeight = "700";
+                  } else if (assignedCount > baseline) {
+                    sep.style.color = "#dc2626";
+                    sep.style.fontWeight = "700";
+                  }
+                }
+              }
+            } else {
+              sep.textContent = "";
+            }
+
+            tr.appendChild(sep);
+          });
+
+          tbody.appendChild(tr);
+        }
+      }
+
+      renderTotals();
+    }
+
+    function isTimeOff(shiftObj) {
+      if (!shiftObj) return false;
+      return shiftObj.is_time_off === true;
+    }
+
+    function describeAssignment(assignment) {
+      if (!assignment) return "N/A";
+      
+      const shift = shiftMap?.get(assignment.shift_id);
+      const user = allUsers?.find(u => u.id === assignment.user_id);
+      const override = overridesMap?.get(assignment.id);
+      
+      if (!shift) return "No shift assigned";
+      if (isTimeOff(shift)) return `Time Off`;
+      
+      // Use override times if available, otherwise use shift times
+      const startTime = override?.override_start_time || shift.start_time;
+      const endTime = override?.override_end_time || shift.end_time;
+      const hours = override?.override_hours || shift.hours || 0;
+      
+      const start = startTime ? startTime.slice(0, 5) : "??:??";
+      const end = endTime ? endTime.slice(0, 5) : "??:??";
+      
+      return `${shift.code} ${start}–${end} (${hours}h)`;
+    }
+
+    function generatePatternWarnings(userId, date) {
+      const warnings = [];
+      const userPatterns = patternsMap?.get(userId);
+      
+      if (!userPatterns) return warnings;
+      
+      const dateObj = new Date(date);
+      const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const weekStart = getWeekStart(dateObj);
+      
+      // Check for patterns
+      const shiftCode = assignmentsMap?.get(`${userId}_${date}`)?.shift_id
+        ? shiftMap?.get(assignmentsMap.get(`${userId}_${date}`).shift_id)?.code
+        : null;
+      
+      if (shiftCode === "N") {
+        // Night shift - check if pattern discourages nights
+        if (userPatterns.avoid_nights === true) {
+          warnings.push("User prefers to avoid night shifts");
+        }
+      }
+      
+      // Check consecutive days pattern
+      if (userPatterns.max_consecutive_days) {
+        let consecutive = 1;
+        let checkDate = new Date(dateObj);
+        
+        // Count forward
+        for (let i = 1; i < 7; i++) {
+          checkDate = new Date(dateObj);
+          checkDate.setDate(checkDate.getDate() + i);
+          const nextKey = checkDate.toISOString().split('T')[0];
+          const nextAssignment = assignmentsMap?.get(`${userId}_${nextKey}`);
+          if (nextAssignment?.shift_id && !isTimeOff(shiftMap.get(nextAssignment.shift_id))) {
+            consecutive++;
+          } else {
+            break;
+          }
+        }
+        
+        if (consecutive > userPatterns.max_consecutive_days) {
+          warnings.push(`Exceeds ${userPatterns.max_consecutive_days}-day limit (${consecutive} assigned)`);
+        }
+      }
+      
+      return warnings;
+    }
+
+    function getBankHolidayName(date) {
+      if (!date) return null;
+      const dateStr = date.toISOString().split('T')[0];
+      const holiday = bankHolidaysByDate[dateStr];
+      if (!holiday) return null;
+      return holiday.holiday_name || "Bank Holiday";
+    }
 
     // ========== INIT ==========
     async function bootRotaPage(){
@@ -3408,198 +2666,90 @@
                   period_non_staff_id: isNonStaff ? userId : null,
                   date,
                   shift_id: shiftId,
-                  status: "draft"
+                  status: currentEditContext === "published" ? "published" : "draft"
                 });
               }
               
               // Re-render immediately
               renderRota();
-              
-              // Sync to database in background
-              const { data: existingDb, error: getErr } = await supabaseClient
-                .from("rota_assignments")
-                .select("id")
-                .eq(isNonStaff ? "period_non_staff_id" : "user_id", userId)
-                .eq("date", date)
-                .maybeSingle();
-              
-              let assignmentId = existingDb?.id;
-              
-              if (!getErr) {
-                if (existingDb?.id) {
-                  assignmentId = existingDb.id;
-                  await supabaseClient
-                    .from("rota_assignments")
-                    .update({ shift_id: shiftId })
-                    .eq("id", existingDb.id);
-                  // Update assignmentsMap with the ID
+
+              try {
+                const { data: assignmentId, error: saveErr } = await supabaseClient.rpc("admin_upsert_rota_assignment", {
+                  p_token: window.currentToken,
+                  p_user_id: isNonStaff ? null : userId,
+                  p_period_non_staff_id: isNonStaff ? userId : null,
+                  p_date: date,
+                  p_shift_id: shiftId,
+                  p_status: currentEditContext === "published" ? "published" : "draft"
+                });
+
+                if (saveErr) throw saveErr;
+                const assignmentIdValue = Array.isArray(assignmentId) ? assignmentId[0] : assignmentId;
+                if (assignmentIdValue) {
                   const existing = assignmentsMap.get(key);
-                  if (existing) existing.id = existingDb.id;
-                  
-                  // Record history if in published mode and shift changed or added
-                  if (currentEditContext === "published") {
-                    // Only record if shift actually changed (or was added to empty cell)
-                    if (!oldShiftId || oldShiftId !== shiftId) {
-                      console.log("[ROTA ONSAVE] Recording history for shift change:", { oldShiftId, newShiftId: shiftId, assignmentId });
-                      const { error: histErr } = await supabaseClient
-                        .from("rota_assignment_history")
-                        .insert([{
-                          rota_assignment_id: assignmentId,
-                          ...historyAssignee,
-                          date: date,
-                          old_shift_id: oldShiftId || null,
-                          old_shift_code: oldShiftCode || null,
-                          new_shift_id: shiftId,
-                          new_shift_code: newShift?.code || 'UNKNOWN',
-                          change_reason: oldShiftId ? 'Admin changed shift' : 'Admin added shift',
-                          changed_by: window.currentUser?.id,
-                          changed_by_name: window.currentUser?.name,
-                          changed_at: new Date().toISOString()
-                        }]);
-                      if (histErr) {
-                        console.error("[ROTA ONSAVE] Error recording history:", histErr);
-                      } else {
-                        console.log("[ROTA ONSAVE] History recorded successfully");
-                      }
-                    }
-                  }
-                } else {
-                  const { data: newAssignment } = await supabaseClient
-                    .from("rota_assignments")
-                    .insert([{
-                      user_id: isNonStaff ? null : userId,
-                      period_non_staff_id: isNonStaff ? userId : null,
-                      date,
-                      shift_id: shiftId,
-                      status: currentEditContext === "published" ? "published" : "draft"
-                    }])
-                    .select()
-                    .single();
-                  assignmentId = newAssignment?.id;
-                  // Update assignmentsMap with the new ID
-                  const existing = assignmentsMap.get(key);
-                  if (existing && assignmentId) existing.id = assignmentId;
-                  
-                  // Record history for new assignment (if in published mode)
-                  if (currentEditContext === "published" && assignmentId) {
-                    console.log("[ROTA ONSAVE] Recording history for new shift:", { shiftId, assignmentId });
-                    const { error: histErr } = await supabaseClient
-                      .from("rota_assignment_history")
-                      .insert([{
-                        rota_assignment_id: assignmentId,
-                        ...historyAssignee,
-                        date: date,
-                        old_shift_id: null,
-                        old_shift_code: null,
-                        new_shift_id: shiftId,
-                        new_shift_code: newShift?.code || 'UNKNOWN',
-                        change_reason: 'Admin added shift',
-                        changed_by: window.currentUser?.id,
-                        changed_by_name: window.currentUser?.name,
-                        changed_at: new Date().toISOString()
-                      }]);
+                  if (existing) existing.id = assignmentIdValue;
+                }
+
+                if (currentEditContext === "published") {
+                  if (!oldShiftId || oldShiftId !== shiftId) {
+                    const { error: histErr } = await supabaseClient.rpc("admin_insert_rota_assignment_history", {
+                      p_token: window.currentToken,
+                      p_assignment_id: assignmentIdValue,
+                      p_user_id: historyAssignee.user_id,
+                      p_period_non_staff_id: historyAssignee.period_non_staff_id,
+                      p_date: date,
+                      p_old_shift_id: oldShiftId || null,
+                      p_old_shift_code: oldShiftCode || null,
+                      p_new_shift_id: shiftId,
+                      p_new_shift_code: newShift?.code || 'UNKNOWN',
+                      p_change_reason: oldShiftId ? 'Admin changed shift' : 'Admin added shift',
+                      p_changed_by_name: window.currentUser?.name
+                    });
                     if (histErr) {
                       console.error("[ROTA ONSAVE] Error recording history:", histErr);
-                    } else {
-                      console.log("[ROTA ONSAVE] History recorded successfully");
                     }
                   }
                 }
-                
-                // Save override data if provided (published mode only)
-                // Only save if there's actual override data (not just empty fields)
+
                 const hasActualOverride = overrideData && (
                   overrideData.override_start_time || 
                   overrideData.override_end_time || 
                   overrideData.override_hours
                 );
-                
-                if (hasActualOverride && assignmentId) {
-                  console.log("[ROTA ONSAVE] Saving override for assignmentId:", assignmentId, overrideData);
-                  const { data: existingOverride } = await supabaseClient
-                    .from("rota_assignment_overrides")
-                    .select("id")
-                    .eq("rota_assignment_id", assignmentId)
-                    .maybeSingle();
-                  
-                  const overridePayload = {
-                    rota_assignment_id: assignmentId,
-                    override_start_time: overrideData.override_start_time,
-                    override_end_time: overrideData.override_end_time,
-                    override_hours: overrideData.override_hours,
-                    comment: overrideData.comment,
-                    comment_visibility: overrideData.comment_visibility || 'admin_only'
-                  };
-                  
-                  console.log("[ROTA ONSAVE] Override payload:", overridePayload);
-                  
-                  if (existingOverride?.id) {
-                    console.log("[ROTA ONSAVE] Updating existing override:", existingOverride.id);
-                    const { data: updateData, error: updateErr } = await supabaseClient
-                      .from("rota_assignment_overrides")
-                      .update(overridePayload)
-                      .eq("id", existingOverride.id);
-                    if (updateErr) {
-                      console.error("[ROTA ONSAVE] Error updating override:", updateErr);
-                    } else {
-                      console.log("[ROTA ONSAVE] Override updated successfully");
-                      overridesMap.set(assignmentId, { ...existingOverride, ...overridePayload });
-                      renderRota(); // Re-render to show override badge
-                    }
+
+                if (hasActualOverride && assignmentIdValue) {
+                  const { data: overrideRow, error: overrideErr } = await supabaseClient.rpc("admin_upsert_rota_assignment_override", {
+                    p_token: window.currentToken,
+                    p_assignment_id: assignmentIdValue,
+                    p_override_start_time: overrideData.override_start_time,
+                    p_override_end_time: overrideData.override_end_time,
+                    p_override_hours: overrideData.override_hours,
+                    p_comment: overrideData.comment,
+                    p_comment_visibility: overrideData.comment_visibility || 'admin_only'
+                  });
+                  if (overrideErr) {
+                    console.error("[ROTA ONSAVE] Error saving override:", overrideErr);
                   } else {
-                    console.log("[ROTA ONSAVE] Inserting new override");
-                    const { data: newOverride, error: insertErr } = await supabaseClient
-                      .from("rota_assignment_overrides")
-                      .insert([overridePayload])
-                      .select()
-                      .single();
-                    if (insertErr) {
-                      console.error("[ROTA ONSAVE] Error inserting override:", insertErr);
-                      console.error("[ROTA ONSAVE] Error details:", {
-                        message: insertErr.message,
-                        status: insertErr.status,
-                        code: insertErr.code,
-                        hint: insertErr.hint
-                      });
-                    } else if (newOverride) {
-                      console.log("[ROTA ONSAVE] Override inserted successfully:", newOverride);
-                      overridesMap.set(assignmentId, newOverride);
-                    }
+                    const row = Array.isArray(overrideRow) ? overrideRow[0] : overrideRow;
+                    if (row) overridesMap.set(assignmentIdValue, row);
+                    renderRota();
                   }
-                  
-                  // Re-render to show override badges
-                  renderRota();
-                } else {
-                  console.log("[ROTA ONSAVE] No override data to save");
-                  
-                  // If there's an existing override but no new override data, delete it
-                  if (assignmentId) {
-                    const { data: existingOverride } = await supabaseClient
-                      .from("rota_assignment_overrides")
-                      .select("id")
-                      .eq("rota_assignment_id", assignmentId)
-                      .maybeSingle();
-                    
-                    if (existingOverride?.id) {
-                      console.log("[ROTA ONSAVE] Deleting old override:", existingOverride.id);
-                      const { error: deleteErr } = await supabaseClient
-                        .from("rota_assignment_overrides")
-                        .delete()
-                        .eq("id", existingOverride.id);
-                      
-                      if (deleteErr) {
-                        console.error("[ROTA ONSAVE] Error deleting override:", deleteErr);
-                      } else {
-                        console.log("[ROTA ONSAVE] Override deleted successfully");
-                        overridesMap.delete(assignmentId);
-                        renderRota(); // Re-render to remove override badge
-                      }
-                    }
+                } else if (assignmentIdValue) {
+                  const { error: deleteErr } = await supabaseClient.rpc("admin_delete_rota_assignment_override", {
+                    p_token: window.currentToken,
+                    p_assignment_id: assignmentIdValue
+                  });
+                  if (deleteErr) {
+                    console.error("[ROTA ONSAVE] Error deleting override:", deleteErr);
+                  } else {
+                    overridesMap.delete(assignmentIdValue);
+                    renderRota();
                   }
                 }
+              } catch (err) {
+                console.error("[ROTA ONSAVE] Error saving assignment:", err);
               }
-            },
-            onClear: async (userId, date) => {
+            },onClear: async (userId, date) => {
               const key = `${userId}_${date}`;
               const userMeta = allUsers.find(u => u.id === userId);
               const isNonStaff = userMeta?.is_non_staff;
@@ -3607,63 +2757,49 @@
                 ? { user_id: null, period_non_staff_id: userId }
                 : { user_id: userId, period_non_staff_id: null };
               
-              // Get the current shift info before deleting (for history)
               const existingAssignment = assignmentsMap.get(key);
               const oldShiftId = existingAssignment?.shift_id;
               const oldShift = oldShiftId ? shiftMap.get(oldShiftId) : null;
               const oldShiftCode = oldShift?.code;
               
-              // Optimistic update: remove from local map immediately
               assignmentsMap.delete(key);
-              
-              // Re-render immediately
               renderRota();
-              
-              // Sync to database in background
-              const { data: existing, error: getErr } = await supabaseClient
-                .from("rota_assignments")
-                .select("id")
-                .eq(isNonStaff ? "period_non_staff_id" : "user_id", userId)
-                .eq("date", date)
-                .maybeSingle();
-              
-              if (!getErr && existing?.id) {
-                // Record history before deleting (if in published mode)
-                if (currentEditContext === "published" && oldShiftId) {
-                  console.log("[ROTA ONCLEAR] Recording history for cleared shift:", { oldShiftId, assignmentId: existing.id });
-                  const { error: histErr } = await supabaseClient
-                    .from("rota_assignment_history")
-                    .insert([{
-                      rota_assignment_id: existing.id,
-                      ...historyAssignee,
-                      date: date,
-                      old_shift_id: oldShiftId,
-                      old_shift_code: oldShiftCode || 'UNKNOWN',
-                      new_shift_id: null,
-                      new_shift_code: null,
-                      change_reason: 'Admin cleared shift',
-                      changed_by: window.currentUser?.id,
-                      changed_by_name: window.currentUser?.name,
-                      changed_at: new Date().toISOString()
-                    }]);
+
+              try {
+                if (currentEditContext === "published" && oldShiftId && existingAssignment?.id) {
+                  const { error: histErr } = await supabaseClient.rpc("admin_insert_rota_assignment_history", {
+                    p_token: window.currentToken,
+                    p_assignment_id: existingAssignment.id,
+                    p_user_id: historyAssignee.user_id,
+                    p_period_non_staff_id: historyAssignee.period_non_staff_id,
+                    p_date: date,
+                    p_old_shift_id: oldShiftId,
+                    p_old_shift_code: oldShiftCode || 'UNKNOWN',
+                    p_new_shift_id: null,
+                    p_new_shift_code: null,
+                    p_change_reason: 'Admin cleared shift',
+                    p_changed_by_name: window.currentUser?.name
+                  });
                   if (histErr) {
                     console.error("[ROTA ONCLEAR] Error recording history:", histErr);
-                  } else {
-                    console.log("[ROTA ONCLEAR] History recorded successfully");
                   }
                 }
-                
-                // Now delete the assignment
-                await supabaseClient
-                  .from("rota_assignments")
-                  .delete()
-                  .eq("id", existing.id);
+
+                const { error: deleteErr } = await supabaseClient.rpc("admin_delete_rota_assignment", {
+                  p_token: window.currentToken,
+                  p_user_id: isNonStaff ? null : userId,
+                  p_period_non_staff_id: isNonStaff ? userId : null,
+                  p_date: date
+                });
+                if (deleteErr) throw deleteErr;
+              } catch (err) {
+                console.error("[ROTA ONCLEAR] Error clearing assignment:", err);
               }
             },
             getCurrentUser: () => window.currentUser,
             getCurrentPeriod: () => currentPeriod,
             getAllUsers: () => allUsers,
-            getDraftShifts: () => draftShifts,
+            getDraftShifts: () => shifts, // Return main shifts array
             getAssignment: (userId, date) => assignmentsMap.get(`${userId}_${date}`),
             getOverride: (assignmentId) => overridesMap.get(assignmentId),
             refreshGrid: () => {
@@ -3688,6 +2824,28 @@
         } catch (err) {
           console.error("[ROTA BOOT] loadPeriods failed:", err);
           throw err;
+        }
+        
+        // Auto-select and load the first available period
+        console.log("[ROTA BOOT] Auto-selecting first period...");
+        // periodSelect was already retrieved at line 1127 with getElement()
+        if (periodSelect && periodSelect.options && periodSelect.options.length > 0) {
+          const firstPeriodId = periodSelect.options[0].value;
+          periodSelect.value = firstPeriodId;
+          console.log("[ROTA BOOT] Auto-loading period:", firstPeriodId);
+          try {
+            if (typeof loadPeriod === "function") {
+              await loadPeriod(firstPeriodId);
+              console.log("[ROTA BOOT] Period loaded successfully");
+            } else {
+              console.warn("[ROTA BOOT] loadPeriod function not available");
+            }
+          } catch (err) {
+            console.error("[ROTA BOOT] Failed to load first period:", err);
+            throw err;
+          }
+        } else {
+          console.warn("[ROTA BOOT] No periods available in dropdown");
         }
         
         // Initialize notices/notifications (from app.js)
@@ -3797,56 +2955,8 @@
       const roleId = Number(window.currentUser.role_id);
       const isAdmin = !!window.currentUser.is_admin;
       
-      // Check if user is in Admin permission group
-      let isAdminGroup = false;
-      if (!isAdmin) {
-        try {
-          const { data: groups } = await supabaseClient
-            .from("user_permission_groups")
-            .select("permission_groups(name)")
-            .eq("user_id", window.currentUser.id);
-          if (groups && groups.some(g => g.permission_groups?.name === "Admin")) {
-            isAdminGroup = true;
-          }
-        } catch (e) {
-          console.warn("Failed to check admin group", e);
-        }
-      }
-      
-      const clauses = ["target_scope.eq.all_staff"];
-
-      if (window.currentUser.id) {
-        clauses.push(`and(target_scope.eq.user,target_user_id.eq.${window.currentUser.id})`);
-      }
-
-      if (isAdmin || isAdminGroup) {
-        clauses.push(`target_scope.eq.admin`);
-      }
-
-      if (!Number.isNaN(roleId)) {
-        clauses.push(`and(target_scope.eq.role,target_role_ids.cs.{${roleId}})`);
-      }
-
       const { data, error } = await supabaseClient
-        .from("notifications")
-        .select(`
-          id,
-          type,
-          payload,
-          target_scope,
-          target_role_ids,
-          target_user_id,
-          requires_action,
-          status,
-          created_by,
-          created_at,
-          updated_by,
-          updated_at,
-          acted_by,
-          acted_at
-        `)
-        .or(clauses.join(","))
-        .order("updated_at", { ascending: false });
+        .rpc("rpc_get_notifications", { p_token: window.currentToken });
 
       if (error) throw error;
 
@@ -3855,8 +2965,8 @@
         // Only show pending notifications
         if ((item.status || 'pending') !== 'pending') return false;
         
-        // all_staff scope matches everyone
-        if (item.target_scope === 'all_staff') return true;
+        // all/all_staff scope matches everyone
+        if (item.target_scope === 'all' || item.target_scope === 'all_staff') return true;
         
         // user scope must match current user ID
         if (item.target_scope === 'user') {
@@ -4000,14 +3110,11 @@
     async function updateNotificationStatus(notifId, status){
       if (!window.currentUser) throw new Error("Not logged in.");
       const { error } = await supabaseClient
-        .from("notifications")
-        .update({
-          status: status,
-          acted_by: window.currentUser.id,
-          acted_at: new Date().toISOString(),
-          updated_by: window.currentUser.id
-        })
-        .eq("id", notifId);
+        .rpc("rpc_update_notification_status", {
+          p_token: window.currentToken,
+          p_notification_id: notifId,
+          p_status: status
+        });
 
       if (error) throw error;
     }
@@ -4382,9 +3489,309 @@
       });
     }
 
+    // ========== PRINT ROTA FUNCTIONALITY ==========
+    const rotaPrintBtn = document.getElementById("rotaPrintBtn");
+    const rotaPrintModal = document.getElementById("rotaPrintModal");
+    const rotaPrintClose = document.getElementById("rotaPrintClose");
+    const rotaPrintCloseX = document.getElementById("rotaPrintCloseX");
+    const rotaPrintAdminOptions = document.getElementById("rotaPrintAdminOptions");
+    
+    function openRotaPrintModal() {
+      if (!window.currentUser) { alert("Please log in first."); return; }
+      rotaPrintAdminOptions.style.display = window.currentUser.is_admin ? "block" : "none";
+      rotaPrintModal.setAttribute("aria-hidden", "false");
+      rotaPrintModal.style.display = "flex";
+    }
+    
+    function closeRotaPrintModal() {
+      rotaPrintModal.setAttribute("aria-hidden", "true");
+      rotaPrintModal.style.display = "none";
+    }
+
+    function cloneRotaForPrint() {
+      const rota = document.getElementById("rota");
+      return rota ? rota.cloneNode(true) : null;
+    }
+
+    function openFittedRotaPrintWindow({ title, subtitle, rotaClone }) {
+      if (!rotaClone) {
+        alert("Nothing to print.");
+        return;
+      }
+
+      const win = window.open("", "_blank");
+      if (!win) {
+        alert("Pop-up blocked. Please allow pop-ups for printing.");
+        return;
+      }
+
+      const doc = win.document;
+      doc.open();
+      doc.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Print</title></head><body></body></html>');
+      doc.close();
+
+      const style = doc.createElement('style');
+      style.textContent = `
+:root { --print-scale: 1; }
+@page { size: A4 landscape; margin: 4mm; }
+html, body { margin: 0; padding: 0; background: #fff; color: #222; }
+body { font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif; }
+#mmProbe { width: 100mm; height: 0; position: absolute; left: -9999px; top: -9999px; visibility: hidden; }
+#printArea { transform: scale(var(--print-scale)); transform-origin: top left; width: calc(100% / var(--print-scale)); }
+.print-header { padding: 0 0 3mm 0; margin: 0 0 3mm 0; border-bottom: 2pt solid #333; page-break-after: avoid; }
+.print-header h1 { margin: 0 0 1.5mm 0; font-size: 14pt; font-weight: 800; line-height: 1; color: #111; }
+.print-header .print-meta { font-size: 8pt; color: #666; line-height: 1.3; }
+table { border-collapse: collapse; width: 100%; }
+#rota { table-layout: auto; }
+#rota th { background: #e0e0e0; border: 1pt solid #888; padding: 3px 2px; font-size: 7pt; font-weight: 700; color: #000; }
+#rota td { border: 1pt solid #ccc; padding: 3px 2px; font-size: 6.8pt; text-align: center; line-height: 1.4; }
+#rota tbody th { background: #f5f5f5; font-weight: 600; text-align: left; padding: 3px 4px; font-size: 7pt; border: 1pt solid #888; }
+#rota thead { display: table-row-group; }
+#rota tbody tr { page-break-inside: avoid; }
+.weekend { background: #fafafa; }
+.closed { background: #f0f0f0; }
+tr { page-break-inside: avoid; }
+* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+`;
+      doc.head.appendChild(style);
+
+      const period = window.currentPeriod?.name || "";
+      const printedAt = new Date().toLocaleDateString("en-GB") + " " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      
+      const printHeader = doc.createElement('div');
+      printHeader.className = 'print-header';
+      const h1 = doc.createElement('h1');
+      h1.textContent = "Calpe Ward Rota - " + title;
+      const meta = doc.createElement('div');
+      meta.className = 'print-meta';
+      meta.textContent = subtitle + "\nPeriod: " + period + " | Printed: " + printedAt;
+      printHeader.appendChild(h1);
+      printHeader.appendChild(meta);
+
+      const mmProbe = doc.createElement('div');
+      mmProbe.id = 'mmProbe';
+
+      const printArea = doc.createElement('div');
+      printArea.id = 'printArea';
+      printArea.appendChild(printHeader);
+      printArea.appendChild(rotaClone);
+
+      doc.body.appendChild(mmProbe);
+      doc.body.appendChild(printArea);
+
+      const script = doc.createElement('script');
+      script.textContent = `(function(){
+function mmToPx(mm){var probe=document.getElementById('mmProbe');return(probe.getBoundingClientRect().width/100)*mm;}
+function fit(){var p=document.getElementById('printArea');document.documentElement.style.setProperty('--print-scale','1');var r=p.getBoundingClientRect();var s=Math.min(mmToPx(293)/r.width,mmToPx(206)/r.height);document.documentElement.style.setProperty('--print-scale',(Math.max(0.1,Math.min(1,s*0.995))).toFixed(4));}
+window.addEventListener('load',function(){requestAnimationFrame(function(){requestAnimationFrame(function(){fit();setTimeout(function(){window.focus();window.print();setTimeout(function(){window.close();},250);},50);});});});
+})();`;
+      doc.body.appendChild(script);
+    }
+
+    // Admin print configuration modal
+    function openRotaAdminPrintConfig() {
+      if (!window.currentUser?.is_admin) { alert("Admin access required"); return; }
+      closeRotaPrintModal();
+      
+      const modal = document.createElement("div");
+      modal.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.28);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:10001;overflow-y:auto;padding:14px";
+      
+      const dialog = document.createElement("div");
+      dialog.style.cssText = "background:linear-gradient(180deg,#ffffff 0%,#f6f8fc 100%);padding:18px;border-radius:22px;max-width:620px;width:min(620px,100%);box-shadow:0 28px 80px rgba(15,23,42,0.14);border:1px solid rgba(15,23,42,0.05);margin:20px auto;font-family:'Manrope',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a";
+      
+      let html = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+          <h2 style="margin:0;font-size:17px;font-weight:700;letter-spacing:0.1px;">Admin Print Configuration</h2>
+          <button type="button" onclick="this.closest('[data-modal]').remove()" style="width:32px;height:32px;border-radius:10px;border:1px solid #e5eaf3;background:#ffffff;cursor:pointer;color:#94a3b8;box-shadow:0 3px 8px rgba(15,23,42,0.05);font-size:18px;line-height:1;">×</button>
+        </div>
+        
+        <!-- STATUS SECTION -->
+        <div style="margin-bottom:18px;padding:14px;background:#f5f7fb;border-radius:14px;border:1px solid #e7ebf3">
+          <label style="display:block;font-weight:600;margin-bottom:10px;font-size:12.5px;color:#6b7387">Rota Status:</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px">
+            <input type="radio" name="adminRotaStatus" value="both" checked style="width:16px;height:16px;cursor:pointer"> All shifts (published & draft)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px">
+            <input type="radio" name="adminRotaStatus" value="published" style="width:16px;height:16px;cursor:pointer"> Published shifts only
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="radio" name="adminRotaStatus" value="draft" style="width:16px;height:16px;cursor:pointer"> Draft shifts only
+          </label>
+        </div>
+        
+        <!-- ROLES SECTION -->
+        <div style="margin-bottom:18px">
+          <label style="display:block;font-weight:600;margin-bottom:10px;font-size:12.5px;color:#6b7387">Select Roles:</label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" class="admin-rota-role-check" value="1" checked style="width:18px;height:18px;cursor:pointer"> Charge Nurses
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" class="admin-rota-role-check" value="2" checked style="width:18px;height:18px;cursor:pointer"> Staff Nurses
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" class="admin-rota-role-check" value="3" checked style="width:18px;height:18px;cursor:pointer"> Nursing Assistants
+            </label>
+          </div>
+        </div>
+        
+        <!-- USERS SECTION -->
+        <div style="margin-bottom:18px">
+          <label style="display:block;font-weight:600;margin-bottom:10px;font-size:12.5px;color:#6b7387">Select Staff (or leave empty for all):</label>
+          <input type="text" id="rotaUserSearchInput" placeholder="Search staff..." style="width:100%;padding:8px 12px;margin-bottom:12px;border:1px solid #e5eaf3;border-radius:10px;font-size:12.5px;background:#ffffff;box-shadow:inset 0 1px 2px rgba(15,23,42,0.06)">
+          <div id="rotaUserList" style="max-height:200px;overflow-y:auto;border:1px solid #e7ebf3;border-radius:12px;padding:8px;background:#ffffff;box-shadow:inset 0 1px 2px rgba(15,23,42,0.06)">`;
+      
+      allUsers.forEach(u => {
+        const roleName = u.role_id === 1 ? "CN" : u.role_id === 2 ? "SN" : u.role_id === 3 ? "NA" : "";
+        html += `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px;margin:0">
+          <input type="checkbox" class="admin-rota-user-check" value="${u.id}" style="width:16px;height:16px;cursor:pointer"> ${u.name}${roleName ? " (" + roleName + ")" : ""}
+        </label>`;
+      });
+      
+      html += `</div>
+        </div>
+        
+        <!-- BUTTONS -->
+        <div style="display:flex;gap:12px;justify-content:flex-end">
+          <button type="button" onclick="this.closest('[data-modal]').remove()" style="height:32px;padding:0 14px;border:1px solid #e5eaf3;background:#ffffff;border-radius:12px;cursor:pointer;font-weight:600;font-size:12.5px;box-shadow:0 3px 8px rgba(15,23,42,0.05)">Cancel</button>
+          <button type="button" id="adminRotaPrintExecBtn" style="height:32px;padding:0 16px;background:linear-gradient(180deg,#6f8bff 0%,#5472f2 100%);color:white;border:1px solid rgba(84,114,242,0.5);border-radius:12px;cursor:pointer;font-weight:600;font-size:12.5px;box-shadow:0 6px 14px rgba(66,95,210,0.25)">Print</button>
+        </div>
+      `;
+      
+      dialog.innerHTML = html;
+      dialog.setAttribute("data-modal", "true");
+      modal.appendChild(dialog);
+      document.body.appendChild(modal);
+      
+      // User search functionality
+      const rotaUserSearchInput = document.getElementById("rotaUserSearchInput");
+      const rotaUserCheckboxes = document.querySelectorAll(".admin-rota-user-check");
+      rotaUserSearchInput.addEventListener("input", (e) => {
+        const query = e.target.value.toLowerCase();
+        rotaUserCheckboxes.forEach(checkbox => {
+          const label = checkbox.closest("label");
+          const userName = label.textContent.toLowerCase();
+          label.style.display = userName.includes(query) ? "flex" : "none";
+        });
+      });
+      
+      // Print execution
+      document.getElementById("adminRotaPrintExecBtn").addEventListener("click", () => {
+        const selectedRoles = Array.from(document.querySelectorAll(".admin-rota-role-check:checked")).map(el => parseInt(el.value));
+        const selectedUsers = Array.from(document.querySelectorAll(".admin-rota-user-check:checked")).map(el => el.value);
+        const statusValue = document.querySelector("input[name='adminRotaStatus']:checked").value;
+        
+        modal.remove();
+        executeAdminRotaPrint(selectedRoles, selectedUsers, statusValue);
+      });
+      
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) modal.remove();
+      });
+    }
+
+    function executeAdminRotaPrint(selectedRoles, selectedUsers, statusValue) {
+      console.log("[ROTA PRINT] Roles:", selectedRoles, "Users:", selectedUsers, "Status:", statusValue);
+      
+      // Build list of users to keep visible
+      let filteredUsers = allUsers;
+      if (selectedRoles.length > 0) {
+        filteredUsers = allUsers.filter(u => selectedRoles.includes(u.role_id));
+      }
+      if (selectedUsers.length > 0) {
+        filteredUsers = filteredUsers.filter(u => selectedUsers.includes(String(u.id)));
+      }
+      
+      if (filteredUsers.length === 0) {
+        alert("No staff selected.");
+        return;
+      }
+      
+      // Filter the rota table to show only selected users and status
+      const restore = (() => {
+        const original = new Map();
+        const selectedUserIds = new Set(filteredUsers.map(u => String(u.id)));
+        
+        document.querySelectorAll("#rota tbody tr").forEach(row => {
+          original.set(row, row.style.display);
+          const userIdStr = row.dataset.userId;
+          if (userIdStr && !selectedUserIds.has(userIdStr)) {
+            row.style.display = "none";
+          }
+        });
+        
+        // Filter cells by status
+        if (statusValue !== "both") {
+          document.querySelectorAll("#rota tbody td.cell").forEach(cell => {
+            const cellStatus = cell.dataset.status;
+            if (statusValue === "published" && cellStatus !== "published") {
+              const prev = cell.textContent;
+              original.set(cell, { display: cell.style.display, text: prev });
+              cell.textContent = "";
+            } else if (statusValue === "draft" && cellStatus === "published") {
+              const prev = cell.textContent;
+              original.set(cell, { display: cell.style.display, text: prev });
+              cell.textContent = "";
+            }
+          });
+        }
+        
+        return () => {
+          original.forEach((val, el) => {
+            if (el.tagName === "TR") {
+              el.style.display = val;
+            } else if (el.tagName === "TD" && val.text !== undefined) {
+              el.textContent = val.text;
+            }
+          });
+        };
+      })();
+      
+      // Clone the filtered rota
+      const rotaClone = cloneRotaForPrint();
+      restore();
+      
+      // Build title based on selections
+      let title = "Rota Schedule";
+      let subtitle = "";
+      
+      if (statusValue === "published") subtitle = "Published shifts only";
+      else if (statusValue === "draft") subtitle = "Draft shifts only";
+      else subtitle = "All shifts (published & draft)";
+      
+      if (selectedRoles.length > 0 && selectedUsers.length === 0) {
+        const roleNames = selectedRoles.map(rid => {
+          if (rid === 1) return "Charge Nurses";
+          if (rid === 2) return "Staff Nurses";
+          if (rid === 3) return "Nursing Assistants";
+          return "";
+        }).join(", ");
+        subtitle += " | " + roleNames;
+      } else if (selectedUsers.length > 0) {
+        const userNames = filteredUsers.map(u => u.name).join(", ");
+        subtitle += " | " + (userNames.length > 50 ? userNames.substring(0, 47) + "..." : userNames);
+      }
+      
+      openFittedRotaPrintWindow({ title, subtitle, rotaClone });
+    }
+
+    // Event listeners
+    rotaPrintBtn?.addEventListener("click", openRotaPrintModal);
+    rotaPrintClose?.addEventListener("click", closeRotaPrintModal);
+    rotaPrintCloseX?.addEventListener("click", closeRotaPrintModal);
+    rotaPrintModal?.addEventListener("click", (e) => {
+      if (e.target === rotaPrintModal) closeRotaPrintModal();
+    });
+
   </script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 

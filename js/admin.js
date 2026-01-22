@@ -112,68 +112,21 @@
         .replaceAll("'","&#039;");
     }
 
+    function getAdminToken(){
+      const token = window.currentToken || sessionStorage.getItem("calpe_ward_token");
+      if (!token) {
+        throw new Error("No session token available for admin panel.");
+      }
+      return token;
+    }
+
     function pinKey(userId){ return `calpeward.pin.${userId}`; }
 
-    const WINDOW_SESSION_PREFIX = "calpeward:";
-
-    function setWindowSession(userId, pin){
-      if (!userId || !pin) return;
-      try {
-        const payload = btoa(JSON.stringify({ userId: String(userId), pin: String(pin) }));
-        window.name = `${WINDOW_SESSION_PREFIX}${payload}`;
-      } catch (e) {
-        console.warn("Failed to store window session", e);
+    async function requireAdminPin(){
+      const ok = await promptAdminPinChallenge();
+      if (!ok) {
+        throw new Error("PIN verification failed.");
       }
-    }
-
-    function getWindowSession(){
-      if (!window.name || !window.name.startsWith(WINDOW_SESSION_PREFIX)) {
-        console.log("[SESSION DEBUG] No window.name session. window.name=", window.name);
-        return null;
-      }
-      try {
-        const raw = window.name.slice(WINDOW_SESSION_PREFIX.length);
-        const session = JSON.parse(atob(raw));
-        console.log("[SESSION DEBUG] Window session found:", session);
-        return session;
-      } catch (e) {
-        console.warn("[SESSION DEBUG] Failed to parse window session", e);
-        return null;
-      }
-    }
-
-    function restoreSessionFromWindow(){
-      const data = getWindowSession();
-      console.log("[SESSION DEBUG] restoreSessionFromWindow: data=", data);
-      if (!data || !data.userId) {
-        console.log("[SESSION DEBUG] No data to restore");
-        return null;
-      }
-      console.log("[SESSION DEBUG] Restoring userId:", data.userId);
-      localStorage.setItem(STORAGE_KEY, data.userId);
-      console.log("[SESSION DEBUG] Set localStorage key:", STORAGE_KEY, "=", data.userId);
-      if (data.pin) {
-        sessionStorage.setItem(pinKey(data.userId), data.pin);
-        console.log("[SESSION DEBUG] Set sessionStorage pin for user", data.userId);
-      }
-      return data;
-    }
-
-    function clearWindowSession(){
-      if (window.name && window.name.startsWith(WINDOW_SESSION_PREFIX)) {
-        window.name = "";
-      }
-    }
-
-    function getSessionPinOrThrow(){
-      if (!currentUser) throw new Error("Not logged in.");
-      let pin = sessionStorage.getItem(pinKey(currentUser.id));
-      if (!pin) {
-        restoreSessionFromWindow();
-        pin = sessionStorage.getItem(pinKey(currentUser.id));
-      }
-      if (!pin) throw new Error("Missing session PIN. Log in again.");
-      return pin;
     }
 
     // SECURITY PATCH: PIN Challenge for sensitive admin operations
@@ -231,10 +184,8 @@
         
         modal.querySelector("#adminPinConfirm").addEventListener("click", () => {
           const enteredPin = input.value;
-          const correctPin = getSessionPinOrThrow();
-          const isCorrect = enteredPin === correctPin;
           cleanup();
-          resolve(isCorrect);
+          resolve(enteredPin);
         });
         
         input.addEventListener("keypress", (e) => {
@@ -242,31 +193,61 @@
             modal.querySelector("#adminPinConfirm").click();
           }
         });
+      }).then(async (enteredPin) => {
+        if (!enteredPin || !/^\d{4}$/.test(String(enteredPin))) {
+          alert("PIN must be 4 digits.");
+          return false;
+        }
+
+        try {
+          const { data, error } = await supabaseClient.rpc("admin_verify_pin_challenge", {
+            p_token: currentToken,
+            p_pin: String(enteredPin)
+          });
+
+          if (error) throw error;
+
+          const result = Array.isArray(data) ? data[0] : data;
+          if (!result?.valid) {
+            alert("Invalid PIN.");
+            return false;
+          }
+
+          return true;
+        } catch (err) {
+          console.error("PIN verification failed:", err);
+          alert("PIN verification failed.");
+          return false;
+        }
       });
     }
 
     async function loadCurrentUser(){
       console.log("[SESSION DEBUG] loadCurrentUser: starting");
-      restoreSessionFromWindow();
       const savedId = localStorage.getItem(STORAGE_KEY);
       console.log("[SESSION DEBUG] loadCurrentUser: savedId from localStorage=", savedId);
-      if (!savedId){
+      let token = null;
+      try {
+        token = getAdminToken();
+      } catch (e) {
+        token = null;
+      }
+      if (!savedId || !token){
         console.log("[SESSION DEBUG] No savedId, showing auth notice");
         adminUserAuthNotice.style.display = "block";
         updateUserStatus(null);
         return null;
       }
-      const { data, error } = await supabaseClient
-        .from("users")
-        .select("id, name, role_id, is_admin, is_active")
-        .eq("id", savedId)
-        .single();
-      if (error || !data){
+      const { data, error } = await supabaseClient.rpc("rpc_get_current_user", {
+        p_token: token
+      });
+      const user = Array.isArray(data) ? data[0] : data;
+      if (error || !user){
         adminUserAuthNotice.style.display = "block";
         updateUserStatus(null);
         return null;
       }
-      currentUser = data;
+      currentUser = user;
       window.currentUser = currentUser; // Expose to window for other scripts
       await loadUserPermissions();
       if (!hasPermission("system.admin_panel")){
@@ -285,33 +266,16 @@
       try {
         const cachedRaw = localStorage.getItem("calpeward.users_cache");
         const cachedUsers = cachedRaw ? JSON.parse(cachedRaw) : [];
-        const { data: users, error } = await supabaseClient
-          .from("users")
-          .select("id, name, is_active")
-          .order("name", { ascending: true });
+        const { data: users, error } = await supabaseClient.rpc("admin_get_users", {
+          p_token: getAdminToken(),
+          p_include_inactive: true
+        });
         if (error) throw error;
         const sourceUsers = (users && users.length) ? users : cachedUsers;
 
-        const { data: permRows, error: permErr } = await supabaseClient
-          .from("permission_group_permissions")
-          .select("group_id")
-          .eq("permission_key", "system.admin_panel");
-        if (permErr) throw permErr;
-        const adminGroupIds = (permRows || []).map(r => r.group_id).filter(Boolean);
-
-        let adminUserIds = new Set();
-        if (adminGroupIds.length) {
-          const { data: groupUsers, error: guErr } = await supabaseClient
-            .from("user_permission_groups")
-            .select("user_id")
-            .in("group_id", adminGroupIds);
-          if (guErr) throw guErr;
-          adminUserIds = new Set((groupUsers || []).map(r => String(r.user_id)));
-        }
-
         let options = (sourceUsers || [])
           .filter(u => u.is_active !== false)
-          .filter(u => u.is_admin || adminUserIds.has(String(u.id)))
+          .filter(u => u.is_admin)
           .map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)}</option>`)
           .join("");
 
@@ -367,15 +331,14 @@
           if (adminLoginMsg) adminLoginMsg.textContent = "Invalid PIN.";
           return;
         }
-        const { data: user, error } = await supabaseClient
-          .from("users")
-          .select("id, name, role_id, is_admin, is_active")
-          .eq("id", userId)
-          .single();
+        const { data: userRows, error } = await supabaseClient.rpc("admin_get_user_by_id", {
+          p_token: currentToken,
+          p_user_id: userId
+        });
+        const user = Array.isArray(userRows) ? userRows[0] : userRows;
         if (error || !user) throw error || new Error("User not found");
         localStorage.setItem(STORAGE_KEY, user.id);
-        sessionStorage.setItem(pinKey(user.id), pin);
-        setWindowSession(user.id, pin);
+        sessionStorage.removeItem(pinKey(user.id));
         currentUser = user;
         window.currentUser = currentUser; // Expose to window for other scripts
         await loadUserPermissions();
@@ -402,19 +365,12 @@
       if (!currentUser) return;
       if (currentUser.is_admin) return;
       try {
-        const { data: groups, error: gErr } = await supabaseClient
-          .from("user_permission_groups")
-          .select("group_id")
-          .eq("user_id", currentUser.id);
-        if (gErr) throw gErr;
-        const groupIds = (groups || []).map(g => g.group_id).filter(Boolean);
-        if (!groupIds.length) return;
         const { data: perms, error: pErr } = await supabaseClient
-          .from("permission_group_permissions")
-          .select("permission_key")
-          .in("group_id", groupIds);
+          .rpc("rpc_get_user_permissions", { p_token: currentToken });
         if (pErr) throw pErr;
-        (perms || []).forEach(p => userPermissions.add(p.permission_key));
+        (perms || []).forEach(p => {
+          if (p.permission_key) userPermissions.add(p.permission_key);
+        });
       } catch (e) {
         console.warn("Failed to load user permissions", e);
       }
@@ -507,33 +463,25 @@
       }
       adminUsersList.textContent = "Loading users...";
 
-      const primarySelect = "id, name, role_id, is_admin, is_active, display_order, roles(name), pref_shift_clustering, pref_night_appetite, pref_weekend_appetite, pref_leave_adjacency, can_be_in_charge_day, can_be_in_charge_night, cannot_be_second_rn_day, cannot_be_second_rn_night, can_work_nights";
-      const fallbackSelect = "id, name, role_id, is_admin, is_active, display_order, roles(name)";
-
       let rows = null;
       try {
-        const { data, error } = await supabaseClient
-          .from("users")
-          .select(primarySelect)
-          .order("role_id", { ascending: true })
-          .order("display_order", { ascending: true })
-          .order("created_at", { ascending: true });
+        const { data, error } = await supabaseClient.rpc("admin_get_users", {
+          p_token: currentToken,
+          p_include_inactive: true
+        });
         if (error) throw error;
-        rows = data;
+        rows = (data || []).slice().sort((a, b) => {
+          const roleDiff = (a.role_id || 0) - (b.role_id || 0);
+          if (roleDiff !== 0) return roleDiff;
+          const aOrder = a.display_order ?? 9999;
+          const bOrder = b.display_order ?? 9999;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return (a.name || "").localeCompare(b.name || "");
+        });
       } catch (err){
-        console.warn("loadAdminUsers: primary select failed, retrying fallback", err?.message || err);
-        const { data: fallbackData, error: fallbackErr } = await supabaseClient
-          .from("users")
-          .select(fallbackSelect)
-          .order("role_id", { ascending: true })
-          .order("display_order", { ascending: true })
-          .order("created_at", { ascending: true });
-        if (fallbackErr){
-          console.error(fallbackErr);
-          adminUsersList.textContent = "Failed to load users.";
-          return;
-        }
-        rows = fallbackData;
+        console.error(err);
+        adminUsersList.textContent = "Failed to load users.";
+        return;
       }
 
       adminUsersCache = rows || [];
@@ -925,11 +873,11 @@
         const rows = Array.from(adminUsersList.querySelectorAll(`.user-row[data-role-id="${roleId}"]`));
         for (let i = 0; i < rows.length; i++) {
           const userId = rows[i].dataset.userId;
-          const { error } = await supabaseClient
-            .from('users')
-            .update({ display_order: i + 1 })
-            .eq('id', userId)
-            .select();
+          const { error } = await supabaseClient.rpc("admin_reorder_users", {
+            p_token: currentToken,
+            p_user_id: userId,
+            p_display_order: i + 1
+          });
           if (error) throw error;
         }
         await loadAdminUsers();
@@ -1095,7 +1043,7 @@
       }
       nsList.innerHTML = rows.map(r => {
         const catTag = `<span class="user-tag">${escapeHtml(r.category)}</span>`;
-        const roleTag = `<span class="user-tag">${escapeHtml(r.role_group.replace('_',' '))}</span>`;
+        const roleTag = r.role_group ? `<span class="user-tag">${escapeHtml(r.role_group.replace('_',' '))}</span>` : '';
         const inactiveTag = r.is_active === false ? `<span class="user-tag inactive">inactive</span>` : '';
         const toggleLabel = r.is_active === false ? 'Reactivate' : 'Deactivate';
         return `
@@ -1357,11 +1305,9 @@
       }
       try {
         // Load permissions from database
-        const { data: permissions, error } = await supabaseClient
-          .from("permissions")
-          .select("key, label, description, category")
-          .order("category", { ascending: true })
-          .order("key", { ascending: true });
+        const { data: permissions, error } = await supabaseClient.rpc("admin_get_permissions", {
+          p_token: currentToken
+        });
         
         if (error) throw error;
         
@@ -1390,10 +1336,9 @@
         });
         
         // Load permission groups
-        const { data: groups, error: groupsError } = await supabaseClient
-          .from("permission_groups")
-          .select("name")
-          .order("name", { ascending: true });
+        const { data: groups, error: groupsError } = await supabaseClient.rpc("admin_get_permission_groups", {
+          p_token: currentToken
+        });
         
         if (groupsError) throw groupsError;
         
@@ -1423,10 +1368,9 @@
     
     async function loadPatterns(){
       try {
-        const { data: patterns, error } = await supabaseClient
-          .from("pattern_definitions")
-          .select("id, name, cycle_weeks, weekly_targets, pattern_type, requires_anchor, notes")
-          .order("id", { ascending: true });
+        const { data: patterns, error } = await supabaseClient.rpc("rpc_get_pattern_definitions", {
+          p_token: currentToken
+        });
         if (error) throw error;
         
         const list = document.getElementById("patternsList");
@@ -1459,13 +1403,13 @@
 
     async function loadPatternDefinitions(){
       try {
-        const { data: patterns, error } = await supabaseClient
-          .from("pattern_definitions")
-          .select("id, name, requires_anchor")
-          .order("name", { ascending: true });
+        const { data: patterns, error } = await supabaseClient.rpc("rpc_get_pattern_definitions", {
+          p_token: currentToken
+        });
         if (error) throw error;
+        const sorted = (patterns || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         
-        console.log("[PATTERNS] Loaded pattern definitions:", patterns);
+        console.log("[PATTERNS] Loaded pattern definitions:", sorted);
         
         const select = document.getElementById("adminUserPattern");
         if (!select) {
@@ -1474,8 +1418,8 @@
         }
         
         select.innerHTML = `<option value="">No fixed pattern</option>`;
-        if (patterns && patterns.length > 0){
-          patterns.forEach(p => {
+        if (sorted && sorted.length > 0){
+          sorted.forEach(p => {
             const opt = document.createElement("option");
             opt.value = String(p.id);
             opt.textContent = p.name || "Unknown";
@@ -1514,33 +1458,30 @@
       try {
         if (patternId){
           // Get pattern to check if anchor is required
-          const { data: pattern, error: patternErr } = await supabaseClient
-            .from("pattern_definitions")
-            .select("requires_anchor")
-            .eq("id", patternId)
-            .single();
+          const { data: patterns, error: patternErr } = await supabaseClient.rpc("rpc_get_pattern_definitions", {
+            p_token: currentToken
+          });
           if (patternErr) throw patternErr;
+          const pattern = (patterns || []).find(p => String(p.id) === String(patternId));
+          if (!pattern) throw new Error("Pattern not found.");
           
           console.log("[PATTERNS] Pattern found:", pattern);
           
           // Upsert user pattern
-          const { data: result, error: upsertErr } = await supabaseClient
-            .from("user_patterns")
-            .upsert({
-              user_id: userId,
-              pattern_id: patternId,
-              anchor_week_start_date: pattern.requires_anchor ? anchorDate : null,
-              assigned_by: currentUser.id,
-              assigned_at: new Date().toISOString()
-            }, { onConflict: "user_id" });
+          const { error: upsertErr } = await supabaseClient.rpc("admin_upsert_user_pattern", {
+            p_token: currentToken,
+            p_user_id: userId,
+            p_pattern_id: patternId,
+            p_anchor_week_start_date: pattern.requires_anchor ? anchorDate : null
+          });
           if (upsertErr) throw upsertErr;
-          console.log("[PATTERNS] Pattern saved successfully:", result);
+          console.log("[PATTERNS] Pattern saved successfully");
         } else {
           // Delete user pattern if no pattern selected
-          const { error: deleteErr } = await supabaseClient
-            .from("user_patterns")
-            .delete()
-            .eq("user_id", userId);
+          const { error: deleteErr } = await supabaseClient.rpc("admin_delete_user_pattern", {
+            p_token: currentToken,
+            p_user_id: userId
+          });
           if (deleteErr) throw deleteErr;
           console.log("[PATTERNS] Pattern cleared.");
         }
@@ -1560,16 +1501,14 @@
       if (!patternSelect || !anchorDateInput) return;
       
       try {
-        const { data: userPattern, error } = await supabaseClient
-          .from("user_patterns")
-          .select("pattern_id, anchor_week_start_date")
-          .eq("user_id", userId)
-          .single();
+        const { data: patterns, error } = await supabaseClient.rpc("rpc_get_user_patterns", {
+          p_token: currentToken
+        });
         
-        if (error && error.code !== "PGRST116"){
+        if (error){
           throw error;
         }
-        
+        const userPattern = (patterns || []).find(p => String(p.user_id) === String(userId));
         if (userPattern){
           patternSelect.value = String(userPattern.pattern_id || "");
           anchorDateInput.value = userPattern.anchor_week_start_date || "";
@@ -1599,10 +1538,9 @@
 
     async function loadPermissionGroups(){
       try {
-        const { data, error } = await supabaseClient
-          .from("permission_groups")
-          .select("id, name, is_system, is_protected")
-          .order("name", { ascending: true });
+        const { data, error } = await supabaseClient.rpc("admin_get_permission_groups", {
+          p_token: currentToken
+        });
         if (error) throw error;
         permissionGroups = data || [];
       } catch (e) {
@@ -1641,10 +1579,10 @@
       groupPermissions = new Set();
       if (!groupId) return;
       try {
-        const { data, error } = await supabaseClient
-          .from("permission_group_permissions")
-          .select("permission_key")
-          .eq("group_id", groupId);
+        const { data, error } = await supabaseClient.rpc("admin_get_permission_group_permissions", {
+          p_token: currentToken,
+          p_group_id: groupId
+        });
         if (error) throw error;
         (data || []).forEach(r => groupPermissions.add(r.permission_key));
       } catch (e) {
@@ -1709,12 +1647,12 @@
       const checkboxes = Array.from(permissionsMatrix.querySelectorAll("input[data-perm-key]"));
       const keys = checkboxes.filter(c => c.checked).map(c => c.dataset.permKey);
       try {
-        await supabaseClient.from("permission_group_permissions").delete().eq("group_id", groupId);
-        if (keys.length){
-          const rows = keys.map(k => ({ group_id: groupId, permission_key: k }));
-          const { error } = await supabaseClient.from("permission_group_permissions").insert(rows);
-          if (error) throw error;
-        }
+        const { error } = await supabaseClient.rpc("admin_set_permission_group_permissions", {
+          p_token: currentToken,
+          p_group_id: groupId,
+          p_permission_keys: keys
+        });
+        if (error) throw error;
       } catch (e) {
         console.error(e);
         alert("Failed to save permissions. Check console.");
@@ -1726,15 +1664,14 @@
       const name = (permissionGroupName?.value || "").trim();
       if (!name) return alert("Group name required.");
       try {
-        const { data, error } = await supabaseClient
-          .from("permission_groups")
-          .insert({ name })
-          .select()
-          .single();
+        const { data, error } = await supabaseClient.rpc("admin_create_permission_group", {
+          p_token: currentToken,
+          p_name: name
+        });
         if (error) throw error;
         permissionGroupName.value = "";
         await loadPermissionGroups();
-        permissionGroupSelect.value = String(data.id);
+        permissionGroupSelect.value = String(data);
         groupPermissions = new Set();
         renderPermissionsMatrix();
       } catch (e) {
@@ -1786,12 +1723,13 @@
         return;
       }
       try {
-        const { data, error } = await supabaseClient
-          .from("user_permission_groups")
-          .select("group_id, permission_groups(name)")
-          .eq("user_id", userId);
+        const { data, error } = await supabaseClient.rpc("admin_get_user_permission_groups", {
+          p_token: currentToken,
+          p_user_id: userId
+        });
         if (error) throw error;
-        const names = new Set((data || []).map(r => r.permission_groups?.name).filter(Boolean));
+        const ids = new Set((data || []).map(r => String(r.group_id)));
+        const names = new Set(permissionGroups.filter(g => ids.has(String(g.id))).map(g => g.name));
         checks.forEach(c => {
           c.checked = names.has(c.dataset.permGroup);
           c.disabled = false;
@@ -1816,12 +1754,12 @@
         .map(g => g.id);
 
       try {
-        await supabaseClient.from("user_permission_groups").delete().eq("user_id", userId);
-        if (groupIds.length){
-          const rows = groupIds.map(id => ({ user_id: userId, group_id: id }));
-          const { error } = await supabaseClient.from("user_permission_groups").insert(rows);
-          if (error) throw error;
-        }
+        const { error } = await supabaseClient.rpc("admin_set_user_permission_groups", {
+          p_token: currentToken,
+          p_user_id: userId,
+          p_group_ids: groupIds
+        });
+        if (error) throw error;
       } catch (e) {
         console.error(e);
         alert("Failed to save user groups. Check console.");
@@ -1837,24 +1775,11 @@
       try {
         let styleFieldsAvailable = true;
         let shifts;
-        // Try to include styling columns; if they don't exist, fallback without them
-        try {
-          const { data, error } = await supabaseClient
-            .from("shifts")
-            .select("id, code, label, hours_value, start_time, end_time, day_or_night, allowed_staff_groups, allow_requests, allow_draft, allow_post_publish, fill_color, text_color, text_bold, text_italic, is_time_off")
-            .order("code", { ascending: true });
-          if (error) throw error;
-          shifts = data;
-        } catch (e) {
-          console.warn("[SHIFTS] Styling or is_time_off columns not found; falling back without them", e?.message);
-          styleFieldsAvailable = false;
-          const { data, error } = await supabaseClient
-            .from("shifts")
-            .select("id, code, label, hours_value, start_time, end_time, day_or_night, allowed_staff_groups, allow_requests, allow_draft, allow_post_publish")
-            .order("code", { ascending: true });
-          if (error) throw error;
-          shifts = data;
-        }
+        const { data, error } = await supabaseClient.rpc("admin_get_shifts", {
+          p_token: currentToken
+        });
+        if (error) throw error;
+        shifts = data;
 
         allShifts = shifts || [];
 
@@ -2025,11 +1950,25 @@
         console.log("[SAVE SHIFT] Update data:", updateData);
         console.log("[SAVE SHIFT] Shift ID:", currentEditingShiftId);
 
-        const { data: result, error: updateErr } = await supabaseClient
-          .from("shifts")
-          .update(updateData)
-          .eq("id", currentEditingShiftId)
-          .select();
+        const { data: result, error: updateErr } = await supabaseClient.rpc("admin_upsert_shift", {
+          p_token: currentToken,
+          p_shift_id: currentEditingShiftId,
+          p_code: document.getElementById("editShiftCode").value,
+          p_label: updateData.label,
+          p_hours_value: updateData.hours_value,
+          p_start_time: updateData.start_time,
+          p_end_time: updateData.end_time,
+          p_day_or_night: updateData.day_or_night,
+          p_allowed_staff_groups: updateData.allowed_staff_groups,
+          p_allow_requests: updateData.allow_requests,
+          p_allow_draft: updateData.allow_draft,
+          p_allow_post_publish: updateData.allow_post_publish,
+          p_fill_color: updateData.fill_color,
+          p_text_color: updateData.text_color,
+          p_text_bold: updateData.text_bold,
+          p_text_italic: updateData.text_italic,
+          p_is_time_off: updateData.is_time_off
+        });
 
         console.log("[SAVE SHIFT] Update response - data:", result, "error:", updateErr);
 
@@ -2051,10 +1990,10 @@
       }
 
       try {
-        const { error: deleteErr } = await supabaseClient
-          .from("shifts")
-          .delete()
-          .eq("id", shiftId);
+        const { error: deleteErr } = await supabaseClient.rpc("admin_delete_shift", {
+          p_token: currentToken,
+          p_shift_id: shiftId
+        });
         
         if (deleteErr) throw deleteErr;
 
@@ -2082,28 +2021,27 @@
         if (document.getElementById("newShiftSN").checked) staffGroups.push("Nurse");
         if (document.getElementById("newShiftCN").checked) staffGroups.push("CN");
 
-        const { data: newShift, error: insertErr } = await supabaseClient
-          .from("shifts")
-          .insert({
-            code: code,
-            label: label,
-            start_time: document.getElementById("newShiftStart").value || null,
-            end_time: document.getElementById("newShiftEnd").value || null,
-            hours_value: parseFloat(document.getElementById("newShiftHours").value) || 0,
-            allowed_staff_groups: staffGroups.join(","),
-            allow_requests: document.getElementById("newShiftRequests").checked,
-            allow_draft: document.getElementById("newShiftRotaDraft").checked,
-            allow_post_publish: document.getElementById("newShiftRotaPost").checked,
-            is_time_off: document.getElementById("newShiftIsTimeOff").checked,
-            fill_color: document.getElementById("newShiftFill").value || null,
-            text_color: document.getElementById("newShiftText").value || null,
-            text_bold: document.getElementById("newShiftBold").checked,
-            text_italic: document.getElementById("newShiftItalic").checked,
-            day_or_night: "day"
-          })
-          .select();
+        const { data: newShiftId, error: insertErr } = await supabaseClient.rpc("admin_upsert_shift", {
+          p_token: currentToken,
+          p_shift_id: null,
+          p_code: code,
+          p_label: label,
+          p_hours_value: parseFloat(document.getElementById("newShiftHours").value) || 0,
+          p_start_time: document.getElementById("newShiftStart").value || null,
+          p_end_time: document.getElementById("newShiftEnd").value || null,
+          p_day_or_night: "day",
+          p_allowed_staff_groups: staffGroups.join(","),
+          p_allow_requests: document.getElementById("newShiftRequests").checked,
+          p_allow_draft: document.getElementById("newShiftRotaDraft").checked,
+          p_allow_post_publish: document.getElementById("newShiftRotaPost").checked,
+          p_fill_color: document.getElementById("newShiftFill").value || null,
+          p_text_color: document.getElementById("newShiftText").value || null,
+          p_text_bold: document.getElementById("newShiftBold").checked,
+          p_text_italic: document.getElementById("newShiftItalic").checked,
+          p_is_time_off: document.getElementById("newShiftIsTimeOff").checked
+        });
         if (insertErr) throw insertErr;
-        if (!newShift || newShift.length === 0) throw new Error("Failed to create shift");
+        if (!newShiftId) throw new Error("Failed to create shift");
 
         alert("Shift created successfully!");
         document.getElementById("createShiftModal").style.display = "none";
@@ -2606,22 +2544,9 @@
     async function loadAdminNotices(){
       if (!currentUser?.is_admin && !hasPermission("notices.view_admin")) return;
 
-      const { data, error } = await supabaseClient
-        .from("notices")
-        .select(`
-          id,
-          title,
-          body_en,
-          body_es,
-          version,
-          is_active,
-          updated_at,
-          created_by,
-          target_all,
-          target_roles,
-          users:created_by ( name )
-        `)
-        .order("updated_at", { ascending: false });
+      const { data, error } = await supabaseClient.rpc("admin_get_all_notices", {
+        p_token: currentToken
+      });
 
       if (error){
         console.error(error);
@@ -2629,7 +2554,22 @@
         return;
       }
 
-      adminNoticesCache = data || [];
+      const notices = data || [];
+      let usersMap = new Map();
+      try {
+        const { data: users } = await supabaseClient.rpc("admin_get_users", {
+          p_token: currentToken,
+          p_include_inactive: true
+        });
+        usersMap = new Map((users || []).map(u => [String(u.id), u.name]));
+      } catch (e) {
+        usersMap = new Map();
+      }
+
+      adminNoticesCache = notices.map(n => ({
+        ...n,
+        users: { name: usersMap.get(String(n.created_by)) || "Unknown" }
+      }));
 
       // Fetch ack counts
       try {
@@ -2664,7 +2604,7 @@
     }
 
     async function adminUpsertNotice(payload){
-      const pin = getSessionPinOrThrow();
+      await requireAdminPin();
 
       const targetRoles = Array.isArray(payload.target_roles) ? payload.target_roles : [];
       const targetAll = !!payload.target_all && targetRoles.length === 0;
@@ -2684,7 +2624,7 @@
     }
 
     async function toggleAdminNoticeActive(notice){
-      const pin = getSessionPinOrThrow();
+      await requireAdminPin();
 
       const next = (notice.is_active === false) ? true : false;
       const ok = confirm(`${next ? "Unhide" : "Hide"} "${notice.title}"?`);
@@ -2702,7 +2642,7 @@
     }
 
     async function deleteAdminNotice(notice){
-      const pin = getSessionPinOrThrow();
+      await requireAdminPin();
 
       const ok = confirm(`Delete "${notice.title}"?\n\nThis cannot be undone.`);
       if (!ok) return;
@@ -2836,7 +2776,6 @@
 
     async function loadAdminSwapsPending(){
       if (!requirePermission("rota.swap", "Permission required to view swaps.")) return;
-      const pin = getSessionPinOrThrow();
 
       try {
         const { data, error } = await supabaseClient.rpc("admin_get_swap_requests", {
@@ -2855,7 +2794,6 @@
 
     async function loadAdminSwapsExecuted(){
       if (!requirePermission("rota.swap", "Permission required to view swaps.")) return;
-      const pin = getSessionPinOrThrow();
 
       try {
         const { data, error } = await supabaseClient.rpc("admin_get_swap_executions", {
@@ -2986,7 +2924,6 @@
             approveBtn.disabled = false;
             return;
           }
-          const pin = getSessionPinOrThrow();
           const { data, error } = await supabaseClient.rpc("admin_approve_swap_request", {
             p_token: currentToken,
             p_swap_request_id: swapId
@@ -3021,7 +2958,6 @@
             declineBtn.disabled = false;
             return;
           }
-          const pin = getSessionPinOrThrow();
           const { data, error } = await supabaseClient.rpc("admin_decline_swap_request", {
             p_token: currentToken,
             p_swap_request_id: swapId
@@ -3144,4 +3080,3 @@
         }
       });
     }
-

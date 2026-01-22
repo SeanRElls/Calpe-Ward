@@ -864,14 +864,14 @@ BEGIN
 
   RETURN QUERY
   SELECT
-    sr.id,
-    sr.period_id,
-    u_init.name,
-    u_cnt.name,
+    sr.id AS id,
+    sr.period_id AS period_id,
+    u_init.name AS initiator_name,
+    u_cnt.name AS counterparty_name,
     sr.initiator_shift_date,
-    s_init.code,
+    sr.initiator_shift_code,
     sr.counterparty_shift_date,
-    s_cnt.code,
+    sr.counterparty_shift_code,
     sr.status,
     sr.counterparty_response,
     sr.counterparty_responded_at,
@@ -879,12 +879,6 @@ BEGIN
   FROM public.swap_requests sr
   JOIN public.users u_init ON u_init.id = sr.initiator_user_id
   JOIN public.users u_cnt ON u_cnt.id = sr.counterparty_user_id
-  JOIN public.rota_assignments ra_init ON ra_init.user_id = sr.initiator_user_id
-    AND ra_init.date = sr.initiator_shift_date
-  JOIN public.shifts s_init ON s_init.id = ra_init.shift_id
-  JOIN public.rota_assignments ra_cnt ON ra_cnt.user_id = sr.counterparty_user_id
-    AND ra_cnt.date = sr.counterparty_shift_date
-  JOIN public.shifts s_cnt ON s_cnt.id = ra_cnt.shift_id
   ORDER BY sr.created_at DESC;
 END;
 $$;
@@ -1154,37 +1148,20 @@ BEGIN
   SELECT
     se.id,
     se.period_id,
-    u_init.name,
-    u_cnt.name,
-    u_auth.name,
-    se.initiator_shift_date,
-    s_init_old.code,
-    s_init_new.code,
-    se.counterparty_shift_date,
-    s_cnt_old.code,
-    s_cnt_new.code,
+    se.initiator_name,
+    se.counterparty_name,
+    se.authoriser_name,
+    se.initiator_old_shift_date AS initiator_date,
+    se.initiator_old_shift_code AS initiator_old_shift,
+    se.initiator_new_shift_code AS initiator_new_shift,
+    se.counterparty_old_shift_date AS counterparty_date,
+    se.counterparty_old_shift_code AS counterparty_old_shift,
+    se.counterparty_new_shift_code AS counterparty_new_shift,
     se.method,
-    se.created_at
+    se.executed_at
   FROM public.swap_executions se
-  JOIN public.users u_init ON u_init.id = se.initiator_user_id
-  JOIN public.users u_cnt ON u_cnt.id = se.counterparty_user_id
-  JOIN public.users u_auth ON u_auth.id = se.authoriser_user_id
-  JOIN public.rota_assignments ra_init_before ON ra_init_before.user_id = se.initiator_user_id
-    AND ra_init_before.date = se.initiator_shift_date
-  JOIN public.shifts s_init_old ON s_init_old.id = ra_init_before.shift_id
-  JOIN public.rota_assignments ra_cnt_before ON ra_cnt_before.user_id = se.counterparty_user_id
-    AND ra_cnt_before.date = se.counterparty_shift_date
-  JOIN public.shifts s_cnt_old ON s_cnt_old.id = ra_cnt_before.shift_id
-  LEFT JOIN public.shifts s_init_new ON s_init_new.id = (
-    SELECT shift_id FROM public.rota_assignments
-    WHERE user_id = se.initiator_user_id AND date = se.initiator_shift_date
-  )
-  LEFT JOIN public.shifts s_cnt_new ON s_cnt_new.id = (
-    SELECT shift_id FROM public.rota_assignments
-    WHERE user_id = se.counterparty_user_id AND date = se.counterparty_shift_date
-  )
   WHERE (p_period_id IS NULL OR se.period_id = p_period_id)
-  ORDER BY se.created_at DESC;
+  ORDER BY se.executed_at DESC NULLS LAST, se.created_at DESC;
 END;
 $$;
 

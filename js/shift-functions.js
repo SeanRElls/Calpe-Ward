@@ -12,20 +12,12 @@ async function loadUserPermissions(){
   if (currentUser.is_admin) return;
 
   try {
-    const { data: groups, error: gErr } = await supabaseClient
-      .from("user_permission_groups")
-      .select("group_id")
-      .eq("user_id", currentUser.id);
-    if (gErr) throw gErr;
-    const groupIds = (groups || []).map(g => g.group_id).filter(Boolean);
-    if (!groupIds.length) return;
-
     const { data: perms, error: pErr } = await supabaseClient
-      .from("permission_group_permissions")
-      .select("permission_key")
-      .in("group_id", groupIds);
+      .rpc("rpc_get_user_permissions", { p_token: window.currentToken });
     if (pErr) throw pErr;
-    (perms || []).forEach(p => userPermissions.add(p.permission_key));
+    (perms || []).forEach(p => {
+      if (p.permission_key) userPermissions.add(p.permission_key);
+    });
   } catch (e) {
     console.warn("Failed to load permissions", e);
   }
@@ -79,12 +71,14 @@ async function populateShiftGrid(){
   
   try {
     // Get shifts with scope flags and allowed_staff_groups
-    const { data: shifts, error: shiftsErr } = await window.supabaseClient
-      .from("shifts")
-      .select("id, code, label, hours_value, allowed_staff_groups, start_time, end_time")
-      .eq("allow_requests", true)
-      .order("code", { ascending: true })
-      .order("hours_value", { ascending: true });
+    const token = window.currentToken || sessionStorage.getItem("calpe_ward_token");
+    if (!token) {
+      throw new Error("No session token available for shift picker.");
+    }
+    const { data: shifts, error: shiftsErr } = await window.supabaseClient.rpc("rpc_get_shifts", {
+      p_token: token,
+      p_allow_requests: true
+    });
     
     if (shiftsErr) throw shiftsErr;
     

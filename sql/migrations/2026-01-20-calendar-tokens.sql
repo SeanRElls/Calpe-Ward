@@ -139,7 +139,8 @@ RETURNS TABLE(
   shift_label text,
   start_time time,
   end_time time,
-  hours_value numeric
+  hours_value numeric,
+  comments text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -148,6 +149,7 @@ AS $$
 DECLARE
   v_token_hash text;
   v_user_id uuid;
+  v_is_admin boolean;
   v_token_record record;
 BEGIN
   -- Hash the incoming token
@@ -168,6 +170,12 @@ BEGIN
   
   v_user_id := v_token_record.user_id;
   
+  -- Check if user is admin
+  SELECT u.is_admin INTO v_is_admin FROM public.users u WHERE u.id = v_user_id;
+  IF v_is_admin IS NULL THEN
+    v_is_admin := false;
+  END IF;
+  
   -- Update last_used_at (fire and forget, don't fail if this errors)
   BEGIN
     UPDATE public.calendar_tokens
@@ -178,8 +186,9 @@ BEGIN
     NULL;
   END;
   
-  -- Return published shifts for this user
+  -- Return published shifts for this user with appropriate comments
   -- Include past 30 days and all future shifts
+  -- Admins see all comments; regular staff see only non-admin-only comments
   RETURN QUERY
   SELECT 
     ra.id::bigint AS assignment_id,
@@ -188,12 +197,22 @@ BEGIN
     s.label AS shift_label,
     s.start_time,
     s.end_time,
-    s.hours_value
+    s.hours_value,
+    -- Aggregate comments: filter by is_admin_only based on user role
+    string_agg(
+      rac.comment, 
+      E'\n' 
+      ORDER BY rac.created_at
+    ) FILTER (
+      WHERE (rac.is_admin_only = false OR v_is_admin)
+    )::text AS comments
   FROM public.rota_assignments ra
   JOIN public.shifts s ON s.id = ra.shift_id
+  LEFT JOIN public.rota_assignment_comments rac ON rac.rota_assignment_id = ra.id
   WHERE ra.user_id = v_user_id
     AND ra.status = 'published'
     AND ra.date >= CURRENT_DATE - interval '30 days'
+  GROUP BY ra.id, s.id, ra.date, s.code, s.label, s.start_time, s.end_time, s.hours_value
   ORDER BY ra.date, s.start_time;
 END;
 $$;

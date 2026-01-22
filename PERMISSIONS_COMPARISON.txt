@@ -1,0 +1,26 @@
+﻿PERMISSIONS.JS COMPARISON REPORT
+================================
+
+Backup file: 156 lines (actual count: 156)
+Current file: 142 lines (actual count: 142)
+Difference: 14 lines
+
+CRITICAL FINDINGS:
+
+Both files have SAME exports and functions:
+  - loadCurrentUserPermissions()
+  - hasPermission()
+  - requirePermission()
+  - getCurrentUser()
+  - isAdmin()
+
+KEY DIFFERENCES IN IMPLEMENTATION:
+
+1. DEBUG LOGGING:
+   CURRENT has debug logging utility (lines 6-12)
+   BACKUP does NOT have debug logging
+
+2. AUTHENTICATION METHOD:
+   CURRENT: Uses token-based RPC functions (rpc_get_current_user, rpc_get_user_permissions)
+   BACKUP: Uses direct database queries (users table, user_permission_groups table)
+

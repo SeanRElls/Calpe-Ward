@@ -244,6 +244,8 @@ DECLARE
   v_week_start date;
   v_week_end date;
   v_current_date date;
+  v_period_start date;
+  v_period_end date;
 BEGIN
   v_admin_uid := public.require_session_permissions(p_token, null);
 
@@ -252,28 +254,36 @@ BEGIN
     PERFORM public.require_session_permissions(p_token, ARRAY['periods.create']);
   END IF;
 
+  IF p_start_date IS NULL THEN
+    RAISE EXCEPTION 'start_date is required';
+  END IF;
+
+  -- Derive 5-week end date server-side to satisfy constraint
+  v_period_start := p_start_date;
+  v_period_end := p_start_date + INTERVAL '34 days';
+
   -- Create the period
   v_period_id := gen_random_uuid();
-  INSERT INTO public.rota_periods (id, name, start, "end", is_active, is_hidden)
-  VALUES (v_period_id, p_name, p_start_date, p_end_date, false, false);
+  INSERT INTO public.rota_periods (id, name, start_date, end_date, is_active, is_hidden)
+  VALUES (v_period_id, p_name, v_period_start, v_period_end, false, false);
 
   -- Create 5 weeks
-  v_week_start := p_start_date;
+  v_week_start := v_period_start;
   FOR i IN 1..5 LOOP
     v_week_end := v_week_start + interval '6 days';
-    IF v_week_end > p_end_date THEN
-      v_week_end := p_end_date;
+    IF v_week_end > v_period_end THEN
+      v_week_end := v_period_end;
     END IF;
 
     v_week_id := gen_random_uuid();
-    INSERT INTO public.rota_weeks (id, period_id, week_number, start, "end", is_open, is_open_after_close)
-    VALUES (v_week_id, v_period_id, i, v_week_start, v_week_end, false, false);
+    INSERT INTO public.rota_weeks (id, period_id, week_start, week_end, open, open_after_close)
+    VALUES (v_week_id, v_period_id, v_week_start, v_week_end, false, false);
 
     -- Create date rows for each day in the week
     v_current_date := v_week_start;
     WHILE v_current_date <= v_week_end LOOP
-      INSERT INTO public.rota_dates (week_id, date)
-      VALUES (v_week_id, v_current_date);
+      INSERT INTO public.rota_dates (week_id, period_id, date)
+      VALUES (v_week_id, v_period_id, v_current_date);
       v_current_date := v_current_date + interval '1 day';
     END LOOP;
 
@@ -431,7 +441,7 @@ BEGIN
   END IF;
 
   UPDATE public.rota_weeks
-  SET is_open = p_open, is_open_after_close = p_open_after_close
+  SET open = p_open, open_after_close = p_open_after_close
   WHERE id = p_week_id;
 END;
 $$;

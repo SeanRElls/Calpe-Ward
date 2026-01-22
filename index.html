@@ -471,6 +471,16 @@
     // Initialize on load
     window.addEventListener('load', () => {
       initSupabase();
+      
+      // Display debug logs if present
+      const logs = localStorage.getItem('calpeward_debug_logs');
+      if (logs) {
+        const logArray = JSON.parse(logs);
+        const debugPanel = document.createElement('div');
+        debugPanel.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #f0f0f0; border: 1px solid #ccc; padding: 10px; max-width: 400px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 11px; z-index: 9999;';
+        debugPanel.innerHTML = '<strong>Debug Logs:</strong><br>' + logArray.map(log => log.replace(/</g, '&lt;').replace(/>/g, '&gt;')).join('<br>');
+        document.body.appendChild(debugPanel);
+      }
 
       // If already logged in, redirect to rota
       const existingToken = sessionStorage.getItem(TOKEN_KEY);

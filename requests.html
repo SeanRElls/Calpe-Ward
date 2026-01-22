@@ -3181,20 +3181,12 @@ async function upsertWeekComment(weekId, userId, comment){
 async function resetWeeksFullyOpen(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
 
-  const { data: wkRows, error: wkErr } = await supaClient
-    .from("rota_dates")
-    .select("week_id")
-    .eq("period_id", periodId);
-
-  if (wkErr) throw wkErr;
-
-  const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
-  if (!weekIds.length) return;
-
   const { error: resetErr } = await supaClient
-    .from("rota_weeks")
-    .update({ open: true, open_after_close: true })
-    .in("id", weekIds);
+    .rpc("admin_set_weeks_open_for_period", {
+      p_token: window.currentToken,
+      p_period_id: periodId,
+      p_open: true
+    });
 
   if (resetErr) throw resetErr;
 }
@@ -3202,39 +3194,29 @@ async function resetWeeksFullyOpen(periodId){
 async function resetWeeksFullyClosed(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
 
-  const { data: wkRows, error: wkErr } = await supaClient
-    .from("rota_dates")
-    .select("week_id")
-    .eq("period_id", periodId);
-
-  if (wkErr) throw wkErr;
-
-  const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
-  if (!weekIds.length) return;
-
   const { error: resetErr } = await supaClient
-    .from("rota_weeks")
-    .update({ open: false, open_after_close: false })
-    .in("id", weekIds);
+    .rpc("admin_set_weeks_open_for_period", {
+      p_token: window.currentToken,
+      p_period_id: periodId,
+      p_open: false
+    });
 
   if (resetErr) throw resetErr;
 }
 
     
-  async function fetchRotaPeriods(){
-  let q = supaClient
-    .from("rota_periods")
-    .select("id, name, start_date, end_date, is_hidden, is_active, closes_at")
-    .order("start_date", { ascending: true });
+async function fetchRotaPeriods(){
+  const { data, error } = await supaClient
+    .rpc("rpc_get_rota_periods", {
+      p_token: window.currentToken
+    });
 
-  // Staff: show active + non-hidden. Admin: show all.
-  if (!currentUser?.is_admin) {
-    q = q.or("is_hidden.eq.false,is_active.eq.true");
-  }
-
-  const { data, error } = await q;
   if (error) throw error;
-  return data || [];
+  const rows = data || [];
+  if (!currentUser?.is_admin) {
+    return rows.filter(r => r.is_hidden === false || r.is_active === true);
+  }
+  return rows;
 }
 
 function roleLabel(u){
@@ -3303,20 +3285,12 @@ async function loadUserPermissions(){
   if (currentUser.is_admin) return;
 
   try {
-    const { data: groups, error: gErr } = await supaClient
-      .from("user_permission_groups")
-      .select("group_id")
-      .eq("user_id", currentUser.id);
-    if (gErr) throw gErr;
-    const groupIds = (groups || []).map(g => g.group_id).filter(Boolean);
-    if (!groupIds.length) return;
-
     const { data: perms, error: pErr } = await supaClient
-      .from("permission_group_permissions")
-      .select("permission_key")
-      .in("group_id", groupIds);
+      .rpc("rpc_get_user_permissions", { p_token: window.currentToken });
     if (pErr) throw pErr;
-    (perms || []).forEach(p => userPermissions.add(p.permission_key));
+    (perms || []).forEach(p => {
+      if (p.permission_key) userPermissions.add(p.permission_key);
+    });
   } catch (e) {
     console.warn("Failed to load permissions", e);
   }
@@ -4211,63 +4185,8 @@ async function fetchNotificationsForMe(){
 
   const roleId = Number(currentUser.role_id);
   const isAdmin = !!currentUser.is_admin;
-  
-  // Check if user is in Admin permission group
-  let isAdminGroup = false;
-  if (!isAdmin) {
-    try {
-      const { data: groups } = await supaClient
-        .from("user_permission_groups")
-        .select("permission_groups(name)")
-        .eq("user_id", currentUser.id);
-      if (groups && groups.some(g => g.permission_groups?.name === "Admin")) {
-        isAdminGroup = true;
-      }
-    } catch (e) {
-      console.warn("Failed to check admin group", e);
-    }
-  }
-  
-  const clauses = [];
-
-  // Match all_staff scope
-  clauses.push("target_scope.eq.all_staff");
-
-  // Match user-specific scope - use and() to ensure BOTH conditions match
-  if (currentUser.id) {
-    clauses.push(`and(target_scope.eq.user,target_user_id.eq.${currentUser.id})`);
-  }
-
-  // Match admin scope - for notifications sent to all admins
-  if (isAdmin || isAdminGroup) {
-    clauses.push("target_scope.eq.admin");
-  }
-
-  // Match role-specific scope
-  if (!Number.isNaN(roleId)) {
-    clauses.push(`and(target_scope.eq.role,target_role_ids.cs.{${roleId}})`);
-  }
-
   const { data, error } = await supaClient
-    .from("notifications")
-    .select(`
-      id,
-      type,
-      payload,
-      target_scope,
-      target_role_ids,
-      target_user_id,
-      requires_action,
-      status,
-      created_by,
-      created_at,
-      updated_by,
-      updated_at,
-      acted_by,
-      acted_at
-    `)
-    .or(clauses.join(","))
-    .order("updated_at", { ascending: false });
+    .rpc("rpc_get_notifications", { p_token: window.currentToken });
 
   if (error) throw error;
   
@@ -4276,8 +4195,8 @@ async function fetchNotificationsForMe(){
     // Only show pending notifications
     if ((item.status || 'pending') !== 'pending') return false;
     
-    // all_staff scope matches everyone
-    if (item.target_scope === 'all_staff') return true;
+    // all/all_staff scope matches everyone
+    if (item.target_scope === 'all' || item.target_scope === 'all_staff') return true;
     
     // user scope must match current user ID
     if (item.target_scope === 'user') {
@@ -4929,14 +4848,11 @@ noticeAllList?.addEventListener("click", async (e) => {
 async function updateNotificationStatus(notifId, status) {
   if (!currentUser) throw new Error("Not logged in.");
   const { error } = await supaClient
-    .from("notifications")
-    .update({
-      status: status,
-      acted_by: currentUser.id,
-      acted_at: new Date().toISOString(),
-      updated_by: currentUser.id
-    })
-    .eq("id", notifId);
+    .rpc("rpc_update_notification_status", {
+      p_token: window.currentToken,
+      p_notification_id: notifId,
+      p_status: status
+    });
 
   if (error) throw error;
 }
@@ -4987,21 +4903,7 @@ async function loadAdminNotices(){
   if (!currentUser?.is_admin) return;
 
 const { data, error } = await supaClient
-  .from("notices")
-  .select(`
-    id,
-    title,
-    body_en,
-    body_es,
-    version,
-    is_active,
-    updated_at,
-    created_by,
-    target_all,
-    target_roles,
-    users:created_by ( name )
-  `)
-  .order("updated_at", { ascending: false });
+  .rpc("admin_get_all_notices", { p_token: window.currentToken });
 
 
   if (error){
@@ -5010,7 +4912,18 @@ const { data, error } = await supaClient
     return;
   }
 
-  adminNoticesCache = data || [];
+  adminNoticesCache = (data || []).map(row => ({
+    id: row.notice_id,
+    title: row.title,
+    body_en: row.body_en,
+    body_es: row.body_es,
+    version: row.version,
+    is_active: row.is_active,
+    updated_at: row.updated_at,
+    created_by_name: row.created_by_name,
+    target_all: row.target_all,
+    target_roles: row.target_roles || []
+  }));
 
   // Fetch ack counts (batched RPC) and merge into cache
   try {
@@ -5262,11 +5175,7 @@ async function loadAdminUsers(){
   adminUsersList.textContent = "Loading users…";
 
   const { data, error } = await supaClient
-    .from("users")
-    .select("id, name, role_id, is_admin, is_active, display_order, roles(name)")
-    .order("role_id", { ascending: true })
-    .order("display_order", { ascending: true })
-    .order("created_at", { ascending: true })
+    .rpc("admin_get_users", { p_token: window.currentToken, p_include_inactive: true });
 
   if (error) {
     console.error(error);
@@ -5463,18 +5372,18 @@ async function updateUserDisplayOrder(roleId) {
       const userId = rows[i].dataset.userId;
       console.log(`Updating user ${userId} to display_order ${i + 1}`);
       
-      const { data, error } = await supaClient
-        .from('users')
-        .update({ display_order: i + 1 })
-        .eq('id', userId)
-        .select();
+      const { error } = await supaClient.rpc("admin_reorder_users", {
+        p_token: window.currentToken,
+        p_user_id: userId,
+        p_display_order: i + 1
+      });
       
       if (error) {
         console.error('Failed to update display_order:', error);
         alert(`Failed to save new order: ${error.message}`);
         return;
       }
-      console.log('Update result:', data);
+      console.log('Order update ok for user:', userId);
     }
     
     console.log('All updates successful, reloading...');
@@ -5806,10 +5715,10 @@ async function loadAdminWeeks(periodId){
 
   // Pull all dates for the period, but we only need them to discover the weeks + open state
   const { data, error } = await supaClient
-    .from("rota_dates")
-.select("date, week_id, period_id, rota_weeks(id, open, open_after_close)")
-    .eq("period_id", periodId)
-    .order("date");
+    .rpc("rpc_get_rota_weeks", {
+      p_token: window.currentToken,
+      p_period_id: periodId
+    });
 
   if (error) {
     console.error(error);
@@ -5817,39 +5726,13 @@ async function loadAdminWeeks(periodId){
     return;
   }
 
-  // Build unique weeks list from rota_dates (because rota_weeks doesn't have period_id)
-const weekMap = new Map();
-
-for (const row of (data || [])) {
-  const w = row.rota_weeks;
-  if (!w?.id) continue;
-
-  // Compute week start/end from the date in rota_dates
-  const ws = startOfWeekSunday(new Date(row.date));
-  const we = addDays(ws, 6);
-
-  if (!weekMap.has(w.id)) {
-    weekMap.set(w.id, {
-      weekId: w.id,
-      open: !!w.open,
-      openAfterClose: !!w.open_after_close,
-      weekStart: ws,
-      weekEnd: we
-    });
-  } else {
-    const existing = weekMap.get(w.id);
-
-    // Keep flags consistent (safety: if any row says closed, treat as closed)
-    existing.open = existing.open && !!w.open;
-    existing.openAfterClose = existing.openAfterClose && !!w.open_after_close;
-
-    // Expand bounds in case of weird data ordering
-    if (ws < existing.weekStart) existing.weekStart = ws;
-    if (we > existing.weekEnd) existing.weekEnd = we;
-  }
-}
-
-const weeks = [...weekMap.values()].sort((a,b) => a.weekStart - b.weekStart);
+  const weeks = (data || []).map(w => ({
+    weekId: w.id,
+    open: !!w.open,
+    openAfterClose: !!w.open_after_close,
+    weekStart: new Date(w.week_start),
+    weekEnd: new Date(w.week_end)
+  })).sort((a,b) => a.weekStart - b.weekStart);
 
 
   if (!weeks.length){
@@ -5926,7 +5809,6 @@ if (periodClosed) {
     try {
       const token = getTokenOrThrow();
       const { error } = await supaClient.rpc("admin_set_week_open_flags", {
-        p_admin_id: currentUser.id,
         p_token: token,
         p_week_id: weekId,
         p_open: nextOpen,
@@ -6105,62 +5987,45 @@ async function setPeriodCloseTime(periodId, closesAtIsoOrNull){
 
 async function resetWeeksAfterClose(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
-  const { data: wkRows, error: wkErr } = await supaClient
-    .from("rota_dates")
-    .select("week_id")
-    .eq("period_id", periodId);
-
-  if (wkErr) throw wkErr;
-
-  const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
-  if (!weekIds.length) return;
-
-  const { error: resetErr } = await supaClient
-    .from("rota_weeks")
-    .update({ open_after_close: false })
-    .in("id", weekIds);
+  const token = getTokenOrThrow();
+  const { error: resetErr } = await supaClient.rpc("admin_set_weeks_open_after_close", {
+    p_token: token,
+    p_period_id: periodId,
+    p_open_after_close: false
+  });
 
   if (resetErr) throw resetErr;
 }
     async function resetWeeksOpen(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
-
-  const { data: wkRows, error: wkErr } = await supaClient
-    .from("rota_dates")
-    .select("week_id")
-    .eq("period_id", periodId);
-
-  if (wkErr) throw wkErr;
-
-  const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
-  if (!weekIds.length) return;
-
-  const { error: resetErr } = await supaClient
-    .from("rota_weeks")
-    .update({ open: true })
-    .in("id", weekIds);
+  const token = getTokenOrThrow();
+  const { error: resetErr } = await supaClient.rpc("admin_set_weeks_open_for_period", {
+    p_token: token,
+    p_period_id: periodId,
+    p_open: true
+  });
 
   if (resetErr) throw resetErr;
 }
 
 async function resetWeeksDefaultForPeriod(periodId){
   if (!currentUser?.is_admin) { alert("Admin only."); return; }
-  const { data: wkRows, error: wkErr } = await supaClient
-    .from("rota_dates")
-    .select("week_id")
-    .eq("period_id", periodId);
+  const token = getTokenOrThrow();
+  const { error: openErr } = await supaClient.rpc("admin_set_weeks_open_for_period", {
+    p_token: token,
+    p_period_id: periodId,
+    p_open: true
+  });
 
-  if (wkErr) throw wkErr;
+  if (openErr) throw openErr;
 
-  const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
-  if (!weekIds.length) return;
+  const { error: closeErr } = await supaClient.rpc("admin_set_weeks_open_after_close", {
+    p_token: token,
+    p_period_id: periodId,
+    p_open_after_close: false
+  });
 
-  const { error: resetErr } = await supaClient
-    .from("rota_weeks")
-    .update({ open: true, open_after_close: false })
-    .in("id", weekIds);
-
-  if (resetErr) throw resetErr;
+  if (closeErr) throw closeErr;
 }
 
 if (adminClosesAtSaveBtn) {
@@ -6332,11 +6197,11 @@ document.addEventListener("keydown", (e) => {
 async function populateShiftGrid(){
   console.warn("[INDEX.HTML] Old populateShiftGrid called - should be overridden by shift-functions.js");
   try {
-    const { data: shifts, error: shiftsErr} = await supaClient
-      .from("shifts")
-      .select("id, code, label, hours_value, allowed_staff_groups")
-      .eq("allow_requests", true)
-      .order("code", { ascending: true });
+    const token = getTokenOrThrow();
+    const { data: shifts, error: shiftsErr} = await supaClient.rpc("rpc_get_shifts", {
+      p_token: token,
+      p_allow_requests: true
+    });
     
     if (shiftsErr) throw shiftsErr;
     
@@ -6690,10 +6555,10 @@ async function loadRota() {
   // 7A) Load users
   // -----------------------------
   const { data: users, error: userError } = await supaClient
-.from("users")
-.select("id, name, role_id, is_admin, is_active, preferred_lang, display_order, roles(name)")
-    .order("role_id", { ascending: true })
-    .order("display_order", { ascending: true })
+    .rpc("rpc_get_users_basic", {
+      p_token: window.currentToken,
+      p_include_inactive: true
+    });
 
   if (userError) {
     console.error("Users load error:", userError);
@@ -6701,13 +6566,22 @@ async function loadRota() {
     return;
   }
 
+  const sortedUsers = (users || []).slice().sort((a, b) => {
+    const roleDiff = (a.role_id || 0) - (b.role_id || 0);
+    if (roleDiff !== 0) return roleDiff;
+    const aOrder = a.display_order ?? 9999;
+    const bOrder = b.display_order ?? 9999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
   // Build helper map + store all users for print/export
-  allUsers = users || [];
-  usersById = new Map((users || []).map(u => [u.id, u.name]));
+  allUsers = sortedUsers;
+  usersById = new Map(sortedUsers.map(u => [u.id, u.name]));
 
   // Update currentUser with full user data if already set from session validation
   if (currentUser && currentUser.id) {
-    const fullUser = (users || []).find(u => String(u.id) === String(currentUser.id));
+  const fullUser = (sortedUsers || []).find(u => String(u.id) === String(currentUser.id));
     if (fullUser) {
       // Merge with existing data to get roles and other details
       currentUser = { ...fullUser };
@@ -6759,16 +6633,33 @@ updateCloseLabel(selected);
 // 7D) Load rota dates FOR SELECTED PERIOD
 // -----------------------------
 const { data: dates, error: dateError } = await supaClient
-  .from("rota_dates")
- .select("date, week_id, period_id, rota_weeks(id, open, open_after_close)")
-  .eq("period_id", activePeriodId)
-  .order("date");
+  .rpc("rpc_get_rota_dates", {
+    p_token: window.currentToken,
+    p_period_id: activePeriodId
+  });
+
+const { data: weeksData, error: weeksError } = await supaClient
+  .rpc("rpc_get_rota_weeks", {
+    p_token: window.currentToken,
+    p_period_id: activePeriodId
+  });
 
 if (dateError) {
   console.error("Dates load error:", dateError);
   alert("Failed to load dates for this period.");
   return;
 }
+if (weeksError) {
+  console.error("Weeks load error:", weeksError);
+  alert("Failed to load weeks for this period.");
+  return;
+}
+
+const weeksById = new Map((weeksData || []).map(w => [String(w.id), w]));
+const datesWithWeeks = (dates || []).map(d => ({
+  ...d,
+  rota_weeks: d.week_id ? weeksById.get(String(d.week_id)) || null : null
+}));
 
 // -----------------------------
 // 7D.5) Load requests for this period (so saved cells show up)
@@ -6806,11 +6697,11 @@ if (start && end) {
 locksCache.clear();
 
 if (start && end) {
-  const { data: locks, error: lockErr } = await supaClient
-    .from("request_cell_locks")
-    .select("user_id, date, reason_en, reason_es, locked_by, locked_at")
-    .gte("date", start)
-    .lte("date", end);
+  const { data: locks, error: lockErr } = await supaClient.rpc("rpc_get_request_cell_locks", {
+    p_token: window.currentToken,
+    p_start_date: start,
+    p_end_date: end
+  });
 
   if (lockErr) {
     console.error("Locks load error:", lockErr);
@@ -6825,7 +6716,7 @@ if (start && end) {
 // -----------------------------
 // 7E) Render table (weeks + users)
 // -----------------------------
-const weeks = groupDatesIntoWeeks(dates);
+const weeks = groupDatesIntoWeeks(datesWithWeeks);
 
 // Store for export/report features
 allWeeks = weeks;
@@ -6834,7 +6725,7 @@ weekWindowStart = 0;
 
 // Hide inactive users from the rota table (for everyone)
 // (Admins can still view/manage them in Admin → Users with "Show inactive")
-const visibleUsers = users.filter(u => u.is_active !== false);
+const visibleUsers = sortedUsers.filter(u => u.is_active !== false);
 
 render(visibleUsers, weeks);
 
@@ -7064,14 +6955,14 @@ if (pe.shift === "O") {
 async function populatePatternTargets() {
   try {
     // Get all user patterns
-    const { data: userPatterns, error: upErr } = await supaClient
-      .from("user_patterns")
-      .select("user_id, pattern_id, anchor_week_start_date");
+    const { data: userPatterns, error: upErr } = await supaClient.rpc("rpc_get_user_patterns", {
+      p_token: window.currentToken
+    });
     if (upErr) throw upErr;
 
-    const { data: patterns, error: pErr } = await supaClient
-      .from("pattern_definitions")
-      .select("id, weekly_targets, requires_anchor");
+    const { data: patterns, error: pErr } = await supaClient.rpc("rpc_get_pattern_definitions", {
+      p_token: window.currentToken
+    });
     if (pErr) throw pErr;
 
     const patternMap = {};
@@ -7923,20 +7814,15 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
               );
               console.log("Week IDs from DOM:", weekIds);
 
-              // Resolve week_start values for these IDs (safe table)
-              const { data: weeksData, error: weekErr } = await supaClient
-                .from('rota_weeks')
-                .select('id, week_start')
-                .in('id', weekIds)
-                .order('week_start', { ascending: true });
-
-              if (weekErr) {
-                console.error('Week fetch error:', weekErr);
-                throw weekErr;
-              }
-
-              weeks = weeksData; // Assign to outer scope variable
-              console.log('Weeks fetched (by DOM ids):', weeks?.length || 0, weeks);
+              // Resolve week_start values from in-memory weeks
+              const allWeekRows = (allWeeks || []).map(w => ({
+                id: String(w.weekId),
+                week_start: w.weekStart
+              }));
+              weeks = allWeekRows
+                .filter(w => weekIds.includes(String(w.id)))
+                .sort((a, b) => new Date(a.week_start) - new Date(b.week_start));
+              console.log('Weeks resolved (by DOM ids):', weeks?.length || 0, weeks);
 
               if (weeks && weeks.length > 0) {
                 // EXACT same path as the modal: fetchWeekComments per week
@@ -8170,11 +8056,10 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
                 return
             }
             const{data:comments,error}=await supaClient
-                .from("week_comments")
-                .select("*, users(name)")
-                .eq("period_id",activePeriodId)
-                .order("week_start",{ascending:true})
-                .order("created_at",{ascending:true});
+                .rpc("admin_get_week_comments_for_period", {
+                    p_token: window.currentToken,
+                    p_period_id: activePeriodId
+                });
             if(error)throw error;
             if(!comments||comments.length===0){
                 alert("No comments found for this period.");
@@ -8183,7 +8068,7 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
             let csv="Week Start,User,Comment,Posted\n";
             comments.forEach(c=>{
                 const weekDate=new Date(c.week_start).toLocaleDateString("en-GB");
-                const userName=c.users?.name||"Unknown";
+                const userName=usersById.get(String(c.user_id))||"Unknown";
                 const comment=(c.comment||"").replace(/"/g,'""');
                 const posted=new Date(c.created_at).toLocaleString("en-GB");
                 csv+=`"${weekDate}","${userName}","${comment}","${posted}"\n`
@@ -8259,13 +8144,12 @@ window.addEventListener('load',function(){requestAnimationFrame(function(){reque
         // Get user_id from validation
         const userId = result.user_id;
         
-        // Fetch full user details from database
-        const { data: userData, error: userError } = await supaClient
-          .from('users')
-          .select('id, name, role_id, is_admin, is_active, preferred_lang')
-          .eq('id', userId)
-          .single();
-          
+        // Fetch full user details via token-only RPC
+        const { data: userRows, error: userError } = await supaClient
+          .rpc('rpc_get_current_user', { p_token: token });
+
+        const userData = Array.isArray(userRows) ? userRows[0] : userRows;
+
         if (userError || !userData) {
           console.error('Failed to fetch user data:', userError);
           window.location.href = 'index.html';

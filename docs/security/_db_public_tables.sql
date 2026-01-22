@@ -1,0 +1,46 @@
+          table_name          | rls_enabled | rls_forced 
+------------------------------+-------------+------------
+ admin_pins                   | t           | f
+ app_settings                 | t           | f
+ audit_logs                   | t           | f
+ bank_holidays                | t           | f
+ calendar_tokens              | t           | f
+ login_audit                  | t           | f
+ login_rate_limiting          | t           | f
+ non_staff_people             | t           | f
+ notice_ack                   | t           | f
+ notice_targets               | t           | f
+ notices                      | t           | f
+ notifications                | t           | f
+ operation_rate_limits        | t           | f
+ pattern_definitions          | t           | f
+ pattern_templates            | t           | f
+ period_non_staff             | t           | f
+ permission_group_permissions | t           | f
+ permission_groups            | t           | f
+ permissions                  | t           | f
+ planned_assignments          | t           | f
+ request_cell_locks           | t           | f
+ requests                     | t           | f
+ roles                        | t           | f
+ rota_assignment_audits       | t           | f
+ rota_assignment_comments     | t           | f
+ rota_assignment_history      | t           | f
+ rota_assignment_overrides    | t           | f
+ rota_assignments             | t           | f
+ rota_dates                   | t           | f
+ rota_periods                 | t           | f
+ rota_weeks                   | t           | f
+ sessions                     | t           | f
+ shift_catalogue              | t           | f
+ shift_eligibility            | t           | f
+ shifts                       | t           | f
+ staffing_requirements        | t           | f
+ swap_executions              | t           | f
+ swap_requests                | t           | f
+ user_patterns                | t           | f
+ user_permission_groups       | t           | f
+ users                        | t           | f
+ week_comments                | t           | f
+(42 rows)
+

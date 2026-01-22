@@ -21,6 +21,7 @@ async function loadAuditLogs() {
     // Use unified audit trail RPC that combines audit_logs and rota_assignment_history
     const { data: logs, error } = await window.supabaseClient
       .rpc("get_unified_audit_trail", {
+        p_token: window.currentToken,
         p_days_back: daysBack,
         p_action_filter: filterAction,
         p_user_filter: filterUser
@@ -156,27 +157,25 @@ async function exportAuditLogsCSV() {
     startDate.setDate(startDate.getDate() - daysBack);
 
     const { data: logs, error } = await window.supabaseClient
-      .from("audit_logs")
-      .select("*")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(5000);
+      .rpc("get_unified_audit_trail", {
+        p_token: window.currentToken,
+        p_days_back: daysBack,
+        p_action_filter: null,
+        p_user_filter: null
+      });
 
     if (error) throw error;
 
     // Build CSV
-    const headers = ["Timestamp", "Action", "User ID", "Impersonator ID", "Target User ID", "Resource Type", "Resource ID", "Status", "Error Message"];
+    const headers = ["Timestamp", "Action", "User ID", "Target User ID", "Resource Type", "Status", "Details"];
     const rows = logs.map((log) => [
       new Date(log.created_at).toLocaleString("en-GB"),
       log.action || "",
       log.user_id || "",
-      log.impersonator_user_id || "",
       log.target_user_id || "",
       log.resource_type || "",
-      log.resource_id || "",
       log.status || "",
-      (log.error_message || "").replace(/"/g, '""') // Escape quotes
+      JSON.stringify(log.metadata || {}).replace(/"/g, '""')
     ]);
 
     let csv = headers.join(",") + "\n";

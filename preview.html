@@ -749,6 +749,7 @@ Step C: Log decision
   <script src="js/session-validator.js"></script>
   <script src="js/permissions.js"></script>
   <script src="js/nav-bar.js"></script>
+  <script src="js/periods-shared.js" defer></script>
   <script>
     let currentPeriodData = null;
     let generatedPreview = null;
@@ -775,40 +776,6 @@ Step C: Log decision
       event.target.classList.add('active');
     }
 
-    // Load periods on page load
-    async function loadPeriods() {
-      try {
-        const { data, error } = await window.supabaseClient
-          .from('rota_periods')
-          .select('id, name, start_date, end_date')
-          .order('start_date', { ascending: false })
-          .limit(12);
-        
-        if (error) throw error;
-        
-        const select = document.getElementById('periodSelect');
-        data.forEach(period => {
-          const option = document.createElement('option');
-          option.value = period.id;
-          // Format dates nicely
-          const startDate = new Date(period.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          const endDate = new Date(period.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          const safeName = normalizeText(period.name);
-          option.textContent = `${safeName} (${startDate} - ${endDate})`;
-          select.appendChild(option);
-          periodMap.set(period.id, {
-            id: period.id,
-            name: period.name,
-            start_date: period.start_date,
-            end_date: period.end_date
-          });
-        });
-      } catch (e) {
-        console.error('Error loading periods:', e);
-        showStatus('Error loading periods: ' + e.message, 'error');
-      }
-    }
-
     // Generate preview
     async function generatePreview() {
       const periodId = document.getElementById('periodSelect').value;
@@ -820,7 +787,7 @@ Step C: Log decision
       showStatus('Generating preview...', 'loading');
       
       // Get token from window or sessionStorage
-      const token = window.currentToken || sessionStorage.getItem('session_token');
+      const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
       if (!token) {
         showStatus('Error: Session token not available. Please log in.', 'error');
         return;
@@ -1053,13 +1020,14 @@ Step C: Log decision
       }
 
       try {
-        const { data: users, error: uErr } = await window.supabaseClient
-          .from('users')
-          .select('id, name, role_id, is_admin, display_order')
-          .eq('is_active', true)
-          .order('role_id', { ascending: true })
-          .order('display_order', { ascending: true })
-          .order('created_at', { ascending: true });
+        const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
+        if (!token) {
+          throw new Error('Session token not available.');
+        }
+        const { data: users, error: uErr } = await window.supabaseClient.rpc('rpc_get_users_basic', {
+          p_token: token,
+          p_include_inactive: false
+        });
 
         if (uErr) throw uErr;
         (users || []).forEach(u => roster.push({ ...u, is_non_staff: false }));

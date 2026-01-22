@@ -20,6 +20,7 @@ const adminClosesAtClearBtn = document.getElementById('adminClosesAtClearBtn');
 const adminClosesAtHelp = document.getElementById('adminClosesAtHelp');
 const adminWeeksList = document.getElementById('adminWeeksList');
 const adminGeneratePreview = document.getElementById('adminGeneratePreview');
+const adminGenerateFutureList = document.getElementById('adminGenerateFutureList');
 const adminGenerateBtn = document.getElementById('adminGenerateBtn');
 
 let adminSelectedPeriodId = null;
@@ -86,13 +87,14 @@ periodsPageTabs.forEach(tab => {
 
 // Fetch all periods
 async function fetchRotaPeriods() {
-  const { data, error } = await supabaseClient
-    .from('rota_periods')
-    .select('*')
-    .order('start_date', { ascending: false });
+  const { data, error } = await supabaseClient.rpc("rpc_get_rota_periods", {
+    p_token: window.currentToken
+  });
   
   if (error) throw error;
-  return data || [];
+  const periods = data || [];
+  periods.sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+  return periods;
 }
 
 // Load periods into dropdown
@@ -167,11 +169,10 @@ function renderAdminCloseTime(periodId) {
 async function loadAdminWeeks(periodId) {
   adminWeeksList.textContent = 'Loading weeks…';
 
-  const { data, error } = await supabaseClient
-    .from('rota_dates')
-    .select('date, week_id, period_id, rota_weeks(id, open, open_after_close)')
-    .eq('period_id', periodId)
-    .order('date');
+  const { data, error } = await supabaseClient.rpc("rpc_get_rota_weeks", {
+    p_token: window.currentToken,
+    p_period_id: periodId
+  });
 
   if (error) {
     console.error(error);
@@ -179,34 +180,15 @@ async function loadAdminWeeks(periodId) {
     return;
   }
 
-  // Build unique weeks list
-  const weekMap = new Map();
-
-  for (const row of (data || [])) {
-    const w = row.rota_weeks;
-    if (!w?.id) continue;
-
-    const ws = startOfWeekSunday(new Date(row.date));
-    const we = addDays(ws, 6);
-
-    if (!weekMap.has(w.id)) {
-      weekMap.set(w.id, {
-        weekId: w.id,
-        open: !!w.open,
-        openAfterClose: !!w.open_after_close,
-        weekStart: ws,
-        weekEnd: we
-      });
-    } else {
-      const existing = weekMap.get(w.id);
-      existing.open = existing.open && !!w.open;
-      existing.openAfterClose = existing.openAfterClose && !!w.open_after_close;
-      if (ws < existing.weekStart) existing.weekStart = ws;
-      if (we > existing.weekEnd) existing.weekEnd = we;
-    }
-  }
-
-  const weeks = [...weekMap.values()].sort((a, b) => a.weekStart - b.weekStart);
+  const weeks = (data || [])
+    .map(w => ({
+      weekId: w.id,
+      open: !!w.open,
+      openAfterClose: !!w.open_after_close,
+      weekStart: new Date(w.week_start),
+      weekEnd: new Date(w.week_end)
+    }))
+    .sort((a, b) => a.weekStart - b.weekStart);
 
   if (!weeks.length) {
     adminWeeksList.textContent = 'No weeks found for this period.';
@@ -272,9 +254,14 @@ async function loadAdminWeeks(periodId) {
       }
 
       try {
+        const adminId = window.currentUser?.id;
+        if (!adminId) {
+          alert('No current admin user found. Please re-login.');
+          return;
+        }
+
         btn.disabled = true;
         const { error } = await supabaseClient.rpc('admin_set_week_open_flags', {
-          p_admin_id: window.currentUserId,
           p_token: window.currentToken,
           p_week_id: weekId,
           p_open: nextOpen,
@@ -404,20 +391,11 @@ if (adminClosesAtClearBtn) {
 }
 
 async function resetWeeksAfterClose(periodId) {
-  const { data: wkRows, error: wkErr } = await supabaseClient
-    .from('rota_dates')
-    .select('week_id')
-    .eq('period_id', periodId);
-
-  if (wkErr) throw wkErr;
-
-  const weekIds = [...new Set((wkRows || []).map(r => r.week_id).filter(Boolean))];
-  if (!weekIds.length) return;
-
-  const { error: resetErr } = await supabaseClient
-    .from('rota_weeks')
-    .update({ open_after_close: false })
-    .in('id', weekIds);
+  const { error: resetErr } = await supabaseClient.rpc("admin_set_weeks_open_after_close", {
+    p_token: window.currentToken,
+    p_period_id: periodId,
+    p_open_after_close: false
+  });
 
   if (resetErr) throw resetErr;
 }
@@ -441,15 +419,48 @@ function computeNextPeriodRange() {
   return { start, end, latest };
 }
 
+function computeFuturePeriodRanges(count = 12) {
+  const first = computeNextPeriodRange();
+  if (!first) return [];
+
+  const results = [];
+  let currentStart = new Date(first.start);
+
+  for (let i = 0; i < count; i++) {
+    const start = new Date(currentStart);
+    const end = addDays(start, 34);
+    results.push({ start, end, index: i });
+
+    // Next period starts the day after this one ends (5 weeks = 35 days)
+    currentStart = addDays(start, 35);
+  }
+
+  return results;
+}
+
 function refreshGeneratePreview() {
   const r = computeNextPeriodRange();
   if (!r) {
     adminGeneratePreview.textContent = 'Cannot preview. No periods loaded.';
+    if (adminGenerateFutureList) adminGenerateFutureList.textContent = 'Cannot preview. No periods loaded.';
     return;
   }
 
   adminGeneratePreview.textContent =
     `Next period: ${fmt(r.start)} – ${fmt(r.end)} (5 weeks, Sun–Sat).`;
+
+  if (adminGenerateFutureList) {
+    const future = computeFuturePeriodRanges(12);
+    adminGenerateFutureList.innerHTML = future
+      .map(p => {
+        const label = p.index === 0 ? 'Next' : `+${p.index}`;
+        return `<div style="padding:6px 0; border-bottom:1px solid #eee; display:flex; justify-content:space-between; gap:8px;">
+          <span style="font-weight:600; color:#111;">${label}</span>
+          <span style="flex:1; text-align:right; color:#333;">${fmt(p.start)} – ${fmt(p.end)}</span>
+        </div>`;
+      })
+      .join('');
+  }
 }
 
 if (adminGenerateBtn) {

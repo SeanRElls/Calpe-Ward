@@ -103,6 +103,33 @@
     // Initialize language buttons state
     updateLanguageButtons();
 
+    // Preferences collapse/expand toggle
+    const prefsToggle = document.getElementById("userPrefsToggle");
+    const prefsContent = document.getElementById("userPrefsContent");
+    const prefsSubtitle = document.getElementById("userPrefsSubtitle");
+    const prefsBtns = document.getElementById("userPrefsBtns");
+
+    if (prefsToggle && prefsContent) {
+      let isExpanded = false; // Start collapsed
+      prefsToggle.textContent = "▶"; // Show collapsed arrow initially
+      
+      prefsToggle.addEventListener("click", () => {
+        isExpanded = !isExpanded;
+        if (isExpanded) {
+          prefsContent.style.display = "flex";
+          prefsSubtitle.style.display = "block";
+          prefsBtns.style.display = "flex";
+          prefsToggle.textContent = "▼";
+        } else {
+          prefsContent.style.display = "none";
+          prefsSubtitle.style.display = "none";
+          prefsBtns.style.display = "none";
+          prefsToggle.textContent = "▶";
+        }
+      });
+    }
+
+
     // Calendar subscription buttons
     const generateCalBtn = document.getElementById("generateCalendarToken");
     const revokeCalBtn = document.getElementById("revokeCalendarToken");
@@ -229,13 +256,12 @@
     const supabase = typeof getSupabase === 'function' ? getSupabase() : window.supabaseClient;
     if (!supabase || !window.currentUser?.id) return;
     try {
+      const token = window.currentToken || sessionStorage.getItem("calpe_ward_token");
       const { data, error } = await supabase
-        .from("users")
-        .select("pref_shift_clustering, pref_night_appetite, pref_weekend_appetite, pref_leave_adjacency")
-        .eq("id", window.currentUser.id)
-        .single();
+        .rpc("rpc_get_current_user", { p_token: token });
       if (error) throw error;
-      const prefs = data || {};
+      const row = Array.isArray(data) ? data[0] : data;
+      const prefs = row || {};
       const fields = [
         "pref_shift_clustering",
         "pref_night_appetite",

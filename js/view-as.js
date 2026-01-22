@@ -18,6 +18,13 @@ function getActiveToken() {
   return sessionStorage.getItem(getTokenStorageKey());
 }
 
+function roleNameFromId(roleId) {
+  if (roleId === 1) return "Charge Nurses";
+  if (roleId === 2) return "Staff Nurses";
+  if (roleId === 3) return "Nursing Assistants";
+  return "Unknown";
+}
+
 function getRealUser() {
   const stored = sessionStorage.getItem(REAL_USER_STORAGE_KEY);
   if (stored) {
@@ -266,10 +273,10 @@ async function startViewingAs(targetUserId) {
   }
 
   // Get target user details
-  const { data: users, error: userError } = await supaClient
-    .from("users")
-    .select("id, name, role_id, is_active, is_admin")
-    .eq("id", targetUserId);
+  const { data: users, error: userError } = await supaClient.rpc("admin_get_user_by_id", {
+    p_token: adminToken,
+    p_user_id: targetUserId
+  });
 
   if (userError || !users || users.length === 0) {
     alert("Failed to find target user");
@@ -411,10 +418,10 @@ async function initViewAs(supabaseClient, currentUser) {
       
       // Load all users for selector
       console.log("[VIEW-AS] Loading users...");
-      const { data: allUsers, error } = await supabaseClient
-        .from("users")
-        .select("id, name, role_id, is_active, roles(name)")
-        .order("name");
+      const { data: allUsers, error } = await supabaseClient.rpc("admin_get_users", {
+        p_token: getActiveToken(),
+        p_include_inactive: true
+      });
 
       if (error) {
         console.error("[VIEW-AS] Failed to load users:", error);
@@ -425,7 +432,7 @@ async function initViewAs(supabaseClient, currentUser) {
 
       const usersWithRoles = allUsers.map(u => ({
         ...u,
-        role_name: u.roles?.name || "Unknown"
+        role_name: roleNameFromId(u.role_id)
       }));
 
       await buildOptions(usersWithRoles, supabaseClient);

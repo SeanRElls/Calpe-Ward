@@ -661,7 +661,7 @@ BEGIN
   IF v_is_admin IS NULL OR NOT v_is_admin THEN
     PERFORM public.require_session_permissions(p_token, ARRAY['weeks.set_open_flags']);
   END IF;
-  UPDATE public.rota_weeks SET is_open = p_open, is_open_after_close = p_open_after_close WHERE id = p_week_id;
+  UPDATE public.rota_weeks SET open = p_open, open_after_close = p_open_after_close WHERE id = p_week_id;
 END;
 $$;
 

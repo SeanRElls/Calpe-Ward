@@ -5,6 +5,14 @@
 // Redirects to login if invalid or expired
 // ============================================================================
 
+// Debug logging utility - persists through page reloads
+window.DEBUG_LOGS = window.DEBUG_LOGS || [];
+function debugLog(msg) {
+  console.log(msg);
+  window.DEBUG_LOGS.push(msg);
+  localStorage.setItem('calpeward_debug_logs', JSON.stringify(window.DEBUG_LOGS.slice(-50))); // Keep last 50
+}
+
 const TOKEN_KEY = "calpe_ward_token";
 const SESSION_KEY = "calpe_ward_session";
 const IMPERSONATION_TOKEN_KEY = "calpeward.impersonationToken";
@@ -31,9 +39,11 @@ function getActiveSessionToken() {
 async function validateSessionOnLoad() {
   // Get token from sessionStorage (prioritize impersonation token)
   const token = getActiveSessionToken();
+  debugLog("[SESSION-VALIDATOR] Starting validation, token: " + (token ? "present" : "MISSING"));
 
   if (!token) {
     // No token - redirect to login
+    debugLog("[SESSION-VALIDATOR] No token found, redirecting to login");
     redirectToLogin("Session expired. Please log in again.");
     return false;
   }
@@ -41,6 +51,7 @@ async function validateSessionOnLoad() {
   // Store token in memory for RPC calls
   currentToken = token;
   window.currentToken = token;  // Expose globally for RPC calls
+  debugLog("[SESSION-VALIDATOR] Token stored globally, validating with server...");
 
   // Validate token with server
   try {
