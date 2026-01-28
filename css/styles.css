@@ -57,7 +57,6 @@ body{
 .titlebar{
 	display:flex;
 	align-items: baseline;
-	justify-content: space-between;
 	gap: 12px;
 	margin: 2px 2px 12px;
 }
@@ -79,6 +78,7 @@ h1{
 	flex-wrap:wrap;
 	gap: 8px;
 	align-items:center;
+	flex: 1;
 }
 
 #periodLabel{ margin: 0; }

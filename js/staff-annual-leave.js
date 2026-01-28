@@ -282,26 +282,26 @@ const StaffAnnualLeaveModule = (() => {
    * Show the annual leave modal with month view for entire 2026
    */
   function showAnnualLeaveModal() {
+    const backdropId = 'staffAnnualLeaveBackdrop';
     const modalId = 'staffAnnualLeaveModal';
-    let modal = document.getElementById(modalId);
+    let backdrop = document.getElementById(backdropId);
 
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = backdropId;
+      backdrop.className = 'modal-backdrop';
+      backdrop.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(backdrop);
+    }
+
+    let modal = backdrop.querySelector('.modal');
     if (!modal) {
       modal = document.createElement('div');
       modal.id = modalId;
       modal.className = 'modal';
-      modal.style.cssText = `
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        justify-content: center;
-        align-items: center;
-        z-index: 10000;
-      `;
-      document.body.appendChild(modal);
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      backdrop.appendChild(modal);
     }
 
     // Start with current month, but constrained to 2026
@@ -354,9 +354,9 @@ const StaffAnnualLeaveModule = (() => {
 
         return `
           <tr>
-            <td style="padding:8px; border-bottom:1px solid #e5e7eb; font-size:13px;">${formatDate(weekStart)} - ${formatDate(weekEnd)}</td>
-            <td style="padding:8px; border-bottom:1px solid #e5e7eb; font-size:13px; color:#333;">${staffNames || '—'}</td>
-            <td style="padding:8px; border-bottom:1px solid #e5e7eb; text-align:right;">${actionHTML}</td>
+            <td data-label="Week" style="padding:8px; border-bottom:1px solid #e5e7eb; font-size:13px;">${formatDate(weekStart)} - ${formatDate(weekEnd)}</td>
+            <td data-label="Staff" style="padding:8px; border-bottom:1px solid #e5e7eb; font-size:13px; color:#333;">${staffNames || '—'}</td>
+            <td data-label="Action" style="padding:8px; border-bottom:1px solid #e5e7eb; text-align:right;">${actionHTML}</td>
           </tr>
         `;
       }).join('');
@@ -366,25 +366,23 @@ const StaffAnnualLeaveModule = (() => {
 
       const content = `
         <style>
-          .leave-modal-content {
-            max-width: 900px;
-            width: 95%;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
+          #staffAnnualLeaveModal {
+            width: min(900px, calc(100% - 36px));
             display: flex;
             flex-direction: column;
-            max-height: 90vh;
+            max-height: calc(100dvh - 28px);
+            box-sizing: border-box;
+            overflow-x: hidden;
           }
-          
+
           .leave-modal-body {
             display: flex;
             flex: 1;
             overflow: hidden;
             flex-direction: row;
+            min-height: 0;
           }
-          
+
           .leave-modal-sidebar {
             width: 340px;
             min-width: 280px;
@@ -394,133 +392,256 @@ const StaffAnnualLeaveModule = (() => {
             background: #fafafa;
             flex-shrink: 0;
           }
-          
+
           .leave-modal-calendar {
             flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
+            overflow-x: hidden;
           }
-          
+
+          .leave-modal-panel {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            padding: 10px;
+          }
+
+          .leave-calendar-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 4px 10px;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .leave-calendar-body {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+          }
+
           @media (max-width: 768px) {
-            .leave-modal-content {
-              width: 100%;
-              max-width: 100%;
-              max-height: 100vh;
-              height: 100vh;
-              border-radius: 0;
+            #staffAnnualLeaveModal {
+              width: calc(100% - 20px);
+              display: flex !important;
+              flex-direction: column !important;
+              max-height: calc(100dvh - 16px);
             }
-            
+
             .leave-modal-body {
-              flex-direction: column;
+              flex-direction: column !important;
+              flex: 1 !important;
+              overflow: hidden !important;
             }
-            
+
             .leave-modal-sidebar {
               width: 100%;
               min-width: 100%;
-              max-height: 25vh;
-              padding: 6px;
+              max-height: 42vh;
+              padding: 12px;
               border-right: none;
               border-bottom: 1px solid #e5e7eb;
-              font-size: 10px;
+              flex-shrink: 0;
+              overflow-y: auto !important;
             }
-            
+
+            .leave-modal-calendar {
+              flex: 1 !important;
+              overflow: hidden !important;
+              display: flex !important;
+              flex-direction: column !important;
+            }
+
             .leave-modal-sidebar h3 {
-              font-size: 11px !important;
-              margin: 4px 0 2px 0 !important;
-            }
-            
-            .leave-modal-sidebar p {
-              font-size: 10px !important;
-              margin: 2px 0 !important;
-              line-height: 1.2 !important;
-            }
-            
-            .leave-modal-content > div:first-of-type {
-              padding: 6px 8px !important;
-            }
-            
-            .leave-modal-content h2 {
               font-size: 13px !important;
+              margin: 6px 0 4px 0 !important;
             }
-            
-            .leave-modal-content button[onclick*="display"] {
-              font-size: 20px !important;
-              padding: 4px 8px !important;
+
+            .leave-modal-sidebar p {
+              font-size: 11px !important;
+              margin: 3px 0 !important;
+              line-height: 1.3 !important;
+            }
+
+            #staffAnnualLeaveModal > h2 {
+              padding: 12px !important;
+              font-size: 15px !important;
+              margin: 0 !important;
+            }
+
+            .leave-calendar-head {
+              padding: 6px 4px 8px !important;
+              gap: 6px !important;
+              flex-wrap: wrap !important;
+            }
+
+            .leave-modal-calendar h3 {
+              font-size: 13px !important;
+              min-width: auto !important;
+            }
+
+            .leave-modal-calendar button {
+              font-size: 14px !important;
+              padding: 6px 8px !important;
               min-width: 36px !important;
               min-height: 36px !important;
             }
-            
-            .leave-modal-calendar > div:first-child {
-              padding: 4px 6px !important;
-              gap: 2px !important;
-            }
-            
-            .leave-modal-calendar h3 {
-              font-size: 12px !important;
-              min-width: 80px !important;
-            }
-            
-            .leave-modal-calendar button {
-              font-size: 14px !important;
-              padding: 4px 6px !important;
-              min-width: 32px !important;
-              min-height: 32px !important;
-            }
-            
+
             #viewFullYear {
-              font-size: 9px !important;
-              padding: 4px 6px !important;
-              min-height: 32px !important;
+              font-size: 11px !important;
+              padding: 6px 10px !important;
+              min-height: 36px !important;
             }
-            
+
             .leave-modal-calendar table th {
-              font-size: 9px !important;
-              padding: 4px 2px !important;
+              font-size: 11px !important;
+              padding: 8px 4px !important;
             }
-            
+
             .leave-modal-calendar table td {
-              font-size: 9px !important;
-              padding: 4px 2px !important;
+              font-size: 11px !important;
+              padding: 8px 4px !important;
             }
-            
-            .leave-modal-calendar table th:first-child,
-            .leave-modal-calendar table td:first-child {
+
+            /* Week column now visible in mobile card layout */            .btn-request {
+              font-size: 10px !important;
+              padding: 4px 6px !important;
+            }
+          }
+
+          @media (max-width: 520px) {
+            /* Fix 1️⃣: Stop viewport height madness on iPhone */
+            #staffAnnualLeaveModal {
+              height: auto !important;
+              max-height: none !important;
+            }
+
+            /* Fix 2️⃣: Declare ONE scroll container only */
+            .leave-modal-body,
+            .leave-modal-sidebar {
+              overflow: visible !important;
+            }
+
+            .leave-modal-calendar {
+              overflow: hidden !important;
+              flex: 1 !important;
+              min-height: 0;
+              display: flex !important;
+              flex-direction: column !important;
+            }
+
+            .leave-calendar-body {
+              overflow-y: auto !important;
+              -webkit-overflow-scrolling: touch;
+              flex: 1 !important;
+              min-height: 0;
+            }
+
+            /* Table card layout */
+            .leave-modal-calendar table,
+            .leave-modal-calendar thead,
+            .leave-modal-calendar tbody,
+            .leave-modal-calendar th,
+            .leave-modal-calendar td,
+            .leave-modal-calendar tr {
+              display: block;
+              width: 100%;
+              box-sizing: border-box;
+            }
+
+            .leave-modal-calendar thead {
               display: none;
             }
-            
-            .btn-request {
-              font-size: 8px !important;
-              padding: 2px 4px !important;
+
+            .leave-modal-calendar tbody tr {
+              background: #ffffff;
+              border: 1px solid #e5e7eb;
+              border-radius: 10px;
+              margin: 10px 0;
+              padding: 10px 12px;
+              box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+              max-width: 100%;
+            }
+
+            .leave-modal-calendar tbody td {
+              border: none !important;
+              padding: 6px 0 !important;
+              font-size: 12px !important;
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 10px;
+              flex-wrap: wrap;
+              overflow-wrap: anywhere;
+            }
+
+            /* Fix 3️⃣: Tighten card layout and keep action buttons attached */
+            .leave-modal-calendar tbody td::before {
+              flex: 0 0 64px;
+              font-size: 11px;
+              content: attr(data-label);
+              font-weight: 600;
+              color: #64748b;
+            }
+
+            .leave-modal-calendar tbody td[data-label="Action"] {
+              margin-top: 6px;
+            }
+
+            .leave-modal-calendar tbody td:last-child {
+              justify-content: flex-start;
+            }
+
+            .leave-modal-calendar tbody tr td[data-label="Week"] {
+              border-bottom: 1px solid #eef2f7 !important;
+              padding-bottom: 8px !important;
+              margin-bottom: 6px;
+            }
+
+            .leave-modal-calendar .btn-request {
+              white-space: normal !important;
+            }
+
+            /* Ensure Week row is visible even if any previous rule hid first-child */
+            .leave-modal-calendar tbody tr td[data-label="Week"] {
+              display: flex !important;
+            }
+
+            /* Hide the "Action" label so the button doesn't look goofy */
+            .leave-modal-calendar tbody td[data-label="Action"]::before {
+              content: "";
+              display: none;
+            }
+
+            /* Make the Request button align nicely */
+            .leave-modal-calendar tbody td[data-label="Action"] {
+              justify-content: flex-end;
             }
           }
         </style>
-        <div class="leave-modal-content">
-          <!-- Header -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb;">
-            <h2 style="margin: 0; font-size: 16px; font-weight: 700;">🏖️ Annual Leave</h2>
-            <button onclick="document.getElementById('${modalId}').style.display='none';" style="font-size: 24px; border: none; background: none; cursor: pointer; padding: 4px 12px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;">&times;</button>
+
+        <h2>🏖️ Annual Leave</h2>
+
+        <div class="leave-modal-body">
+          <div class="leave-modal-sidebar">
+            ${entitlementHTML}
           </div>
 
-          <!-- Content Area -->
-          <div class="leave-modal-body">
-            <!-- Left: Entitlement -->
-            <div class="leave-modal-sidebar">
-              ${entitlementHTML}
-            </div>
-
-            <!-- Right: Calendar -->
-            <div class="leave-modal-calendar">
-              <!-- Month Navigation -->
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: white; border-bottom: 1px solid #e5e7eb; flex-wrap: wrap; gap: 8px;">
+          <div class="leave-modal-calendar">
+            <div class="modal-bubble leave-modal-panel">
+              <div class="leave-calendar-head">
                 <button id="prevMonth" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 8px 12px; min-width: 44px; min-height: 44px; opacity: ${canGoPrev ? '1' : '0.3'}; ${canGoPrev ? '' : 'cursor: not-allowed;'}">&lt;</button>
                 <h3 style="margin: 0; font-size: 15px; font-weight: 600; flex: 1; text-align: center; min-width: 120px;">${monthName}</h3>
                 <button id="nextMonth" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 8px 12px; min-width: 44px; min-height: 44px; opacity: ${canGoNext ? '1' : '0.3'}; ${canGoNext ? '' : 'cursor: not-allowed;'}">&gt;</button>
                 <button id="viewFullYear" style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 12px; cursor: pointer; white-space: nowrap; min-height: 44px;">📅 View Year</button>
               </div>
 
-              <!-- Table -->
-              <div style="flex: 1; overflow-y: auto;">
+              <div class="leave-calendar-body">
                 <table style="width: 100%; border-collapse: collapse;">
                   <thead>
                     <tr style="background: #f0f4f8; border-bottom: 2px solid #d1d5db; position: sticky; top: 0;">
@@ -536,6 +657,10 @@ const StaffAnnualLeaveModule = (() => {
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="btns">
+          <button id="annualLeaveClose" type="button">Close</button>
         </div>
       `;
 
@@ -579,10 +704,18 @@ const StaffAnnualLeaveModule = (() => {
           requestLeave(weekStart, weekEnd);
         });
       });
+
+      // Attach close button
+      const closeBtn = modal.querySelector('#annualLeaveClose');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          backdrop.setAttribute('aria-hidden', 'true');
+        });
+      }
     };
 
     createMonthView();
-    modal.style.display = 'flex';
+    backdrop.setAttribute('aria-hidden', 'false');
     console.log('[Leave] Month view modal displayed for 2026');
   }
 
@@ -613,7 +746,8 @@ const StaffAnnualLeaveModule = (() => {
       if (error) throw error;
 
       alert('✅ Leave request submitted! Admins will review and add you to the rota.');
-      document.getElementById('staffAnnualLeaveModal').style.display = 'none';
+      const backdrop = document.getElementById('staffAnnualLeaveBackdrop');
+      if (backdrop) backdrop.setAttribute('aria-hidden', 'true');
     } catch (error) {
       console.error('[Leave] Error:', error);
       alert('Error: ' + error.message);
@@ -791,3 +925,5 @@ const StaffAnnualLeaveModule = (() => {
 setTimeout(() => {
   StaffAnnualLeaveModule.init();
 }, 500);
+
+

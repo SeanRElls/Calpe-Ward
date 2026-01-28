@@ -37,26 +37,14 @@
     
     <!-- Title + Controls -->
     <div class="titlebar">
-      <div style="display:flex; gap:12px; align-items:center; flex:1;">
+      <div style="display:flex; gap:6px; align-items:center; flex:1;">
         <img
           src="logo.png"
           alt="Calpe Ward"
-          style="height:44px; width:auto;"
+          style="height:60px; width:auto;"
         />
-        <div style="flex:1;">
-          <h1>Calpe Ward</h1>
-          <div class="header-subrow" style="margin:0;">
-            <label for="periodSelect" class="subtitle" style="font-weight: 600;">Period:</label>
-            <select id="periodSelect" style="margin: 0 8px;">
-              <option>Loading...</option>
-            </select>
-            <button id="publishBtn" class="btn" style="display: none; background: #059669; color: white; padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px;">📤 Publish</button>
-            <button id="unpublishBtn" class="btn" style="display: none; background: #dc2626; color: white; padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; margin-left: 6px;">⚠️ Unpublish</button>
-            <button id="toggleEditingBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">🔒 Locked</button>
-      <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">👁️ Requests</button>
-            <button type="button" id="addNonStaffBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">➕ Non-Staff</button>
-            <button type="button" id="toggleWeekViewBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">📆 Week View</button>
-          </div>
+        <div>
+          <h1 style="color: #0369a1; margin: 0;">Calpe Ward</h1>
         </div>
       </div>
       <div class="rightbits" style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 8px 16px; border-radius: 20px; border: 1px solid #e2e8f0;">
@@ -91,20 +79,29 @@
       </div>
     </div>
 
-    <!-- Period Status -->
+    <!-- Period Status with Controls -->
     <div id="periodStatus" class="period-status" style="display: none;">
-      <span class="status-badge" id="statusBadge"></span>
-      <span id="statusText"></span>
+      <div class="header-subrow" style="margin:0;">
+        <label for="periodSelect" class="subtitle" style="font-weight: 600;">Period:</label>
+        <select id="periodSelect" style="margin: 0 8px;">
+          <option>Loading...</option>
+        </select>
+        <button id="publishBtn" class="btn" style="display: none; background: #059669; color: white; padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px;">📤 Publish</button>
+        <button id="unpublishBtn" class="btn" style="display: none; background: #dc2626; color: white; padding: 6px 12px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 13px; margin-left: 6px;">⚠️ Unpublish</button>
+        <button id="toggleEditingBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">🔒 Locked</button>
+        <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">👁️ Requests</button>
+        <button type="button" id="addNonStaffBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">➕ Non-Staff</button>
+        <button type="button" id="toggleWeekViewBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">📆 Week View</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="status-badge" id="statusBadge"></span>
+        <span id="statusText"></span>
+      </div>
     </div>
 
     <!-- Metadata Display (shown when editing) -->
     <div id="metadataDisplay" class="metadata-display" style="display: none; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin: 0 2px 12px; font-size: 14px;">
       <strong>Draft Editing Mode:</strong> Click any cell to assign shifts. Changes save immediately.
-    </div>
-
-    <!-- Published edit warning banner -->
-    <div id="publishedEditBanner" class="metadata-display" style="display: none; padding: 12px; background: #ffe4d5; border: 1px solid #f97316; border-radius: 4px; margin: 0 2px 12px; font-size: 14px;">
-      <strong>Published Edit Mode:</strong> Use only for post-publish corrections. All changes are recorded.
     </div>
 
     <!-- Pattern Warnings (admin only, collapsible) -->
@@ -1809,9 +1806,9 @@
       badge.textContent = isPublished ? "Published" : "Draft";
       badge.className = `status-badge status-${isPublished ? "published" : "draft"}`;
 
-      const start = new Date(period.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      const end = new Date(period.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      text.textContent = `${period.label || period.name || 'Period'} (${start} - ${end})`;
+      const start = new Date(period.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      const end = new Date(period.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      text.textContent = `${start} - ${end}`;
 
       status.style.display = "flex";
 
@@ -1831,7 +1828,7 @@
       const toggleEditingBtn = document.getElementById("toggleEditingBtn");
       const addNsBtn = document.getElementById("addNonStaffBtn");
       const metadataDisplay = document.getElementById("metadataDisplay");
-      const publishedBanner = document.getElementById("publishedEditBanner");
+      const patternWarnings = document.getElementById("patternWarnings");
       const isPublished = period?.status === "published";
       const canEditCurrent = isPublished ? canEditPublished : canEditDraft;
 
@@ -1851,13 +1848,9 @@
         addNsBtn.style.display = canShowNonStaff ? "inline-block" : "none";
       }
 
-      // Show published edit banner when period is published
-      if (publishedBanner) {
-        if (isPublished) {
-          publishedBanner.style.display = canEditCurrent ? "block" : "none";
-        } else {
-          publishedBanner.style.display = "none";
-        }
+      // Hide pattern guidance in published mode - only show in draft mode
+      if (patternWarnings) {
+        patternWarnings.style.display = isPublished ? "none" : "block";
       }
 
       if (typeof window.setShiftEditContext === "function") {
