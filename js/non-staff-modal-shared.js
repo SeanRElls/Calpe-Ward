@@ -11,18 +11,21 @@ function openNonStaffModal() {
   const backdrop = document.getElementById('nonStaffModalBackdrop');
   if (!backdrop) return;
   
-  const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+  const hasStudentPerm = window.PermissionsModule?.hasPermission?.('non_staff.add_student');
+  const hasBankAgencyPerm = window.PermissionsModule?.hasPermission?.('non_staff.add_bank_agency');
   
-  // Mentors default to students and lock categories
+  // Users with only student permission default to students and lock categories
   const categorySel = document.getElementById('nsCategory');
   const categorySelCreate = document.getElementById('nsCategoryCreate');
+  const canOnlyAddStudents = hasStudentPerm && !hasBankAgencyPerm && !window.currentUser?.is_admin;
+  
   if (categorySel) {
-    categorySel.value = 'student';
-    categorySel.disabled = !window.currentUser?.is_admin && isMentor;
+    categorySel.value = canOnlyAddStudents ? 'student' : categorySel.value || 'student';
+    categorySel.disabled = canOnlyAddStudents;
   }
   if (categorySelCreate) {
-    categorySelCreate.value = 'student';
-    categorySelCreate.disabled = !window.currentUser?.is_admin && isMentor;
+    categorySelCreate.value = canOnlyAddStudents ? 'student' : categorySelCreate.value || 'student';
+    categorySelCreate.disabled = canOnlyAddStudents;
   }
   
   // Initialize role group + counts UI for default (student)
@@ -109,6 +112,14 @@ function loadExistingNonStaff() {
 
 function closeNonStaffModal() {
   const backdrop = document.getElementById('nonStaffModalBackdrop');
+  const nsSearch = document.getElementById('nsSearch');
+  const nsResults = document.getElementById('nsResults');
+  
+  // Clear search input and results
+  if (nsSearch) nsSearch.value = '';
+  if (nsResults) nsResults.innerHTML = '';
+  
+  // Hide the modal
   if (backdrop) backdrop.setAttribute('aria-hidden','true');
 }
 
@@ -195,6 +206,11 @@ async function addExistingNonStaff(nonStaffPersonId, category) {
     
     if (error) throw error;
     
+    // Check if the RPC function returned an error in the JSON response
+    if (data && !data.success) {
+      throw new Error(data.error || 'Failed to add non-staff to period');
+    }
+    
     closeNonStaffModal();
     
     // Reload period data
@@ -228,6 +244,11 @@ async function addNewNonStaff() {
     
     if (addErr) throw addErr;
     
+    // Check if the RPC function returned an error in the JSON response
+    if (created && !created.success) {
+      throw new Error(created.error || 'Failed to create non-staff person');
+    }
+    
     const newId = created?.id;
     if (!newId) throw new Error('Create returned no id');
     
@@ -257,7 +278,7 @@ function showDeleteSection(item) {
 }
 
 async function deleteSelectedNonStaff() {
-  if (!selectedNonStaffForDelete || !selectedNonStaffForDelete.id) {
+  if (!selectedNonStaffForDelete || !selectedNonStaffForDelete.period_non_staff_id) {
     alert('No item selected for deletion');
     return;
   }
@@ -268,7 +289,7 @@ async function deleteSelectedNonStaff() {
   try {
     const { error } = await supabaseClient.rpc('rpc_remove_non_staff_from_period', {
       p_token: window.currentToken,
-      p_period_non_staff_id: selectedNonStaffForDelete.id
+      p_period_non_staff_id: selectedNonStaffForDelete.period_non_staff_id
     });
     
     if (error) throw error;
@@ -378,6 +399,44 @@ window.addNewNonStaff = addNewNonStaff;
 window.deleteSelectedNonStaff = deleteSelectedNonStaff;
 window.switchNonStaffTab = switchNonStaffTab;
 window.updateNonStaffModalFields = updateNonStaffModalFields;
+
+// ========== INITIALIZATION ==========
+// Set up event listeners for tabs when DOM is ready
+function initializeNonStaffModal() {
+  const tabSelect = document.getElementById('nsTabSelect');
+  const tabCreate = document.getElementById('nsTabCreate');
+  const closeBtn = document.getElementById('nsCloseBtn');
+  const searchBtn = document.getElementById('nsSearchBtn');
+  const backdrop = document.getElementById('nonStaffModalBackdrop');
+  
+  if (tabSelect) {
+    tabSelect.addEventListener('click', () => switchNonStaffTab('select'));
+  }
+  if (tabCreate) {
+    tabCreate.addEventListener('click', () => switchNonStaffTab('create'));
+  }
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeNonStaffModal);
+  }
+  if (searchBtn) {
+    searchBtn.addEventListener('click', searchNonStaff);
+  }
+  // Close modal when clicking on the backdrop
+  if (backdrop) {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        closeNonStaffModal();
+      }
+    });
+  }
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeNonStaffModal);
+} else {
+  initializeNonStaffModal();
+}
 window.updateNonStaffModalFieldsCreate = updateNonStaffModalFieldsCreate;
 window.loadExistingNonStaff = loadExistingNonStaff;
 console.log("[NON-STAFF-MODAL-SHARED.JS] Functions exported to window");

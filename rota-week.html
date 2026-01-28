@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calpe Ward - Weekly Rota View</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: white;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      flex: 1;
+    }
+
+    .header-title h1 {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .week-nav {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,0.2);
+      padding: 6px 12px;
+      border-radius: 6px;
+    }
+
+    .week-nav button {
+      background: rgba(255,255,255,0.3);
+      border: none;
+      color: white;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: background 200ms;
+    }
+
+    .week-nav button:hover {
+      background: rgba(255,255,255,0.5);
+    }
+
+    .week-range {
+      font-size: 14px;
+      min-width: 150px;
+      text-align: center;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .login-badge {
+      background: rgba(255,255,255,0.2);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 200ms;
+    }
+
+    .login-badge:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .header-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 200ms;
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    /* Main content */
+    .content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Staff sidebar */
+    .staff-sidebar {
+      width: 180px;
+      border-right: 1px solid #e2e8f0;
+      overflow-y: auto;
+      background: #f1f5f9;
+      flex-shrink: 0;
+    }
+
+    .staff-group {
+      border-bottom: 1px solid #cbd5e1;
+    }
+
+    .staff-group-header {
+      background: #e2e8f0;
+      padding: 8px 12px;
+      font-weight: 600;
+      font-size: 12px;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .staff-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 200ms;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 45px;
+    }
+
+    .staff-item:hover {
+      background: #e0e7ff;
+    }
+
+    .staff-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #667eea;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .staff-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Grid container */
+    .grid-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      scrollbar-gutter: stable;
+      clip-path: inset(0 0 0 0);
+    }
+
+    /* Day headers */
+    .day-headers {
+      display: flex;
+      border-bottom: 2px solid #cbd5e1;
+      flex-shrink: 0;
+      background: white;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+      clip-path: inset(0 0 0 0);
+    }
+
+    .day-header {
+      flex: 0 0 150px;
+      padding: 12px;
+      text-align: center;
+      border-right: 1px solid #e2e8f0;
+    }
+
+    .day-header-date {
+      font-size: 13px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .day-header-day {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-top: 4px;
+    }
+
+    /* Grid rows */
+    .grid-rows {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      clip-path: inset(0 0 0 0);
+    }
+
+    .grid-row {
+      display: flex;
+      border-bottom: 1px solid #e2e8f0;
+      min-height: 45px;
+    }
+
+    .grid-cell {
+      flex: 0 0 150px;
+      border-right: 1px solid #e2e8f0;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: #fafbfc;
+      transition: background 200ms;
+    }
+
+    .grid-cell:hover {
+      background: #f1f5f9;
+    }
+
+    .grid-cell.drag-over {
+      background: #dbeafe;
+      border: 2px dashed #3b82f6;
+    }
+
+    /* Shift blocks */
+    .shift-block {
+      background: white;
+      color: #1e293b;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: move;
+      user-select: none;
+      transition: all 200ms;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      border: 1px solid #cbd5e1;
+      min-width: 0;
+      max-width: 90%;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      position: relative;
+    }
+
+    /* Shift type indicators - left border color */
+    .shift-block.day {
+      border-left: 4px solid #3b82f6;
+    }
+
+    .shift-block.night {
+      border-left: 4px solid #1e40af;
+    }
+
+    .shift-block.long-day {
+      border-left: 4px solid #06b6d4;
+    }
+
+    .shift-block.time-off {
+      border-left: 4px solid #6b7280;
+      opacity: 0.8;
+    }
+
+    /* Draft assignments have dashed border */
+    .shift-block.draft {
+      border: 1px dashed #94a3b8;
+      opacity: 0.8;
+    }
+
+    .shift-block:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      transform: translateY(-2px);
+      background: #f8fafc;
+    }
+
+    .shift-block.dragging {
+      opacity: 0.7;
+      transform: scale(0.95);
+    }
+
+    /* Context menu */
+    .context-menu {
+      position: fixed;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      min-width: 160px;
+      display: none;
+    }
+
+    .context-menu.visible {
+      display: block;
+    }
+
+    .context-menu-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      border-bottom: 1px solid #f1f5f9;
+      transition: background 200ms;
+    }
+
+    .context-menu-item:last-child {
+      border-bottom: none;
+    }
+
+    .context-menu-item:hover {
+      background: #f1f5f9;
+    }
+
+    /* Empty state */
+    .empty-cell {
+      color: #cbd5e1;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .staff-sidebar {
+        width: 140px;
+      }
+      
+      .day-header {
+        min-width: 120px;
+      }
+
+      .grid-cell {
+        min-width: 120px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="header-title">
+          <h1>📅 Weekly Rota</h1>
+        </div>
+        <div class="week-nav">
+          <button id="prevWeekBtn">← Prev</button>
+          <div class="week-range" id="weekRange">Jan 27 - Feb 2, 2026</div>
+          <button id="nextWeekBtn">Next →</button>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="login-badge" id="loginBadge">Guest</div>
+        <div class="header-buttons">
+          <button class="btn" onclick="window.location.href='rota.html'">← 5-Week View</button>
+          <button class="btn" onclick="handleLogout()">Logout</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="content">
+      <!-- Staff sidebar -->
+      <div class="staff-sidebar" id="staffSidebar">
+        <!-- Staff groups will be populated here -->
+      </div>
+
+      <!-- Grid -->
+      <div class="grid-container">
+        <div class="day-headers" id="dayHeaders">
+          <!-- Day headers will be populated here -->
+        </div>
+        <div class="grid-rows" id="gridRows">
+          <!-- Grid rows will be populated here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context menu -->
+  <div class="context-menu" id="contextMenu">
+    <div class="context-menu-item" id="changeShiftItem">Change Shift</div>
+    <div class="context-menu-item" id="swapShiftItem">Swap Shift</div>
+    <div class="context-menu-item" id="clearShiftItem">Clear Shift</div>
+    <div class="context-menu-item" id="viewCommentsItem">View Comments</div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/permissions.js"></script>
+  <script src="js/session-validator.js"></script>
+  <script>
+    // Week view state
+    let currentDate = new Date();
+    let shifts = [];
+    let allUsers = [];
+    let assignments = new Map();
+    let overrides = new Map();
+    let comments = new Map();
+    let requests = new Map();
+    let currentPeriod = null;
+    let currentUser = null;
+    let userPatterns = new Map();
+
+    // ========== INITIALIZATION ==========
+    async function init() {
+      try {
+        console.log('[WEEK VIEW] Initializing...');
+        const user = await checkAuth();
+        if (!user) {
+          console.error('[WEEK VIEW] checkAuth failed, user is null');
+          return;
+        }
+        console.log('[WEEK VIEW] Auth successful, loading data...');
+        await loadWeekData();
+        console.log('[WEEK VIEW] Data loaded, rendering...');
+        renderWeek();
+        setupEventListeners();
+        console.log('[WEEK VIEW] Initialization complete');
+      } catch (err) {
+        console.error('[WEEK VIEW] Init error:', err);
+        // If auth failed, redirect to login
+        if (err.message.includes('token') || err.message.includes('auth')) {
+          console.log('[WEEK VIEW] Auth error detected, redirecting to login');
+          window.location.href = 'index.html';
+        } else {
+          alert('Failed to load week view: ' + err.message);
+        }
+      }
+    }
+
+    // ========== AUTH ==========
+    async function checkAuth() {
+      console.log("[WEEK VIEW] checkAuth starting...");
+      
+      if (!window.PermissionsModule || typeof window.PermissionsModule.loadCurrentUserPermissions !== "function") {
+        console.error("[WEEK VIEW] PermissionsModule not available");
+        window.location.href = "index.html";
+        return null;
+      }
+
+      console.log("[WEEK VIEW] Calling PermissionsModule.loadCurrentUserPermissions...");
+      await window.PermissionsModule.loadCurrentUserPermissions();
+      currentUser = window.PermissionsModule.getCurrentUser();
+      console.log("[WEEK VIEW] After permissions load, currentUser:", currentUser);
+
+      if (!currentUser) {
+        console.warn("[WEEK VIEW] No current user - redirecting to login");
+        window.location.href = "index.html";
+        return null;
+      }
+
+      console.log("[WEEK VIEW] User authenticated:", currentUser.name);
+
+      window.currentUser = currentUser;
+      const badge = document.getElementById('loginBadge');
+      if (badge) badge.textContent = currentUser.name;
+
+      return currentUser;
+    }
+
+    // ========== LOAD DATA ==========
+    async function loadWeekData() {
+      if (!window.supabaseClient) {
+        throw new Error('Supabase client not initialized. Config.js may not have loaded.');
+      }
+
+      const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
+      console.log('[WEEK VIEW] loadWeekData: token =', token ? 'present' : 'MISSING');
+      if (!token) throw new Error('No authentication token');
+
+      // Get week start/end dates
+      const weekStart = getWeekStart(currentDate);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+
+      // Load period
+      console.log('[WEEK VIEW] Loading periods...');
+      const { data: periods, error: pErr } = await window.supabaseClient.rpc('rpc_get_rota_periods', {
+        p_token: token
+      });
+
+      if (pErr) throw new Error('Failed to load periods: ' + (pErr.message || JSON.stringify(pErr)));
+      
+      currentPeriod = (periods || []).find(p => {
+        const start = new Date(p.start_date);
+        const end = new Date(p.end_date);
+        return weekStart >= start && weekStart <= end;
+      });
+
+      if (!currentPeriod) throw new Error('No active period for selected week');
+      console.log('[WEEK VIEW] Period loaded:', currentPeriod.name);
+
+      // Load users
+      console.log('[WEEK VIEW] Loading users...');
+      const { data: users, error: uErr } = await window.supabaseClient.rpc('rpc_get_users_basic', {
+        p_token: token
+      });
+
+      if (uErr) throw new Error('Users load failed: ' + (uErr.message || JSON.stringify(uErr)));
+      allUsers = users || [];
+      console.log('[WEEK VIEW] Users loaded:', allUsers.length);
+
+      // Load shifts
+      console.log('[WEEK VIEW] Loading shifts...');
+      const { data: shiftsData, error: sErr } = await window.supabaseClient.rpc('rpc_get_shifts', {
+        p_token: token
+      });
+
+      if (sErr) throw new Error('Shifts load failed: ' + (sErr.message || JSON.stringify(sErr)));
+      shifts = shiftsData || [];
+      console.log('[WEEK VIEW] Shifts loaded:', shifts.length);
+
+      // Load assignments for this week
+      console.log('[WEEK VIEW] Loading assignments for period:', currentPeriod.id);
+      const { data: assignments_data, error: aErr } = await window.supabaseClient.rpc('rpc_get_rota_assignments', {
+        p_token: token,
+        p_period_id: currentPeriod.id,
+        p_include_draft: true
+      });
+
+      if (aErr) throw new Error('Assignments load failed: ' + (aErr.message || JSON.stringify(aErr)));
+
+      assignments.clear();
+      (assignments_data || []).forEach(a => {
+        const key = `${a.user_id || a.period_non_staff_id}_${a.date}`;
+        assignments.set(key, a);
+      });
+
+      console.log('[WEEK VIEW] Sample assignments:', 
+        Array.from(assignments.entries()).slice(0, 5).map(([k, v]) => ({ key: k, date: v.date, userId: v.user_id }))
+      );
+
+      console.log('[WEEK VIEW] Data loaded:', {
+        period: currentPeriod?.name,
+        users: allUsers.length,
+        shifts: shifts.length,
+        assignments: assignments.size
+      });
+    }
+
+    // ========== RENDER ==========
+    function renderWeek() {
+      // Clear both containers
+      document.getElementById('staffSidebar').innerHTML = '';
+      document.getElementById('gridRows').innerHTML = '';
+      document.getElementById('dayHeaders').innerHTML = '';
+
+      renderDayHeaders();
+      renderStaffAndGrid();
+      updateWeekRange();
+    }
+
+    function renderDayHeaders() {
+      const weekStart = getWeekStart(currentDate);
+      const container = document.getElementById('dayHeaders');
+      container.innerHTML = '';
+
+      // Add spacer to match sidebar width (180px)
+      const spacer = document.createElement('div');
+      spacer.style.flex = '0 0 180px';
+      spacer.style.borderRight = '1px solid #e2e8f0';
+      spacer.style.backgroundColor = '#f1f5f9';
+      container.appendChild(spacer);
+
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(weekStart);
+        date.setDate(date.getDate() + i);
+
+        const header = document.createElement('div');
+        header.className = 'day-header';
+        header.innerHTML = `
+          <div class="day-header-date">${date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+          <div class="day-header-day">${date.getDate()}</div>
+        `;
+        container.appendChild(header);
+      }
+    }
+
+    function renderStaffAndGrid() {
+      const weekStart = getWeekStart(currentDate);
+      const sidebarContainer = document.getElementById('staffSidebar');
+      const gridContainer = document.getElementById('gridRows');
+
+      // Group users by role to create matching structure
+      const roleGroups = {
+        'Charge Nurse': [],
+        'Staff Nurse': [],
+        'Nursing Assistant': [],
+        'Non-Staff': []
+      };
+
+      allUsers.forEach(u => {
+        if (u.role_id === 1) roleGroups['Charge Nurse'].push(u);
+        else if (u.role_id === 2) roleGroups['Staff Nurse'].push(u);
+        else if (u.role_id === 3) roleGroups['Nursing Assistant'].push(u);
+        else roleGroups['Non-Staff'].push(u);
+      });
+
+      Object.entries(roleGroups).forEach(([role, users]) => {
+        if (users.length === 0) return;
+
+        // Render role group header in sidebar
+        const sidebarHeader = document.createElement('div');
+        sidebarHeader.className = 'staff-group-header';
+        sidebarHeader.textContent = role;
+        sidebarHeader.style.height = '35px';
+        sidebarHeader.style.display = 'flex';
+        sidebarHeader.style.alignItems = 'center';
+        sidebarContainer.appendChild(sidebarHeader);
+
+        // Render role group header row in grid (no extra space)
+        const gridHeaderRow = document.createElement('div');
+        gridHeaderRow.style.display = 'flex';
+        gridHeaderRow.style.height = '35px';
+        gridHeaderRow.style.backgroundColor = '#f1f5f9';
+        gridHeaderRow.style.borderBottom = '2px solid #cbd5e1';
+
+        for (let i = 0; i < 7; i++) {
+          const cell = document.createElement('div');
+          cell.style.flex = '0 0 150px';
+          cell.style.borderRight = '1px solid #e2e8f0';
+          gridHeaderRow.appendChild(cell);
+        }
+        gridContainer.appendChild(gridHeaderRow);
+
+        // Render user rows
+        users.forEach(user => {
+          // Sidebar item
+          const sidebarItem = document.createElement('div');
+          sidebarItem.className = 'staff-item';
+          const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase();
+          sidebarItem.innerHTML = `
+            <div class="staff-avatar">${initials}</div>
+            <div class="staff-name">${user.name}</div>
+          `;
+          sidebarContainer.appendChild(sidebarItem);
+
+          // Grid row
+          const row = document.createElement('div');
+          row.className = 'grid-row';
+          row.dataset.userId = user.id;
+
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(weekStart);
+            date.setDate(date.getDate() + i);
+            const dateStr = date.toISOString().split('T')[0];
+
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.dataset.userId = user.id;
+            cell.dataset.date = dateStr;
+
+            const lookupKey = `${user.id}_${dateStr}`;
+            const assignment = assignments.get(lookupKey);
+            
+            if (assignment && assignment.shift_id) {
+              const shift = shifts.find(s => s.id === assignment.shift_id);
+              if (shift) {
+                const block = document.createElement('div');
+                block.className = `shift-block ${getShiftType(shift)}`;
+                
+                if (assignment.status === 'draft') {
+                  block.classList.add('draft');
+                }
+                
+                block.textContent = shift.code;
+                block.draggable = true;
+                block.dataset.assignmentId = assignment.id;
+                block.dataset.shiftCode = shift.code;
+                block.dataset.userId = user.id;
+                block.dataset.date = dateStr;
+
+                block.addEventListener('dragstart', handleDragStart);
+                block.addEventListener('dragend', handleDragEnd);
+                block.addEventListener('contextmenu', handleContextMenu);
+
+                cell.appendChild(block);
+              }
+            } else {
+              cell.innerHTML = '<div class="empty-cell">—</div>';
+            }
+
+            cell.addEventListener('dragover', handleDragOver);
+            cell.addEventListener('drop', handleDrop);
+            cell.addEventListener('dragleave', handleDragLeave);
+
+            row.appendChild(cell);
+          }
+
+          gridContainer.appendChild(row);
+        });
+      });
+    }
+
+    // ========== DRAG & DROP ==========
+    let draggedElement = null;
+
+    function handleDragStart(e) {
+      draggedElement = this;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleDragEnd(e) {
+      document.querySelectorAll('.grid-cell.drag-over').forEach(cell => {
+        cell.classList.remove('drag-over');
+      });
+      this.classList.remove('dragging');
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      this.classList.add('drag-over');
+    }
+
+    function handleDragLeave(e) {
+      this.classList.remove('drag-over');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      this.classList.remove('drag-over');
+
+      if (!draggedElement) return;
+
+      const fromUserId = draggedElement.dataset.userId;
+      const fromDate = draggedElement.dataset.date;
+      const shiftCode = draggedElement.dataset.shiftCode;
+
+      const toUserId = this.dataset.userId;
+      const toDate = this.dataset.date;
+
+      if (fromUserId === toUserId && fromDate === toDate) return;
+
+      handleShiftDrop(fromUserId, fromDate, toUserId, toDate, shiftCode);
+      draggedElement = null;
+    }
+
+    async function handleShiftDrop(fromUserId, fromDate, toUserId, toDate, shiftCode) {
+      const token = window.currentToken || sessionStorage.getItem('calpe_ward_token');
+      console.log('[WEEK VIEW] handleShiftDrop:', { fromUserId, fromDate, toUserId, toDate, shiftCode, token: token ? 'present' : 'MISSING' });
+      
+      try {
+        // Find shift ID from code
+        const shift = shifts.find(s => s.code === shiftCode);
+        if (!shift) throw new Error('Shift not found: ' + shiftCode);
+
+        // Get assignment IDs
+        const fromAssignment = assignments.get(`${fromUserId}_${fromDate}`);
+        const toAssignment = assignments.get(`${toUserId}_${toDate}`);
+
+        console.log('[WEEK VIEW] Assignments:', { fromAssignment, toAssignment });
+
+        if (!fromAssignment) throw new Error('Source assignment not found');
+
+        // If target has an assignment, swap; otherwise move
+        if (toAssignment && toAssignment.shift_id) {
+          // Swap shifts
+          console.log('[WEEK VIEW] Executing swap...');
+          const { error: swapErr } = await window.supabaseClient.rpc('admin_execute_shift_swap', {
+            p_token: token,
+            p_initiator_user_id: fromUserId,
+            p_initiator_shift_date: fromDate,
+            p_counterparty_user_id: toUserId,
+            p_counterparty_shift_date: toDate,
+            p_period_id: currentPeriod.id
+          });
+          if (swapErr) throw new Error('Swap failed: ' + (swapErr.message || JSON.stringify(swapErr)));
+          console.log('[WEEK VIEW] Swap successful');
+        } else {
+          // Move shift
+          console.log('[WEEK VIEW] Executing move...');
+          const { error: upsertErr } = await window.supabaseClient.rpc('admin_upsert_rota_assignment', {
+            p_token: token,
+            p_user_id: toUserId,
+            p_period_non_staff_id: null,
+            p_date: toDate,
+            p_shift_id: shift.id,
+            p_status: 'draft'
+          });
+          if (upsertErr) throw new Error('Upsert failed: ' + (upsertErr.message || JSON.stringify(upsertErr)));
+          console.log('[WEEK VIEW] Upsert successful');
+
+          // Clear old assignment
+          console.log('[WEEK VIEW] Clearing old assignment...');
+          const { error: deleteErr } = await window.supabaseClient.rpc('admin_delete_rota_assignment', {
+            p_token: token,
+            p_user_id: fromUserId,
+            p_period_non_staff_id: null,
+            p_date: fromDate
+          });
+          if (deleteErr) throw new Error('Delete failed: ' + (deleteErr.message || JSON.stringify(deleteErr)));
+          console.log('[WEEK VIEW] Delete successful');
+        }
+
+        // Reload data and re-render
+        console.log('[WEEK VIEW] Reloading data...');
+        await loadWeekData();
+        renderGrid();
+        alert('Shift updated successfully');
+      } catch (err) {
+        console.error('[WEEK VIEW] Drop error:', err);
+        alert('Failed to update shift: ' + (err?.message || err));
+        renderGrid(); // Restore original state
+      }
+    }
+
+    // ========== CONTEXT MENU ==========
+    function handleContextMenu(e) {
+      e.preventDefault();
+      
+      const menu = document.getElementById('contextMenu');
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+      menu.classList.add('visible');
+
+      // Store the shift element for menu actions
+      menu.dataset.shiftElement = JSON.stringify({
+        userId: e.target.dataset.userId,
+        date: e.target.dataset.date,
+        shiftCode: e.target.dataset.shiftCode
+      });
+
+      e.target.dataset.contextTarget = 'true';
+    }
+
+    // ========== UTILITY ==========
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day;
+      return new Date(d.setDate(diff));
+    }
+
+    function updateWeekRange() {
+      const weekStart = getWeekStart(currentDate);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+
+      const range = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      document.getElementById('weekRange').textContent = range;
+    }
+
+    function getShiftType(shift) {
+      if (!shift.code) return '';
+      if (shift.code === 'N') return 'night';
+      if (shift.code === 'LD') return 'long-day';
+      if (shift.code === 'O' || shift.is_time_off) return 'time-off';
+      return 'day';
+    }
+
+    // ========== EVENT LISTENERS ==========
+    function setupEventListeners() {
+      document.getElementById('prevWeekBtn').addEventListener('click', () => {
+        currentDate.setDate(currentDate.getDate() - 7);
+        loadWeekData().then(() => renderWeek());
+      });
+
+      document.getElementById('nextWeekBtn').addEventListener('click', () => {
+        currentDate.setDate(currentDate.getDate() + 7);
+        loadWeekData().then(() => renderWeek());
+      });
+
+      // Synchronize horizontal scroll between day headers and grid rows
+      const gridRows = document.getElementById('gridRows');
+      const dayHeaders = document.getElementById('dayHeaders');
+      let syncing = false;
+
+      gridRows.addEventListener('scroll', () => {
+        if (!syncing) {
+          syncing = true;
+          dayHeaders.scrollLeft = gridRows.scrollLeft;
+          syncing = false;
+        }
+      });
+
+      dayHeaders.addEventListener('scroll', () => {
+        if (!syncing) {
+          syncing = true;
+          gridRows.scrollLeft = dayHeaders.scrollLeft;
+          syncing = false;
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.context-menu')) {
+          document.getElementById('contextMenu').classList.remove('visible');
+        }
+      });
+    }
+
+    async function handleLogout() {
+      if (confirm('Logout?')) {
+        sessionStorage.removeItem('calpe_ward_token');
+        window.location.href = 'index.html';
+      }
+    }
+
+    // ========== INIT ==========
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

@@ -22,6 +22,7 @@
   <script src="js/shift-editor.js" defer></script>
   <script src="js/periods-shared.js" defer></script>
   <script src="js/non-staff-modal-shared.js" defer></script>
+  <script src="js/staff-annual-leave.js" defer></script>
 </head>
 
 <body>
@@ -54,31 +55,39 @@
             <button id="toggleEditingBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">🔒 Locked</button>
       <button type="button" id="toggleRequestsBtn" class="btn" style="margin-left: 8px; padding: 6px 12px; font-size: 13px;">👁️ Requests</button>
             <button type="button" id="addNonStaffBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">➕ Non-Staff</button>
+            <button type="button" id="toggleWeekViewBtn" class="btn" style="margin-left: 8px; display:none; padding: 6px 12px; font-size: 13px;">📆 Week View</button>
           </div>
         </div>
       </div>
-      <div class="rightbits">
+      <div class="rightbits" style="display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 8px 16px; border-radius: 20px; border: 1px solid #e2e8f0;">
+        <!-- Account badge (username first) -->
+        <button class="badge account-badge" id="loginBadge" type="button" title="Edit your account" style="background: transparent; border: none; display: flex; align-items: center; gap: 6px; padding: 4px 8px; cursor: pointer;">
+          <span class="acc-ic" style="font-size: 16px;">👤</span>
+          <span class="acc-txt" style="font-weight: 600; color: #334155;">Not logged in</span>
+        </button>
+
+        <!-- Divider -->
+        <div style="width: 1px; height: 24px; background: #cbd5e1;"></div>
+
         <!-- Bell -->
-        <button class="badge" id="noticeBell" type="button" title="Notices & notifications">
-          🔔 <span id="noticeBellDot" style="display:none;">•</span>
+        <button class="badge" id="noticeBell" type="button" title="Notices & notifications" style="background: transparent; border: none; padding: 6px; cursor: pointer; font-size: 18px; position: relative;">
+          🔔 <span id="noticeBellDot" style="display:none; position: absolute; top: 4px; right: 4px; color: #ef4444; font-size: 20px;">•</span>
+        </button>
+
+        <!-- Annual Leave (Staff only) -->
+        <button class="badge" id="annualLeaveBtn" type="button" title="View and request annual leave" style="display:none; background: transparent; border: none; padding: 6px; cursor: pointer; font-size: 18px;">
+          🏖️
         </button>
 
         <!-- Print button (admin only) -->
-        <button class="badge" id="rotaPrintBtn" type="button" title="Print rota" style="display:none; cursor:pointer;">
-          🖨️ Print
-        </button>
-        
-        <!-- Admin badge -->
-        <div class="badge admin" id="adminBadge" style="display:none;">ADMIN</div>
-        
-        <!-- Account badge (clickable to edit account) -->
-        <button class="badge account-badge" id="loginBadge" type="button" title="Edit your account">
-          <span class="acc-ic">👤</span>
-          <span class="acc-txt">Not logged in</span>
+        <button class="badge" id="rotaPrintBtn" type="button" title="Print rota" style="display:none; background: transparent; border: none; padding: 6px; cursor: pointer; font-size: 18px;">
+          🖨️
         </button>
         
         <!-- Logout -->
-        <button id="logoutBtn">Logout</button>
+        <button id="logoutBtn" type="button" title="Logout" style="background: transparent; border: none; padding: 6px; cursor: pointer; font-size: 18px;">
+          👋
+        </button>
       </div>
     </div>
 
@@ -753,6 +762,8 @@
             console.warn("[ROTA] Non-staff load failed:", nsErr);
           } else if (nonStaff && nonStaff.length > 0) {
             console.log("[ROTA] Loaded", nonStaff.length, "non-staff");
+            // Store the raw non-staff data for use in the modal
+            window.nonStaff = nonStaff;
             nonStaff.forEach(ns => {
               allUsers.push({
                 id: ns.period_non_staff_id,
@@ -766,6 +777,8 @@
                 display_order: ns.display_order
               });
             });
+          } else {
+            window.nonStaff = [];
           }
         } catch (e) {
           console.warn("[ROTA] Failed to load non-staff:", e.message);
@@ -892,6 +905,26 @@
           console.warn("[ROTA] Failed to load user patterns:", err.message);
         }
 
+        // Load pattern definitions via RPC
+        console.log("[ROTA] Loading pattern definitions via RPC...");
+        try {
+          const { data: patternDefs, error: patDefErr } = await supabaseClient.rpc("rpc_get_pattern_definitions", {
+            p_token: token
+          });
+
+          if (patDefErr) {
+            console.warn("[ROTA] Failed to load pattern definitions:", patDefErr.message);
+          } else {
+            patterns.clear();
+            (patternDefs || []).forEach(pd => {
+              patterns.set(pd.id, pd);
+            });
+            console.log("[ROTA] Loaded", patterns.size, "pattern definitions");
+          }
+        } catch (err) {
+          console.warn("[ROTA] Failed to load pattern definitions:", err.message);
+        }
+
         console.log("[ROTA] Period data loaded successfully");
         
         // Display period status and configure editing controls
@@ -906,11 +939,17 @@
           console.warn("[ROTA] renderRota function not available");
         }
         
+        // Generate pattern warnings
+        generatePatternWarnings();
+        
       } catch (err) {
         console.error("[ROTA] loadPeriod error:", err);
         throw err;
       }
     }
+
+    // Expose loadPeriod to window for external callers (like admin-leave-management.js)
+    window.loadPeriod = loadPeriod;
 
     // ========== AUTH ==========
     async function checkAuth() {
@@ -961,12 +1000,22 @@
       const viewAsBtn = document.getElementById("viewAsBtn");
       if (viewAsBtn) viewAsBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
 
-      // Show Add Non-Staff if admin or mentor
+      // Show Add Non-Staff if admin or has any non-staff permission
       const addNsBtn = document.getElementById("addNonStaffBtn");
-      const isMentor = window.PermissionsModule?.hasPermission?.('non_staff.edit_student_shifts');
+      const hasStudentPerm = window.PermissionsModule?.hasPermission?.('non_staff.add_student');
+      const hasBankAgencyPerm = window.PermissionsModule?.hasPermission?.('non_staff.add_bank_agency');
       if (addNsBtn) {
-        addNsBtn.style.display = (currentUser.is_admin || isMentor) ? "inline-block" : "none";
+        addNsBtn.style.display = (currentUser.is_admin || hasStudentPerm || hasBankAgencyPerm) ? "inline-block" : "none";
         addNsBtn.onclick = openNonStaffModal;
+      }
+
+      // Show toggle week view button only for admins
+      const toggleWeekViewBtn = document.getElementById("toggleWeekViewBtn");
+      if (toggleWeekViewBtn) {
+        toggleWeekViewBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
+        toggleWeekViewBtn.onclick = () => {
+          window.location.href = "rota-week.html";
+        };
       }
 
       // Show Print button only for admins
@@ -996,7 +1045,7 @@
       if (modal) modal.setAttribute("aria-hidden", "true");
     }
 
-    window.openPublishedDetails = function openPublishedDetails(context) {
+    window.openPublishedDetails = async function openPublishedDetails(context) {
       console.log("[OPEN PUBLISHED DETAILS] Called with context:", context);
       window.currentPublishedContext = context;
       window.lastPublishedCell = context;
@@ -1024,8 +1073,14 @@
         if (nameEl) nameEl.textContent = "Rest day";
         if (restDayLabel) restDayLabel.style.display = "";
       } else if (shift) {
-        if (codeEl) codeEl.textContent = shift.code || "";
-        if (nameEl) nameEl.textContent = shift.shift_name || shift.code || "";
+        if (codeEl) {
+          codeEl.textContent = shift.code || "";
+          if (shift.fill_color) codeEl.style.backgroundColor = shift.fill_color;
+          if (shift.text_color) codeEl.style.color = shift.text_color;
+          if (shift.text_bold) codeEl.style.fontWeight = "700";
+          if (shift.text_italic) codeEl.style.fontStyle = "italic";
+        }
+        if (nameEl) nameEl.textContent = shift.label || shift.code || "";
         if (restDayLabel) restDayLabel.style.display = "none";
       } else {
         if (codeEl) codeEl.textContent = "—";
@@ -1044,13 +1099,53 @@
       const hoursEl = document.getElementById("publishedShiftHours");
       
       if (shift && shift.code !== "O") {
-        // Show scheduled times
-        const startTime = shift.start_time ? shift.start_time.slice(0, 5) : "—";
-        const endTime = shift.end_time ? shift.end_time.slice(0, 5) : "—";
-        if (scheduledTimes) scheduledTimes.textContent = `${startTime} – ${endTime}`;
-        if (scheduledTimesRow) scheduledTimesRow.style.display = "";
-        if (hoursEl) hoursEl.textContent = shift.hours_value || "—";
-        if (hoursRow) hoursRow.style.display = "";
+        // Show scheduled times (unless it's leave)
+        if (shift.code === "L") {
+          // For leave, fetch the leave entry details
+          const { data: leaveEntries, error: leaveErr } = await supabaseClient.rpc("admin_get_user_leave_entries", {
+            p_token: window.currentToken,
+            p_user_id: userId
+          });
+          
+          if (!leaveErr && leaveEntries && leaveEntries.length > 0) {
+            // Find the leave entry that covers this date
+            const leaveEntry = leaveEntries.find(le => {
+              const leStart = new Date(le.start_date).toISOString().split('T')[0];
+              const leEnd = new Date(le.end_date).toISOString().split('T')[0];
+              return date >= leStart && date <= leEnd;
+            });
+            
+            if (leaveEntry) {
+              // Format dates
+              const startDate = new Date(leaveEntry.start_date).toLocaleDateString('en-GB');
+              const endDate = new Date(leaveEntry.end_date).toLocaleDateString('en-GB');
+              
+              // Calculate total days
+              const start = new Date(leaveEntry.start_date);
+              const end = new Date(leaveEntry.end_date);
+              const totalDays = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+              
+              if (scheduledTimes) scheduledTimes.textContent = `${startDate} to ${endDate}`;
+              if (scheduledTimesRow) scheduledTimesRow.style.display = "";
+              if (hoursEl) hoursEl.textContent = `${totalDays} day${totalDays !== 1 ? 's' : ''}`;
+              if (hoursRow) hoursRow.style.display = "";
+            } else {
+              if (scheduledTimesRow) scheduledTimesRow.style.display = "none";
+              if (hoursRow) hoursRow.style.display = "none";
+            }
+          } else {
+            if (scheduledTimesRow) scheduledTimesRow.style.display = "none";
+            if (hoursRow) hoursRow.style.display = "none";
+          }
+        } else {
+          // Regular shift - show times and hours
+          const startTime = shift.start_time ? shift.start_time.slice(0, 5) : "—";
+          const endTime = shift.end_time ? shift.end_time.slice(0, 5) : "—";
+          if (scheduledTimes) scheduledTimes.textContent = `${startTime} – ${endTime}`;
+          if (scheduledTimesRow) scheduledTimesRow.style.display = "";
+          if (hoursEl) hoursEl.textContent = shift.hours_value || "—";
+          if (hoursRow) hoursRow.style.display = "";
+        }
       } else {
         if (scheduledTimesRow) scheduledTimesRow.style.display = "none";
         if (hoursRow) hoursRow.style.display = "none";
@@ -1087,6 +1182,30 @@
         if (commentDisplay) commentDisplay.style.display = "none";
       }
       
+      // Control button visibility based on permissions
+      const btnChange = document.getElementById("publishedChangeBtn");
+      const btnOverride = document.getElementById("publishedOverrideBtn");
+      const btnComments = document.getElementById("publishedCommentsBtn");
+      const btnSwap = document.getElementById("publishedSwapBtn");
+      const btnHistory = document.getElementById("publishedHistoryBtn");
+      
+      const canHistory = isAdmin || window.PermissionsModule?.hasPermission("rota.view_history");
+      const isOwnCell = (window.currentUser?.id === userId);
+      const isMentor = window.PermissionsModule?.hasPermission("non_staff.edit_student_shifts");
+      const isStudentNonStaff = user?.is_non_staff && user?.category === 'student';
+      
+      // Change shift: admin, has edit_published permission, or mentor editing student shift
+      const canChangeShift = canEditPublished || (isMentor && isStudentNonStaff);
+      if (btnChange) btnChange.style.display = canChangeShift ? "" : "none";
+      // Override shift: admin only
+      if (btnOverride) btnOverride.style.display = isAdmin ? "" : "none";
+      // View comments: always visible (filtering handled by visibility flags)
+      if (btnComments) btnComments.style.display = "";
+      // Swap shift: admin can swap any shift; staff can only swap their own
+      if (btnSwap) btnSwap.style.display = (isAdmin || isOwnCell) ? "" : "none";
+      // View history: if user has permission
+      if (btnHistory) btnHistory.style.display = canHistory ? "" : "none";
+      
       // Open modal
       const modal = document.getElementById("publishedDetailsModal");
       if (modal) modal.setAttribute("aria-hidden", "false");
@@ -1095,8 +1214,15 @@
     function handlePublishedChange() {
       const cell = window.lastPublishedCell || lastPublishedCell;
       if (!cell) return;
-      if (!canEditPublished) {
-        alert("You don't have permission to edit published rotas.");
+      
+      // Check permissions: allow if user has edit_published OR if mentor editing student shift
+      const isMentor = window.PermissionsModule?.hasPermission("non_staff.edit_student_shifts");
+      const user = allUsers?.find(u => u.id === cell.userId);
+      const isStudentNonStaff = user?.is_non_staff && user?.category === 'student';
+      const canChange = canEditPublished || (isMentor && isStudentNonStaff);
+      
+      if (!canChange) {
+        alert("You don't have permission to edit this shift.");
         return;
       }
       closePublishedDetails();
@@ -1115,8 +1241,9 @@
     function handlePublishedOverride() {
       const cell = window.lastPublishedCell || lastPublishedCell;
       if (!cell) return;
-      if (!canEditPublished) {
-        alert("You don't have permission to edit published rotas.");
+      const isAdmin = window.currentUser?.is_admin;
+      if (!isAdmin) {
+        alert("You don't have permission to override shifts. Admin access required.");
         return;
       }
       closePublishedDetails();
@@ -1188,7 +1315,9 @@
         window.overrideAmendmentContext = { userId, date, assignmentId: assignment?.id };
 
         console.log("[OVERRIDE AMENDMENT] Opening modal, context:", window.overrideAmendmentContext);
+        console.log("[OVERRIDE AMENDMENT] Setting aria-hidden to false on element:", backdrop?.id);
         backdrop.setAttribute("aria-hidden", "false");
+        console.log("[OVERRIDE AMENDMENT] Modal should now be visible");
       } catch (err) {
         console.error("[OVERRIDE AMENDMENT] Error opening modal:", err);
         alert("Error opening override modal. Check console.");
@@ -1450,8 +1579,14 @@
       if (!window.currentUser) return;
 
       const { userId, date } = cell;
-      // Allow all logged-in staff; admins can still act. Permission gate removed for staff.
       const isAdmin = !!window.currentUser.is_admin;
+      const isOwnCell = (window.currentUser.id === userId);
+      
+      // Non-admin users can only swap their own shifts
+      if (!isAdmin && !isOwnCell) {
+        alert("You can only swap your own shifts.");
+        return;
+      }
 
       // Get initiator's user data and shift
       const initiatorUser = allUsers.find(u => u.id === userId);
@@ -1573,10 +1708,48 @@
       closePublishedDetails();
     }
 
-    function saveOverrideAmendment() {
-      const modal = document.getElementById("overrideAmendmentModalBackdrop");
-      if (modal) modal.setAttribute("aria-hidden", "true");
-      alert("Override amendment saved (placeholder).");
+    async function saveOverrideAmendment() {
+      try {
+        const context = window.overrideAmendmentContext;
+        if (!context || !context.assignmentId) {
+          alert("No assignment context found.");
+          return;
+        }
+
+        const startTime = document.getElementById("amendmentStartTime")?.value || null;
+        const endTime = document.getElementById("amendmentEndTime")?.value || null;
+        const hours = parseFloat(document.getElementById("amendmentHours")?.value) || null;
+        const reason = document.getElementById("amendmentReason")?.value || null;
+
+        // Call the RPC to save the override
+        const { data, error } = await supabaseClient.rpc("admin_upsert_rota_assignment_override", {
+          p_token: window.currentToken,
+          p_assignment_id: context.assignmentId,
+          p_override_start_time: startTime,
+          p_override_end_time: endTime,
+          p_override_hours: hours,
+          p_comment: reason,
+          p_comment_visibility: 'admin_only'
+        });
+
+        if (error) throw error;
+
+        // Update local override map
+        if (data) {
+          const row = Array.isArray(data) ? data[0] : data;
+          if (row) overridesMap.set(context.assignmentId, row);
+        }
+
+        // Close modal and refresh
+        const modal = document.getElementById("overrideAmendmentModalBackdrop");
+        if (modal) modal.setAttribute("aria-hidden", "true");
+        
+        renderRota();
+        alert("Override saved successfully.");
+      } catch (err) {
+        console.error("[OVERRIDE AMENDMENT] Error saving:", err);
+        alert("Error saving override: " + err.message);
+      }
     }
 
     function closeOverrideAmendmentModal() {
@@ -1808,9 +1981,17 @@
       isEditingUnlocked = !isEditingUnlocked;
       const btn = document.getElementById("toggleEditingBtn");
       const metadataDisplay = document.getElementById("metadataDisplay");
+      const periodSelect = document.getElementById("periodSelect");
       
       btn.textContent = isEditingUnlocked ? "🔓 Editing" : "🔒 Locked";
       btn.classList.toggle("primary", isEditingUnlocked);
+      
+      // Lock/unlock period selector
+      if (periodSelect) {
+        periodSelect.disabled = isEditingUnlocked;
+        periodSelect.style.opacity = isEditingUnlocked ? "0.5" : "1";
+        periodSelect.style.cursor = isEditingUnlocked ? "not-allowed" : "pointer";
+      }
       
       // Show/hide metadata display
       if (metadataDisplay) {
@@ -1821,6 +2002,11 @@
       document.querySelectorAll("#rota td.cell").forEach(td => {
         td.classList.toggle("editable", isEditingUnlocked);
       });
+      
+      // Regenerate pattern warnings when entering edit mode
+      if (isEditingUnlocked && typeof generatePatternWarnings === 'function') {
+        generatePatternWarnings();
+      }
     }
 
 
@@ -2387,52 +2573,291 @@
       return `${shift.code} ${start}–${end} (${hours}h)`;
     }
 
-    function generatePatternWarnings(userId, date) {
-      const warnings = [];
-      const userPatterns = patternsMap?.get(userId);
+    function generatePatternWarnings() {
+      console.log("[PATTERN] generatePatternWarnings called");
+      console.log("[PATTERN] isAdmin:", window.currentUser?.is_admin);
+      console.log("[PATTERN] allUsers count:", allUsers?.length);
+      console.log("[PATTERN] patterns size:", patterns?.size);
+      console.log("[PATTERN] userPatterns size:", userPatterns?.size);
       
-      if (!userPatterns) return warnings;
-      
-      const dateObj = new Date(date);
-      const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      const weekStart = getWeekStart(dateObj);
-      
-      // Check for patterns
-      const shiftCode = assignmentsMap?.get(`${userId}_${date}`)?.shift_id
-        ? shiftMap?.get(assignmentsMap.get(`${userId}_${date}`).shift_id)?.code
-        : null;
-      
-      if (shiftCode === "N") {
-        // Night shift - check if pattern discourages nights
-        if (userPatterns.avoid_nights === true) {
-          warnings.push("User prefers to avoid night shifts");
-        }
+      if (!window.currentUser?.is_admin) {
+        console.log("[PATTERN] Not admin, skipping");
+        return;
       }
-      
-      // Check consecutive days pattern
-      if (userPatterns.max_consecutive_days) {
-        let consecutive = 1;
-        let checkDate = new Date(dateObj);
+
+      // Collect warnings by user
+      const userWarnings = new Map(); // user name -> { issues: [], hasError: boolean }
+
+      allUsers.forEach(u => {
+        const upat = userPatterns.get(u.id);
+        if (!upat || !upat.pattern_id) return; // Only validate users with an assigned pattern
+
+        const pat = patterns.get(upat.pattern_id);
+        if (!pat) return;
+
+        // Count shifts per week (including leave/extra days with hours)
+        const weeklyShiftCounts = allWeeks.map((w, weekIndex) => {
+          const count = w.days.reduce((c, d) => {
+            const assignment = assignmentsMap.get(`${u.id}_${d.date}`);
+            if (!assignment) return c;
+            const shift = shiftMap.get(assignment.shift_id);
+            if (!shift) return c;
+            
+            // Get override if exists
+            const override = overridesMap?.get(assignment.id);
+            
+            // If shift is time-off (L, X, etc.) but has override_hours, count those hours
+            if (shift.is_time_off && override?.override_hours) {
+              // Convert hours to "day units" (divide by 8)
+              return c + (override.override_hours / 8);
+            }
+            
+            // Otherwise, count regular shifts (not time-off)
+            if (!shift.is_time_off) return c + 1;
+            
+            return c;
+          }, 0);
+          
+          // SPECIAL LOGIC FOR NURSING ASSISTANTS (role_id === 3)
+          // If NA has leave (L) marked across entire week, count week as "achieved"
+          let countForWeek = count;
+          if (u.role_id === 3) {
+            const allDaysHaveLeave = w.days.every(d => {
+              const assignment = assignmentsMap.get(`${u.id}_${d.date}`);
+              if (!assignment) return false;
+              const shift = shiftMap.get(assignment.shift_id);
+              return shift && shift.code === 'L';
+            });
+            if (allDaysHaveLeave && w.days.length > 0) {
+              countForWeek = 1; // Treat full-week leave as "week achieved" for NA
+            }
+          }
+          
+          return { weekNum: weekIndex + 1, count: countForWeek };
+        });
+
+        // Compute total assigned shifts in the 5-week period
+        const totalAssigned = weeklyShiftCounts.reduce((sum, w) => sum + w.count, 0);
+
+        // Pattern-specific validation
+        const patternType = String(pat.pattern_type || "").toLowerCase();
+        const weeklyTargets = Array.isArray(pat.weekly_targets) ? pat.weekly_targets : [];
         
-        // Count forward
-        for (let i = 1; i < 7; i++) {
-          checkDate = new Date(dateObj);
-          checkDate.setDate(checkDate.getDate() + i);
-          const nextKey = checkDate.toISOString().split('T')[0];
-          const nextAssignment = assignmentsMap?.get(`${userId}_${nextKey}`);
-          if (nextAssignment?.shift_id && !isTimeOff(shiftMap.get(nextAssignment.shift_id))) {
-            consecutive++;
-          } else {
-            break;
+        const userIssues = [];
+        let hasError = false;
+
+        // NURSE FLEXIBLE 16 PATTERN
+        if (patternType.includes("nurse_flexible_16") || patternType.includes("flexible")) {
+          const expectedTotal = 16;
+          
+          // Check total
+          if (totalAssigned < expectedTotal) {
+            userIssues.push(`Flexible 16: ${totalAssigned}/${expectedTotal} shifts assigned`);
+            hasError = true;
+          } else if (totalAssigned > expectedTotal) {
+            userIssues.push(`Flexible 16: ${totalAssigned} shifts (>${expectedTotal})`);
+          }
+
+          // Check for 4-day week requirement
+          const fourDayWeeks = weeklyShiftCounts.filter(w => w.count === 4);
+          if (fourDayWeeks.length === 0) {
+            userIssues.push(`Flexible 16: Missing required 4-day week`);
+            hasError = true;
+          } else if (fourDayWeeks.length > 1) {
+            const weekNums = fourDayWeeks.map(w => `W${w.weekNum}`).join(', ');
+            userIssues.push(`Flexible 16: Multiple 4-day weeks (${weekNums})`);
           }
         }
-        
-        if (consecutive > userPatterns.max_consecutive_days) {
-          warnings.push(`Exceeds ${userPatterns.max_consecutive_days}-day limit (${consecutive} assigned)`);
+        // 2/2/3 PATTERN
+        else if (weeklyTargets.length === 3 && weeklyTargets[0] === 2 && weeklyTargets[1] === 2 && weeklyTargets[2] === 3) {
+          const expectedTotal = pat.requires_anchor && upat.anchor_week_start_date ? 
+            calculateAnchoredTotal(upat, pat) : 
+            (2 + 2 + 3 + 2 + 2); // Default 5 weeks
+
+          // Check total
+          if (totalAssigned < expectedTotal) {
+            userIssues.push(`2/2/3: ${totalAssigned}/${expectedTotal} shifts`);
+            hasError = true;
+          } else if (totalAssigned > expectedTotal) {
+            userIssues.push(`2/2/3: ${totalAssigned} shifts (>${expectedTotal})`);
+          }
+
+          // Check weekly pattern adherence
+          weeklyShiftCounts.forEach((w, idx) => {
+            const cyclePos = pat.requires_anchor ? 
+              calculateWeekInCycle(allWeeks[idx], upat, pat) : 
+              idx % 3;
+            const expectedForWeek = weeklyTargets[cyclePos];
+            
+            if (w.count < expectedForWeek) {
+              userIssues.push(`W${w.weekNum}: ${w.count} shifts (need ${expectedForWeek})`);
+              hasError = true;
+            } else if (w.count > expectedForWeek) {
+              userIssues.push(`W${w.weekNum}: ${w.count} shifts (expect ${expectedForWeek})`);
+            }
+          });
         }
+        // 3/3/4 PATTERN
+        else if (weeklyTargets.length === 3 && weeklyTargets[0] === 3 && weeklyTargets[1] === 3 && weeklyTargets[2] === 4) {
+          const expectedTotal = pat.requires_anchor && upat.anchor_week_start_date ? 
+            calculateAnchoredTotal(upat, pat) : 
+            (3 + 3 + 4 + 3 + 3); // Default 5 weeks
+
+          // Check total
+          if (totalAssigned < expectedTotal) {
+            userIssues.push(`3/3/4: ${totalAssigned}/${expectedTotal} shifts`);
+            hasError = true;
+          } else if (totalAssigned > expectedTotal) {
+            userIssues.push(`3/3/4: ${totalAssigned} shifts (>${expectedTotal})`);
+          }
+
+          // Check weekly pattern adherence
+          weeklyShiftCounts.forEach((w, idx) => {
+            const cyclePos = pat.requires_anchor ? 
+              calculateWeekInCycle(allWeeks[idx], upat, pat) : 
+              idx % 3;
+            const expectedForWeek = weeklyTargets[cyclePos];
+            
+            if (w.count < expectedForWeek) {
+              userIssues.push(`W${w.weekNum}: ${w.count} shifts (need ${expectedForWeek})`);
+              hasError = true;
+            } else if (w.count > expectedForWeek) {
+              userIssues.push(`W${w.weekNum}: ${w.count} shifts (expect ${expectedForWeek})`);
+            }
+          });
+        }
+        // 1 LONG 1 SHORT PATTERN
+        else if (patternType.includes("long_short") || (weeklyTargets.length === 2 && weeklyTargets[0] !== weeklyTargets[1])) {
+          const expectedTotal = pat.requires_anchor && upat.anchor_week_start_date ? 
+            calculateAnchoredTotal(upat, pat) : 
+            weeklyTargets.reduce((a, b) => a + b, 0) * 2 + weeklyTargets[0]; // 5 weeks
+
+          // Check total
+          if (totalAssigned < expectedTotal) {
+            userIssues.push(`1L/1S: ${totalAssigned}/${expectedTotal} shifts`);
+            hasError = true;
+          } else if (totalAssigned > expectedTotal) {
+            userIssues.push(`1L/1S: ${totalAssigned} shifts (>${expectedTotal})`);
+          }
+
+          // Check weekly pattern adherence
+          weeklyShiftCounts.forEach((w, idx) => {
+            const cyclePos = pat.requires_anchor ? 
+              calculateWeekInCycle(allWeeks[idx], upat, pat) : 
+              idx % 2;
+            const expectedForWeek = weeklyTargets[cyclePos];
+            
+            if (w.count < expectedForWeek) {
+              userIssues.push(`W${w.weekNum}: ${w.count} shifts (need ${expectedForWeek})`);
+              hasError = true;
+            } else if (w.count > expectedForWeek) {
+              userIssues.push(`W${w.weekNum}: ${w.count} shifts (expect ${expectedForWeek})`);
+            }
+          });
+        }
+        // GENERIC ANCHORED PATTERN
+        else if (pat.requires_anchor && upat.anchor_week_start_date && weeklyTargets.length) {
+          const expectedTotal = calculateAnchoredTotal(upat, pat);
+
+          // Check total
+          if (totalAssigned < expectedTotal) {
+            userIssues.push(`${pat.name}: ${totalAssigned}/${expectedTotal} shifts`);
+            hasError = true;
+          } else if (totalAssigned > expectedTotal) {
+            userIssues.push(`${pat.name}: ${totalAssigned} shifts (>${expectedTotal})`);
+          }
+        }
+        // FALLBACK - SIMPLE TOTAL CHECK
+        else {
+          const expectedTotal = weeklyTargets.length ? 
+            weeklyTargets.reduce((a, b) => a + b, 0) : 
+            null;
+
+          if (expectedTotal != null) {
+            if (totalAssigned < expectedTotal) {
+              userIssues.push(`Assigned ${totalAssigned} shifts; require ${expectedTotal}`);
+              hasError = true;
+            } else if (totalAssigned > expectedTotal) {
+              userIssues.push(`Assigned ${totalAssigned} (> ${expectedTotal})`);
+            }
+          }
+        }
+
+        // Store this user's issues if any
+        if (userIssues.length > 0) {
+          userWarnings.set(u.name, { issues: userIssues, hasError });
+        }
+      });
+
+      console.log("[PATTERN] Total users with warnings:", userWarnings.size);
+      
+      if (userWarnings.size === 0) {
+        console.log("[PATTERN] No warnings, hiding section");
+        const elem = document.getElementById("patternWarnings");
+        if (elem) elem.classList.remove("visible");
+        return;
+      }
+
+      console.log("[PATTERN] Displaying warnings for", userWarnings.size, "users");
+      const list = document.getElementById("warningsList");
+      if (!list) {
+        console.error("[PATTERN] warningsList element not found!");
+        return;
       }
       
-      return warnings;
+      list.innerHTML = "";
+      
+      // Create one alert per user with all their issues
+      userWarnings.forEach((data, userName) => {
+        const div = document.createElement("div");
+        div.className = `warning-item ${data.hasError ? "error" : ""}`;
+        
+        const header = document.createElement("strong");
+        header.textContent = `${userName}:`;
+        div.appendChild(header);
+        
+        const ul = document.createElement("ul");
+        ul.style.marginTop = "0.5em";
+        ul.style.marginBottom = "0";
+        data.issues.forEach(issue => {
+          const li = document.createElement("li");
+          li.textContent = issue;
+          ul.appendChild(li);
+        });
+        div.appendChild(ul);
+        
+        list.appendChild(div);
+      });
+
+      const elem = document.getElementById("patternWarnings");
+      if (elem) {
+        elem.classList.add("visible");
+        console.log("[PATTERN] Section made visible");
+      } else {
+        console.error("[PATTERN] patternWarnings element not found!");
+      }
+    }
+
+    // Helper: Calculate expected total for anchored patterns
+    function calculateAnchoredTotal(upat, pat) {
+      return allWeeks.reduce((sum, w) => {
+        const weekStart = getWeekStart(w.weekStart);
+        const anchorDate = getWeekStart(new Date(upat.anchor_week_start_date));
+        const weeksDiff = Math.floor((weekStart - anchorDate) / (7 * 24 * 60 * 60 * 1000));
+        const cycleLen = pat.weekly_targets.length;
+        const weekInCycle = ((weeksDiff % cycleLen) + cycleLen) % cycleLen;
+        const target = Number(pat.weekly_targets[weekInCycle]) || 0;
+        return sum + target;
+      }, 0);
+    }
+
+    // Helper: Calculate which week in cycle
+    function calculateWeekInCycle(week, upat, pat) {
+      const weekStart = getWeekStart(week.weekStart);
+      const anchorDate = getWeekStart(new Date(upat.anchor_week_start_date));
+      const weeksDiff = Math.floor((weekStart - anchorDate) / (7 * 24 * 60 * 60 * 1000));
+      const cycleLen = pat.weekly_targets.length;
+      return ((weeksDiff % cycleLen) + cycleLen) % cycleLen;
     }
 
     function getBankHolidayName(date) {
@@ -2690,26 +3115,7 @@
                   if (existing) existing.id = assignmentIdValue;
                 }
 
-                if (currentEditContext === "published") {
-                  if (!oldShiftId || oldShiftId !== shiftId) {
-                    const { error: histErr } = await supabaseClient.rpc("admin_insert_rota_assignment_history", {
-                      p_token: window.currentToken,
-                      p_assignment_id: assignmentIdValue,
-                      p_user_id: historyAssignee.user_id,
-                      p_period_non_staff_id: historyAssignee.period_non_staff_id,
-                      p_date: date,
-                      p_old_shift_id: oldShiftId || null,
-                      p_old_shift_code: oldShiftCode || null,
-                      p_new_shift_id: shiftId,
-                      p_new_shift_code: newShift?.code || 'UNKNOWN',
-                      p_change_reason: oldShiftId ? 'Admin changed shift' : 'Admin added shift',
-                      p_changed_by_name: window.currentUser?.name
-                    });
-                    if (histErr) {
-                      console.error("[ROTA ONSAVE] Error recording history:", histErr);
-                    }
-                  }
-                }
+                // History is now handled automatically by admin_upsert_rota_assignment for published periods
 
                 const hasActualOverride = overrideData && (
                   overrideData.override_start_time || 

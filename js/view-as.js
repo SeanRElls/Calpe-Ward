@@ -278,8 +278,17 @@ async function startViewingAs(targetUserId) {
     p_user_id: targetUserId
   });
 
-  if (userError || !users || users.length === 0) {
-    alert("Failed to find target user");
+  console.log("[VIEW-AS] admin_get_user_by_id response:", { users, userError });
+
+  if (userError) {
+    console.error("[VIEW-AS] Error getting user:", userError);
+    alert(`Failed to get user details: ${userError.message}`);
+    return;
+  }
+
+  if (!users || users.length === 0) {
+    console.error("[VIEW-AS] User not found:", targetUserId);
+    alert(`User not found with ID: ${targetUserId}`);
     return;
   }
 

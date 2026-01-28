@@ -1043,6 +1043,8 @@ Step C: Log decision
             if (nsErr) {
               console.warn('[PREVIEW] Non-staff load failed:', nsErr);
             } else {
+              // Store the raw non-staff data for use in the modal
+              window.nonStaff = nonStaff || [];
               (nonStaff || []).forEach(ns => {
                 roster.push({
                   id: ns.period_non_staff_id,

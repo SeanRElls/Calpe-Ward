@@ -94,6 +94,25 @@ const AssignmentHistoryModule = (() => {
       }
       content.innerHTML = '<p>Loading...</p>';
 
+      // Load shifts if not already loaded
+      let shiftsByCode = new Map();
+      if (window.shiftMap && window.shiftMap.size > 0) {
+        // Build a code -> shift lookup from existing shiftMap
+        window.shiftMap.forEach(shift => {
+          if (shift.code) shiftsByCode.set(shift.code, shift);
+        });
+      } else {
+        // Fetch shifts if not available
+        const { data: shifts, error: shiftsErr } = await window.supabaseClient.rpc('rpc_get_shifts', {
+          p_token: window.currentToken
+        });
+        if (!shiftsErr && shifts) {
+          shifts.forEach(shift => {
+            if (shift.code) shiftsByCode.set(shift.code, shift);
+          });
+        }
+      }
+
       // Call RPC to get history by user_id + date
       console.log('[HISTORY] Calling admin_get_assignment_history_by_date RPC');
       const { data, error } = await window.supabaseClient.rpc(
@@ -130,7 +149,7 @@ const AssignmentHistoryModule = (() => {
       if (!data || data.length === 0) {
         content.innerHTML = '<p style="color: #666; font-size: 13px;">No history for this assignment.</p>';
       } else {
-        content.innerHTML = renderHistoryTable(data);
+        content.innerHTML = renderHistoryTable(data, shiftsByCode);
       }
 
       if (historyModal) {
@@ -152,7 +171,20 @@ const AssignmentHistoryModule = (() => {
     }
   };
 
-  const renderHistoryTable = (records) => {
+  const renderHistoryTable = (records, shiftsByCode) => {
+    const formatShiftCode = (code) => {
+      if (!code || code === '—') return '—';
+      const shift = shiftsByCode ? shiftsByCode.get(code) : null;
+      if (!shift) return code;
+      
+      const fillColor = shift.fill_color || '#f7f7f7';
+      const textColor = shift.text_color || '#333';
+      const fontWeight = shift.text_bold ? '700' : '600';
+      const fontStyle = shift.text_italic ? 'italic' : 'normal';
+      
+      return `<span style="display: inline-block; padding: 4px 8px; border-radius: 6px; background: ${fillColor}; color: ${textColor}; font-weight: ${fontWeight}; font-style: ${fontStyle}; border: 1px solid rgba(0,0,0,0.1);">${code}</span>`;
+    };
+
     let html = `
       <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
         <thead style="background-color: #f0f0f0; font-weight: 600;">
@@ -168,40 +200,50 @@ const AssignmentHistoryModule = (() => {
         <tbody>
     `;
 
-    records.forEach(record => {
+    records.forEach((record, index) => {
       const changedAt = new Date(record.changed_at).toLocaleDateString('en-GB', { 
         day: 'numeric', 
         month: 'short', 
         hour: '2-digit', 
         minute: '2-digit' 
       });
-      const oldShift = record.old_shift_code || '—';
-      const newShift = record.new_shift_code || '—';
+      const oldShift = formatShiftCode(record.old_shift_code || '—');
+      const newShift = formatShiftCode(record.new_shift_code || '—');
       const reason = record.change_reason || '—';
       const changedBy = record.changed_by_name || 'System';
       
-      // Format override info if present
+      // Show override if it applies to the period when this assignment was active
+      // An assignment is active from when it was created until the next change
       let overrideInfo = '—';
       if (record.override_start_time || record.override_end_time || record.override_hours) {
-        const parts = [];
-        if (record.override_start_time) {
-          parts.push(`${record.override_start_time.substring(0, 5)}`);
+        const overrideTime = record.override_created_at ? new Date(record.override_created_at).getTime() : null;
+        const thisChangeTime = new Date(record.changed_at).getTime();
+        
+        // Get the next change time (previous index since records are DESC ordered)
+        const nextChangeTime = index > 0 ? new Date(records[index - 1].changed_at).getTime() : null;
+        
+        // Show override if it was created during this assignment's active period
+        if (overrideTime && overrideTime >= thisChangeTime && (!nextChangeTime || overrideTime < nextChangeTime)) {
+          const parts = [];
+          if (record.override_start_time) {
+            parts.push(`${record.override_start_time.substring(0, 5)}`);
+          }
+          if (record.override_end_time) {
+            parts.push(`${record.override_end_time.substring(0, 5)}`);
+          }
+          if (record.override_hours) {
+            parts.push(`${record.override_hours}h`);
+          }
+          if (record.override_comment) {
+            parts.push(`"${record.override_comment}"`);
+          }
+          overrideInfo = parts.join(' ');
         }
-        if (record.override_end_time) {
-          parts.push(`${record.override_end_time.substring(0, 5)}`);
-        }
-        if (record.override_hours) {
-          parts.push(`${record.override_hours}h`);
-        }
-        if (record.override_comment) {
-          parts.push(`"${record.override_comment}"`);
-        }
-        overrideInfo = parts.join(' ');
       }
 
       html += `
         <tr>
-          <td style="border: 1px solid #ddd; padding: 6px 8px; color: #666;">${record.date}</td>
+          <td style="border: 1px solid #ddd; padding: 6px 8px; color: #666; font-size: 11px;">${changedAt}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-weight: 600; color: #333;">${oldShift}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-weight: 600; color: #2563eb;">${newShift}</td>
           <td style="border: 1px solid #ddd; padding: 6px 8px; font-size: 11px; color: #666;">${reason}</td>

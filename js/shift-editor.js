@@ -287,6 +287,125 @@ function initDraftEditing({
   };
   document.addEventListener("keydown", gridKeyHandler);
 
+  // Helper to show leave days dialog for L and X shifts
+  function showLeaveDaysDialog(userId, date, shift) {
+    const user = getAllUsers().find(u => u.id === userId);
+    const dateObj = new Date(date);
+    const dateStr = dateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    
+    const dialogHTML = `
+      <div style="padding: 20px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto;">
+        <h3 style="margin: 0 0 15px 0; color: #1f2937;">${shift.code} - ${shift.label || 'Leave'}</h3>
+        <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 0.95em;">
+          <strong>${user?.name || 'User'}</strong> on <strong>${dateStr}</strong>
+        </p>
+        
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 8px; color: #374151; font-weight: 500; font-size: 0.95em;">
+            How many ${shift.code === 'L' ? 'leave' : 'extra'} days taken?
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input type="number" id="leaveDaysInput" min="0.5" max="7" step="0.5" value="1" 
+              style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1em;" />
+            <span style="padding: 8px 12px; background: #f3f4f6; border-radius: 6px; color: #6b7280; min-width: 80px; text-align: center;" id="hoursDisplay">8.0 hours</span>
+          </div>
+          <p style="margin: 8px 0 0 0; font-size: 0.85em; color: #9ca3af;">
+            0.5 = 4h, 1 = 8h, 1.5 = 12h
+          </p>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
+            <input type="radio" name="distributeOption" value="single" checked style="margin: 0;" />
+            <span style="font-size: 0.95em; color: #374151;">Just this day</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
+            <input type="radio" name="distributeOption" value="week" style="margin: 0;" />
+            <span style="font-size: 0.95em; color: #374151;">Spread across week</span>
+          </label>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+          <button id="leaveDaysConfirm" style="flex: 1; padding: 10px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer;">
+            Assign
+          </button>
+          <button id="leaveDaysCancel" style="flex: 1; padding: 10px; background: #e5e7eb; color: #374151; border: none; border-radius: 6px; font-weight: 500; cursor: pointer;">
+            Cancel
+          </button>
+        </div>
+      </div>
+    `;
+    
+    // Create overlay
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;";
+    overlay.innerHTML = dialogHTML;
+    
+    const input = overlay.querySelector("#leaveDaysInput");
+    const hoursDisplay = overlay.querySelector("#hoursDisplay");
+    
+    // Update hours display when leave days change
+    const updateHours = () => {
+      const days = parseFloat(input.value) || 1;
+      const hours = days * 8;
+      hoursDisplay.textContent = `${hours.toFixed(1)} hours`;
+    };
+    
+    input.addEventListener("input", updateHours);
+    updateHours();
+    
+    // Confirm button
+    overlay.querySelector("#leaveDaysConfirm").addEventListener("click", async () => {
+      const days = parseFloat(input.value) || 1;
+      const hours = days * 8;
+      const distributeOption = overlay.querySelector("input[name='distributeOption']:checked")?.value || "single";
+      
+      console.log(`[LEAVE DAYS] ${shift.code}: ${days} days (${hours}h), option: ${distributeOption}`);
+      
+      // Remove overlay
+      overlay.remove();
+      
+      // For draft mode: save with leave_days metadata
+      if (editMode === "draft") {
+        const leaveMetadata = {
+          leave_days: days,
+          leave_hours: hours,
+          distributeOption: distributeOption
+        };
+        console.log("[LEAVE DAYS SAVE] Calling onSave with leaveMetadata:", leaveMetadata);
+        if (onSave) onSave(userId, date, shift.id, leaveMetadata);
+        closeShiftPicker();
+      } else if (editMode === "published") {
+        // For published mode: just select and show in override section
+        selectedShiftId = shift.id;
+        const list = document.getElementById("shiftPickerList");
+        list.querySelectorAll(".shift-card").forEach(c => c.classList.remove("selected"));
+        const btn = list.querySelector(`[data-shift-id="${shift.id}"]`);
+        if (btn) btn.classList.add("selected");
+        
+        // Store in override for hours calculation
+        const overrideHours = document.getElementById("overrideHours");
+        if (overrideHours) {
+          overrideHours.value = hours.toString();
+        }
+      }
+    });
+    
+    // Cancel button
+    overlay.querySelector("#leaveDaysCancel").addEventListener("click", () => {
+      overlay.remove();
+      openShiftPicker(userId, date, pickerContext?.currentAssignment, editMode === "published");
+    });
+    
+    // Close picker and show dialog
+    closeShiftPicker();
+    document.body.appendChild(overlay);
+    
+    // Focus on input
+    input.focus();
+    input.select();
+  }
+
   // Helper to open picker
   function openShiftPicker(userId, date, currentAssignment, showOverride = false) {
     pickerContext = { userId, date, currentAssignment };
@@ -487,6 +606,12 @@ function initDraftEditing({
           btn.classList.add("selected");
         }
         btn.addEventListener("click", () => {
+          // For X (Extra Days): ask for leave days first
+          if (shift.code === "X") {
+            showLeaveDaysDialog(userId, date, shift);
+            return;
+          }
+          
           // In draft mode: save immediately (old behavior)
           if (editMode === "draft") {
             if (onSave) onSave(userId, date, shift.id, null);

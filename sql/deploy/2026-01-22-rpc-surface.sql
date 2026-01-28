@@ -104,7 +104,7 @@ DECLARE
   v_is_admin boolean;
 BEGIN
   v_uid := public.require_session_permissions(p_token, NULL);
-  SELECT is_admin INTO v_is_admin FROM public.users WHERE id = v_uid;
+  SELECT u.is_admin INTO v_is_admin FROM public.users u WHERE u.id = v_uid;
   IF NOT COALESCE(v_is_admin, false) THEN
     PERFORM public.require_session_permissions(p_token, ARRAY['system.admin_panel']);
   END IF;

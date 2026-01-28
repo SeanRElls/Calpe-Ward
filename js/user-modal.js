@@ -218,12 +218,12 @@
         throw new Error("Supabase client not available");
       }
 
-      if (!window.currentUser?.id) {
-        throw new Error("No current user");
+      if (!window.currentUser?.id || !window.currentToken) {
+        throw new Error("No current user or session");
       }
 
       const { data, error } = await supabase.rpc("change_user_pin", {
-        p_user_id: window.currentUser.id,
+        p_token: window.currentToken,
         p_old_pin: oldPin,
         p_new_pin: newPin
       });

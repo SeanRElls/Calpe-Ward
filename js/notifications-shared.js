@@ -18,6 +18,11 @@ function getNotificationTitle(n){
     }
   }
   
+  // Leave request notification
+  if (n.type === "leave_request") {
+    return `🏖️ Leave Request from ${payload?.staff_name || "Staff Member"}`;
+  }
+  
   // Special handling for swap_request type
   if (n.type === "swap_request") {
     // Check if this is a staff swap request or admin approval notification
@@ -57,6 +62,13 @@ function getNotificationBody(n){
       console.error('Failed to parse notification payload:', e);
       payload = {};
     }
+  }
+  
+  // Leave request notification
+  if (n.type === "leave_request") {
+    const weekStart = payload.week_start ? new Date(payload.week_start).toLocaleDateString("en-GB") : "Unknown";
+    const weekEnd = payload.week_end ? new Date(payload.week_end).toLocaleDateString("en-GB") : "Unknown";
+    return `${payload?.staff_name || "Staff member"} has requested annual leave for the week of ${weekStart} - ${weekEnd}. Review and approve in Leave Requests.`;
   }
   
   // Special handling for swap_request type
@@ -127,8 +139,15 @@ function renderNotificationCard(item) {
 
   let actionHtml = '';
   if (item.status === "pending" && item.requiresAction) {
+    // Leave request notification (admin only) - just acknowledge, they add manually
+    if (item.data?.type === "leave_request") {
+      actionHtml = `<div class="notification-actions">
+        <button type="button" class="primary" data-notif-ack="${item.id}">Got it</button>
+        <button type="button" data-notif-ignore="${item.id}">Ignore</button>
+      </div>`;
+    }
     // Check if this is a swap_pending notification (for admins)
-    if (item.data?.type === "swap_pending") {
+    else if (item.data?.type === "swap_pending") {
       actionHtml = `<div class="notification-actions">
         <button type="button" class="primary" data-admin-approve-swap="${item.id}">Approve</button>
         <button type="button" data-admin-decline-swap="${item.id}">Decline</button>

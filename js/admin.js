@@ -1,5 +1,14 @@
     console.log("[ADMIN.JS] Script loaded");
 
+    // Utility function for debouncing
+    function debounce(func, delay) {
+      let timeoutId;
+      return function(...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+      };
+    }
+
     const navLinks = Array.from(document.querySelectorAll(".nav a[data-panel]"));
     const panels = Array.from(document.querySelectorAll(".panel"));
     const adminUserAuthNotice = document.getElementById("adminUserAuthNotice");
@@ -21,7 +30,6 @@
     const adminEditUserName = document.getElementById("adminEditUserName");
     const adminEditUserRole = document.getElementById("adminEditUserRole");
     const adminEditUserPin = document.getElementById("adminEditUserPin");
-    const adminSaveUserBtn = document.getElementById("adminSaveUserBtn");
     const adminCancelUserEditBtn = document.getElementById("adminCancelUserEditBtn");
     const adminUserEditHelp = document.getElementById("adminUserEditHelp");
     const adminPrefShiftClustering = document.getElementById("adminPrefShiftClustering");
@@ -37,7 +45,6 @@
     const adminCannotBeSecondDay = document.getElementById("adminCannotBeSecondDay");
     const adminCannotBeSecondNight = document.getElementById("adminCannotBeSecondNight");
     const adminCanWorkNights = document.getElementById("adminCanWorkNights");
-    const adminSavePrefsBtn = document.getElementById("adminSavePrefsBtn");
     const adminPrefsHelp = document.getElementById("adminPrefsHelp");
     const adminEditUserSearch = document.getElementById("adminEditUserSearch");
     const adminEditUserSelect = document.getElementById("adminEditUserSelect");
@@ -485,6 +492,7 @@
       }
 
       adminUsersCache = rows || [];
+      window.adminUsersCache = adminUsersCache; // Expose to window for other modules
       renderAdminUsers();
     }
 
@@ -608,7 +616,6 @@
       if (adminEditUserName) adminEditUserName.disabled = false;
       if (adminEditUserRole) adminEditUserRole.disabled = false;
       if (adminEditUserPin) adminEditUserPin.disabled = false;
-      if (adminSaveUserBtn) adminSaveUserBtn.disabled = false;
       if (adminPrefShiftClustering) adminPrefShiftClustering.value = 3;
       if (adminPrefNightAppetite) adminPrefNightAppetite.value = 3;
       if (adminPrefWeekendAppetite) adminPrefWeekendAppetite.value = 3;
@@ -714,11 +721,28 @@
       clearUserAddForm();
     }
 
-    function startEditUser(userId){
+    async function startEditUser(userId){
       if (!requirePermission("users.edit", "Permission required to edit users.")) return;
       const u = adminUsersCache.find(x => x.id === userId);
       if (!u) return;
       adminEditingUserId = u.id;
+      
+      // Set user name header and role badge
+      const titleEl = document.getElementById("editUserPageTitle");
+      const roleBadgeEl = document.getElementById("editUserRoleBadge");
+      if (titleEl) titleEl.textContent = u.name || "User";
+      
+      // Set role badge color and text
+      const roleNames = { 1: "Charge Nurse", 2: "Staff Nurse", 3: "Nursing Assistant" };
+      const roleBgColors = { 1: "#2563eb", 2: "#7c3aed", 3: "#0891b2" };
+      const roleText = roleNames[u.role_id] || "Unknown Role";
+      const roleBg = roleBgColors[u.role_id] || "#6b7280";
+      
+      if (roleBadgeEl) {
+        roleBadgeEl.textContent = roleText;
+        roleBadgeEl.style.background = roleBg;
+      }
+      
       adminEditUserName.value = u.name || "";
       adminEditUserRole.value = String(u.role_id || 2);
       adminEditUserPin.value = "";
@@ -730,7 +754,6 @@
       adminEditUserName.disabled = !canEditThisUser;
       adminEditUserRole.disabled = !canEditThisUser;
       adminEditUserPin.disabled = !canSetPin;
-      adminSaveUserBtn.disabled = !canEditThisUser;
       if (!canEditThisUser) {
         adminUserEditHelp.textContent = "Admin accounts are read-only unless you are superadmin.";
       } else if (!canSetPin) {
@@ -738,9 +761,429 @@
       }
       if (adminEditUserSelect) adminEditUserSelect.value = String(userId);
       populateAdminPreferences(u);
-      loadPatternDefinitions();
-      loadUserPattern();
+      await loadPatternDefinitions();
+      await loadUserPattern();
+      loadUserLeaveSummary(userId);
+      loadUserLeaveBalance(userId);
       showUsersPage("edit");
+    }
+
+    async function loadUserLeaveSummary(userId) {
+      const totalDaysEl = document.getElementById("editUserTotalLeaveDays");
+      const entriesListEl = document.getElementById("editUserLeaveEntriesList");
+      const manageLeaveBtn = document.getElementById("editUserManageLeaveBtn");
+
+      if (!totalDaysEl || !entriesListEl) {
+        console.warn("[ADMIN] Leave summary elements not found");
+        return;
+      }
+
+      // Set loading state
+      totalDaysEl.textContent = "...";
+      entriesListEl.innerHTML = '<p style="text-align:center; color:#9ca3af; padding:20px 0; font-size:14px;">Loading...</p>';
+
+      try {
+        const { data, error } = await supabaseClient.rpc("admin_get_user_leave_entries", {
+          p_token: currentToken,
+          p_user_id: userId
+        });
+
+        if (error) throw error;
+
+        const entries = data || [];
+        let totalDays = 0;
+
+        entries.forEach(entry => {
+          totalDays += entry.leave_days || 0;
+        });
+
+        totalDaysEl.textContent = totalDays.toFixed(1);
+
+        if (entries.length === 0) {
+          entriesListEl.innerHTML = '<p style="text-align:center; color:#9ca3af; padding:20px 0; font-size:14px;">No leave entries for this user.</p>';
+        } else {
+          entriesListEl.innerHTML = '';
+          entries.forEach(entry => {
+            const startDate = new Date(entry.start_date);
+            const endDate = new Date(entry.end_date);
+            const dateRange = startDate.toLocaleDateString() === endDate.toLocaleDateString()
+              ? startDate.toLocaleDateString("en-GB")
+              : `${startDate.toLocaleDateString("en-GB")} - ${endDate.toLocaleDateString("en-GB")}`;
+
+            const card = document.createElement("div");
+            card.style.cssText = "background:white; border:1px solid #e5e7eb; border-radius:6px; padding:10px; margin-bottom:6px; font-size:14px;";
+            card.innerHTML = `
+              <div style="font-weight:600; color:#1f2937; margin-bottom:2px;">${dateRange}</div>
+              <div style="font-size:13px; color:#6b7280;">
+                ${entry.leave_days} days
+              </div>
+            `;
+            entriesListEl.appendChild(card);
+          });
+        }
+
+        // Set up "Manage Leave" button to navigate to Leave Management panel
+        if (manageLeaveBtn) {
+          manageLeaveBtn.onclick = () => {
+            // Switch to leave-management panel
+            const leavePanel = document.querySelector('[data-panel="leave-management"]');
+            if (leavePanel) {
+              leavePanel.click();
+              // Pre-select this user
+              setTimeout(() => {
+                const leaveUserSelect = document.getElementById("leaveUserSelect");
+                if (leaveUserSelect) {
+                  leaveUserSelect.value = userId;
+                  leaveUserSelect.dispatchEvent(new Event("change"));
+                }
+              }, 100);
+            }
+          };
+        }
+
+      } catch (err) {
+        console.error("[ADMIN] Error loading leave summary:", err);
+        totalDaysEl.textContent = "Error";
+        entriesListEl.innerHTML = '<p style="text-align:center; color:#ef4444; padding:20px 0; font-size:14px;">Failed to load leave data.</p>';
+      }
+    }
+
+    async function loadUserLeaveBalance(userId) {
+      const balanceSection = document.getElementById("editUserLeaveBalanceSection");
+      const cardsContainer = document.getElementById("editUserLeaveBalanceCards");
+      const balanceYearSpan = document.getElementById("balanceYear");
+      
+      if (!balanceSection || !cardsContainer) {
+        console.warn("[ADMIN] Leave balance elements not found");
+        return;
+      }
+
+      try {
+        // Get user details to check role
+        const user = adminUsersCache.find(x => x.id === userId);
+        if (!user) {
+          console.warn("[ADMIN] User not found in cache");
+          return;
+        }
+
+        const isNA = user.role_id === 3; // Nursing Assistant
+
+        // Hide the balance section for Nursing Assistants
+        if (isNA) {
+          balanceSection.style.display = "none";
+          return;
+        }
+
+        // Show the section for RN/SN
+        balanceSection.style.display = "block";
+
+        // Set loading state
+        cardsContainer.innerHTML = '<p style="text-align:center; color:#9ca3af; padding:20px 0; font-size:13px;">Loading balance...</p>';
+
+        // Fetch leave balance
+        const { data, error } = await supabaseClient.rpc("admin_get_user_leave_balance", {
+          p_token: currentToken,
+          p_user_id: userId
+        });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          cardsContainer.innerHTML = '<p style="text-align:center; color:#ef4444; padding:10px 0; font-size:13px;">Could not load balance.</p>';
+          return;
+        }
+
+        const balance = data[0];
+        const hasAdjustments = balance.adjustments_days && balance.adjustments_days !== 0;
+
+        // Update year display
+        if (balanceYearSpan) balanceYearSpan.textContent = balance.leave_year;
+
+        // Render balance cards
+        cardsContainer.innerHTML = `
+          <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">
+            <div style="padding:10px; background:#f0fdf4; border:1px solid #86efac; border-radius:7px; text-align:center;">
+              <div style="font-size:10px; color:#166534; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px;">Base</div>
+              <div style="font-size:20px; font-weight:700; color:#16a34a; line-height:1;">${balance.annual_entitlement_days}</div>
+            </div>
+            
+            <div style="padding:10px; background:${hasAdjustments ? '#fef3c7' : '#f9fafb'}; border:1px solid ${hasAdjustments ? '#fcd34d' : '#e5e7eb'}; border-radius:7px; text-align:center;">
+              <div style="font-size:10px; color:${hasAdjustments ? '#92400e' : '#6b7280'}; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px;">Adjust</div>
+              <div style="font-size:20px; font-weight:700; color:${hasAdjustments ? '#f59e0b' : '#6b7280'}; line-height:1;">
+                ${balance.adjustments_days > 0 ? '+' : ''}${balance.adjustments_days}
+              </div>
+            </div>
+            
+            <div style="padding:10px; background:#fef2f2; border:1px solid #fca5a5; border-radius:7px; text-align:center;">
+              <div style="font-size:10px; color:#991b1b; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px;">Taken</div>
+              <div style="font-size:20px; font-weight:700; color:#dc2626; line-height:1;">${balance.used_days}</div>
+            </div>
+            
+            <div style="padding:10px; background:#dbeafe; border:1px solid #60a5fa; border-radius:7px; text-align:center;">
+              <div style="font-size:10px; color:#1e40af; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px;">Remaining</div>
+              <div style="font-size:20px; font-weight:700; color:#2563eb; line-height:1;">${balance.remaining_days}</div>
+            </div>
+          </div>
+        `;
+
+        // Populate input fields
+        const entitlementInput = document.getElementById("editUserLeaveEntitlementDays");
+        const yearInput = document.getElementById("editUserLeaveYear");
+        if (entitlementInput) entitlementInput.value = balance.annual_entitlement_days;
+        if (yearInput) yearInput.value = balance.leave_year;
+
+        // Load adjustments history
+        await loadLeaveAdjustments(userId, balance.leave_year);
+
+        // Set up save button
+        const saveBtn = document.getElementById("editUserSaveLeaveEntitlementBtn");
+        if (saveBtn) {
+          saveBtn.onclick = async () => {
+            const entitlementDays = parseFloat(entitlementInput.value);
+            const leaveYear = parseInt(yearInput.value);
+
+            if (isNaN(entitlementDays) || entitlementDays < 0) {
+              alert("Please enter a valid entitlement value");
+              return;
+            }
+
+            if (isNaN(leaveYear) || leaveYear < 2020) {
+              alert("Please enter a valid year");
+              return;
+            }
+
+            try {
+              const { error } = await supabaseClient.rpc("admin_set_user_leave_entitlement", {
+                p_token: currentToken,
+                p_user_id: userId,
+                p_entitlement_days: entitlementDays,
+                p_leave_year: leaveYear
+              });
+
+              if (error) throw error;
+
+              alert("Leave entitlement updated successfully");
+              await loadUserLeaveBalance(userId);
+            } catch (err) {
+              console.error("[ADMIN] Error saving leave entitlement:", err);
+              alert("Failed to save: " + err.message);
+            }
+          };
+        }
+
+        // Set up add adjustment button
+        const addBtn = document.getElementById("addLeaveAdjustmentBtn");
+        if (addBtn) {
+          addBtn.onclick = () => {
+            showAddAdjustmentDialog(userId, balance.leave_year);
+          };
+        }
+
+      } catch (err) {
+        console.error("[ADMIN] Error loading leave balance:", err);
+        cardsContainer.innerHTML = '<p style="text-align:center; color:#ef4444; padding:10px 0; font-size:13px;">Failed to load balance.</p>';
+      }
+    }
+
+    async function loadLeaveAdjustments(userId, year) {
+      const listEl = document.getElementById("leaveAdjustmentsList");
+      if (!listEl) return;
+
+      try {
+        const { data, error } = await supabaseClient.rpc("admin_get_leave_adjustments", {
+          p_token: currentToken,
+          p_user_id: userId,
+          p_year: year
+        });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          listEl.innerHTML = '<p style="text-align:center; color:#9ca3af; font-size:13px; padding:10px 0;">No adjustments for this year</p>';
+          return;
+        }
+
+        let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+        
+        data.forEach(adj => {
+          const isPositive = adj.adjustment_days > 0;
+          const dateStr = new Date(adj.adjustment_date).toLocaleDateString('en-GB');
+          const typeLabel = adj.adjustment_type.replace('_', ' ').toUpperCase();
+          
+          html += `
+            <div style="padding:10px; background:${isPositive ? '#f0fdf4' : '#fef2f2'}; border:1px solid ${isPositive ? '#bbf7d0' : '#fecaca'}; border-radius:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:4px;">
+                <div style="flex:1;">
+                  <span style="display:inline-block; padding:2px 8px; background:${isPositive ? '#dcfce7' : '#fee2e2'}; color:${isPositive ? '#166534' : '#991b1b'}; border-radius:4px; font-size:11px; font-weight:600; margin-right:8px;">
+                    ${typeLabel}
+                  </span>
+                  <span style="font-size:13px; font-weight:700; color:${isPositive ? '#16a34a' : '#dc2626'};">
+                    ${isPositive ? '+' : ''}${adj.adjustment_days} days
+                  </span>
+                  <span style="font-size:12px; color:#6b7280; margin-left:6px;">
+                    (${isPositive ? '+' : ''}${(adj.adjustment_days * 8).toFixed(1)}h)
+                  </span>
+                </div>
+                <div style="font-size:11px; color:#6b7280;">${dateStr}</div>
+              </div>
+              <div style="font-size:12px; color:#374151; margin-bottom:2px;">
+                <strong>Reason:</strong> ${adj.reason}
+              </div>
+              ${adj.notes ? `<div style="font-size:11px; color:#6b7280;">Note: ${adj.notes}</div>` : ''}
+              <div style="font-size:11px; color:#9ca3af; margin-top:4px;">
+                Added by ${adj.created_by_name || 'Unknown'} on ${new Date(adj.created_at).toLocaleString('en-GB')}
+              </div>
+            </div>
+          `;
+        });
+
+        html += '</div>';
+        listEl.innerHTML = html;
+
+      } catch (err) {
+        console.error("[ADMIN] Error loading adjustments:", err);
+        listEl.innerHTML = '<p style="text-align:center; color:#ef4444; font-size:13px; padding:10px 0;">Failed to load adjustments</p>';
+      }
+    }
+
+    function showAddAdjustmentDialog(userId, currentYear) {
+      const user = adminUsersCache.find(x => x.id === userId);
+      if (!user) return;
+
+      const dialogHtml = `
+        <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; display:flex; align-items:center; justify-content:center;" id="addAdjustmentDialog">
+          <div style="background:white; border-radius:8px; width:90%; max-width:500px; max-height:90vh; overflow-y:auto; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
+            <div style="padding:20px; border-bottom:1px solid #e5e7eb;">
+              <h3 style="margin:0; font-size:18px; font-weight:600; color:#1f2937;">Add Leave Adjustment</h3>
+              <p style="margin:6px 0 0 0; font-size:13px; color:#6b7280;">For: ${user.name} (Year: ${currentYear})</p>
+            </div>
+            
+            <div style="padding:20px;">
+              <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+                  Adjustment Type *
+                </label>
+                <select id="adjustmentType" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:14px;">
+                  <option value="carry_forward">Carry Forward (from previous year)</option>
+                  <option value="anniversary">Anniversary Increase</option>
+                  <option value="pro_rata">Pro Rata (mid-year change)</option>
+                  <option value="manual">Manual Adjustment</option>
+                  <option value="correction">Correction</option>
+                </select>
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+                  Adjustment Days * (use negative for deductions)
+                </label>
+                <input type="number" id="adjustmentDays" step="0.5" placeholder="e.g., 5 or -2.5" 
+                  style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:14px;" />
+                <div style="font-size:11px; color:#6b7280; margin-top:4px;">
+                  Hours equivalent: <span id="adjustmentHours">0</span>h
+                </div>
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+                  Reason *
+                </label>
+                <input type="text" id="adjustmentReason" placeholder="e.g., 5 days carried forward from 2025" 
+                  style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:14px;" />
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+                  Additional Notes (optional)
+                </label>
+                <textarea id="adjustmentNotes" rows="3" placeholder="Any additional details..."
+                  style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; resize:vertical;"></textarea>
+              </div>
+
+              <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+                  Leave Year
+                </label>
+                <input type="number" id="adjustmentYear" value="${currentYear}" min="2020" max="2100" 
+                  style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:14px;" />
+              </div>
+            </div>
+
+            <div style="padding:16px 20px; border-top:1px solid #e5e7eb; display:flex; gap:12px; justify-content:flex-end;">
+              <button id="cancelAdjustmentBtn" class="btn" type="button" style="background:#f3f4f6; color:#374151;">
+                Cancel
+              </button>
+              <button id="saveAdjustmentBtn" class="btn" type="button">
+                Save Adjustment
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', dialogHtml);
+
+      // Auto-calculate hours
+      const daysInput = document.getElementById("adjustmentDays");
+      const hoursSpan = document.getElementById("adjustmentHours");
+      daysInput.addEventListener('input', () => {
+        const days = parseFloat(daysInput.value) || 0;
+        hoursSpan.textContent = (days * 8).toFixed(1);
+      });
+
+      // Cancel button
+      document.getElementById("cancelAdjustmentBtn").onclick = () => {
+        document.getElementById("addAdjustmentDialog").remove();
+      };
+
+      // Save button
+      document.getElementById("saveAdjustmentBtn").onclick = async () => {
+        const type = document.getElementById("adjustmentType").value;
+        const days = parseFloat(document.getElementById("adjustmentDays").value);
+        const reason = document.getElementById("adjustmentReason").value.trim();
+        const notes = document.getElementById("adjustmentNotes").value.trim();
+        const year = parseInt(document.getElementById("adjustmentYear").value);
+
+        if (isNaN(days) || days === 0) {
+          alert("Please enter a valid adjustment (cannot be 0)");
+          return;
+        }
+
+        if (!reason) {
+          alert("Please enter a reason for this adjustment");
+          return;
+        }
+
+        try {
+          const { data, error } = await supabaseClient.rpc("admin_add_leave_adjustment", {
+            p_token: currentToken,
+            p_user_id: userId,
+            p_adjustment_days: days,
+            p_adjustment_type: type,
+            p_reason: reason,
+            p_leave_year: year,
+            p_notes: notes || null
+          });
+
+          if (error) throw error;
+
+          alert("Adjustment added successfully");
+          document.getElementById("addAdjustmentDialog").remove();
+
+          // Reload balance display
+          await loadUserLeaveBalance(userId);
+
+        } catch (err) {
+          console.error("[ADMIN] Error adding adjustment:", err);
+          alert("Failed to add adjustment: " + err.message);
+        }
+      };
+
+      // Close on background click
+      document.getElementById("addAdjustmentDialog").onclick = (e) => {
+        if (e.target.id === "addAdjustmentDialog") {
+          document.getElementById("addAdjustmentDialog").remove();
+        }
+      };
     }
 
     async function toggleUserActive(userId){
@@ -781,17 +1224,12 @@
       if (!requirePermission("users.edit", "Permission required to edit users.")) return;
       const name = adminEditUserName.value.trim();
       const role_id = Number(adminEditUserRole.value);
-      const pin = (adminEditUserPin.value || "").trim();
 
       if (!name) return alert("Name required.");
       if (![1,2,3].includes(role_id)) return alert("Role invalid.");
       const u = adminUsersCache.find(x => x.id === adminEditingUserId);
       if (u?.is_admin && !currentUser?.is_admin) {
         alert("Admin accounts are read-only unless you are superadmin.");
-        return;
-      }
-      if (pin && !hasPermission("users.set_pin")) {
-        alert("Permission required to change PIN.");
         return;
       }
 
@@ -803,13 +1241,28 @@
           p_role_id: role_id
         });
         if (error) throw error;
-        if (pin) await adminSetUserPin(userId, pin);
         await loadAdminUsers();
-        clearUserEditor();
-        alert("Saved.");
+        await startEditUser(adminEditingUserId);
       } catch (e){
         console.error(e);
         alert("Save failed. Check console.");
+      }
+    }
+
+    async function saveUserPin(){
+      if (!requirePermission("users.set_pin", "Permission required to set PIN.")) return;
+      if (!adminEditingUserId) return alert("Select a user first.");
+      const pin = (adminEditUserPin.value || "").trim();
+      if (pin && pin.length !== 4) return alert("PIN must be 4 digits.");
+      if (!pin) return alert("Enter a 4-digit PIN.");
+      
+      try {
+        await adminSetUserPin(adminEditingUserId, pin);
+        adminEditUserPin.value = "";
+        alert("PIN updated successfully.");
+      } catch (e){
+        console.error(e);
+        alert("PIN update failed. Check console.");
       }
     }
 
@@ -858,7 +1311,6 @@
           if (adminEditUserName) adminEditUserName.disabled = true;
           if (adminEditUserRole) adminEditUserRole.disabled = true;
           if (adminEditUserPin) adminEditUserPin.disabled = true;
-          if (adminSaveUserBtn) adminSaveUserBtn.disabled = true;
         }
       }
     }
@@ -947,6 +1399,11 @@
           clearNonStaffAddForm();
           clearNonStaffEditForm();
           showNonStaffPage('view');
+        });
+      }
+      if (id === 'bank-holidays'){
+        ensureCurrentUser().then(() => {
+          loadBankHolidays();
         });
       }
     }
@@ -1355,12 +1812,12 @@
         if (createPermissionGroupBtn) createPermissionGroupBtn.disabled = !canEdit;
         if (permissionGroupHelp) {
           permissionGroupHelp.textContent = canEdit
-            ? "Admin group can be assigned by admins, but only superadmin can edit its permissions."
+            ? "Admin group assignments are managed here. Admin group permissions are read-only to maintain system integrity."
             : "Read-only. You don't have permission to edit groups.";
         }
       } catch (e) {
-        console.error(e);
-        permissionsMatrix.innerHTML = `<div class="page-subtitle">Failed to load permissions catalogue.</div>`;
+        console.error("[PERMISSIONS] Error loading catalogue:", e);
+        permissionsMatrix.innerHTML = `<div class="page-subtitle">Failed to load permissions catalogue: ${e.message || e}</div>`;
       }
     }
 
@@ -1568,9 +2025,9 @@
       }
       const canEditUsers = hasPermission("users.edit");
       adminUserPermissionGroups.innerHTML = permissionGroups.map(g => `
-        <label style="display:flex; align-items:center; gap:6px;">
+        <label class="perm-group-item">
           <input type="checkbox" data-perm-group="${escapeHtml(g.name)}" ${canEditUsers ? "" : "disabled"} />
-          ${escapeHtml(g.name)}
+          <span>${escapeHtml(g.name)}</span>
         </label>
       `).join("");
     }
@@ -1686,7 +2143,7 @@
       renderPermissionsMatrix();
       if (permissionGroupHelp) {
         permissionGroupHelp.textContent = isEditingAdminGroup() && !isSuperAdmin()
-          ? "Admin group is read-only unless you are superadmin."
+          ? "Admin group permissions are read-only to maintain system integrity. Only full system administrators can modify these."
           : "Changes are saved immediately.";
       }
     });
@@ -1826,7 +2283,7 @@
       } catch (e) {
         console.error("Failed to load shifts", e);
         const list = document.getElementById("shiftsList");
-        if (list) list.innerHTML = `<div style="padding:20px; text-align:center; color:var(--muted);">Failed to load shifts.</div>`;
+        if (list) list.innerHTML = `<div style="padding:20px; text-align:center; color:var(--muted);">Failed to load shifts: ${e.message || e}</div>`;
       }
     }
 
@@ -2080,13 +2537,42 @@
     adminShowInactiveUsers?.addEventListener("change", renderAdminUsers);
     adminAddUserBtn?.addEventListener("click", openAddUserSection);
     adminCancelUserEditBtn?.addEventListener("click", clearUserEditor);
-    adminSaveUserBtn?.addEventListener("click", saveUser);
-    adminSavePrefsBtn?.addEventListener("click", saveAdminPreferences);
+    
+    // Auto-save on Name change
+    adminEditUserName?.addEventListener("change", saveUser);
+    
+    // Auto-save on Role change
+    adminEditUserRole?.addEventListener("change", saveUser);
+    
+    // PIN save button (explicit save only)
+    document.getElementById("adminSaveUserPinBtn")?.addEventListener("click", saveUserPin);
+    
+    // Preferences auto-save
+    const savePrefsDebounce = debounce(() => saveAdminPreferences(), 500);
+    adminPrefShiftClustering?.addEventListener("input", () => {
+      setAdminPref(adminPrefShiftClustering, adminPrefShiftClusteringValue, adminPrefShiftClustering.value);
+      savePrefsDebounce();
+    });
+    adminPrefNightAppetite?.addEventListener("input", () => {
+      setAdminPref(adminPrefNightAppetite, adminPrefNightAppetiteValue, adminPrefNightAppetite.value);
+      savePrefsDebounce();
+    });
+    adminPrefWeekendAppetite?.addEventListener("input", () => {
+      setAdminPref(adminPrefWeekendAppetite, adminPrefWeekendAppetiteValue, adminPrefWeekendAppetite.value);
+      savePrefsDebounce();
+    });
+    adminPrefLeaveAdjacency?.addEventListener("input", () => {
+      setAdminPref(adminPrefLeaveAdjacency, adminPrefLeaveAdjacencyValue, adminPrefLeaveAdjacency.value);
+      savePrefsDebounce();
+    });
 
-    adminPrefShiftClustering?.addEventListener("input", () => setAdminPref(adminPrefShiftClustering, adminPrefShiftClusteringValue, adminPrefShiftClustering.value));
-    adminPrefNightAppetite?.addEventListener("input", () => setAdminPref(adminPrefNightAppetite, adminPrefNightAppetiteValue, adminPrefNightAppetite.value));
-    adminPrefWeekendAppetite?.addEventListener("input", () => setAdminPref(adminPrefWeekendAppetite, adminPrefWeekendAppetiteValue, adminPrefWeekendAppetite.value));
-    adminPrefLeaveAdjacency?.addEventListener("input", () => setAdminPref(adminPrefLeaveAdjacency, adminPrefLeaveAdjacencyValue, adminPrefLeaveAdjacency.value));
+    // Capability checkbox auto-save
+    const saveCapabilitiesDebounce = debounce(() => saveAdminPreferences(), 500);
+    adminCanBeInChargeDay?.addEventListener("change", saveCapabilitiesDebounce);
+    adminCanBeInChargeNight?.addEventListener("change", saveCapabilitiesDebounce);
+    adminCannotBeSecondDay?.addEventListener("change", saveCapabilitiesDebounce);
+    adminCannotBeSecondNight?.addEventListener("change", saveCapabilitiesDebounce);
+    adminCanWorkNights?.addEventListener("change", saveCapabilitiesDebounce);
 
     // Pattern selector listeners
     document.getElementById("adminUserPattern")?.addEventListener("change", () => {
@@ -2107,6 +2593,16 @@
       }
       if (act === "toggle") toggleUserActive(id);
     });
+
+    // Prompt when Edit user tab is clicked without a user selected
+    document.addEventListener("click", (e) => {
+      const editUserBtn = e.target.closest("button[data-users-page='edit']");
+      if (editUserBtn && !adminEditingUserId) {
+        e.preventDefault();
+        e.stopPropagation();
+        alert("Please select a user from the View users list first.");
+      }
+    }, true);
 
     adminEditUserSearch?.addEventListener("input", () => {
       renderAdminUserSelectOptions(adminEditUserSearch.value);
@@ -2550,7 +3046,7 @@
 
       if (error){
         console.error(error);
-        alert("Failed to load notices");
+        alert("Failed to load notices: " + err.message);
         return;
       }
 
@@ -2983,6 +3479,7 @@
       try {
         const selectedYear = parseInt(bhYear.value) || new Date().getFullYear();
         const { data, error } = await supabaseClient.rpc('rpc_list_bank_holidays', {
+          p_token: currentToken,
           p_year: selectedYear
         });
         if (error) throw error;

@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Calpe Ward Admin Console</title>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="js/config.js"></script>
   <script src="js/session-validator.js"></script>
   <style>
@@ -210,6 +212,61 @@
       color: var(--ink);
       border-color: #e3e8f2;
       background: #f5f7fb;
+    }
+
+    /* Edit User: Pattern + Permission Groups row */
+    .edit-user-two-col{
+      display: grid;
+      grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+      gap: 14px;
+      margin-bottom: 14px;
+      align-items: stretch;
+    }
+
+    /* Make details act like equal-height cards */
+    .edit-user-card{
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      min-height: 210px;
+      padding: 0;
+    }
+
+    /* Key fix: body must fill remaining height */
+    .edit-user-card-body{
+      padding: 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #adminUserPermissionGroups{
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #adminUserPermissionGroups .perm-group-item{
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 12px;
+      color: #374151;
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    #adminUserPermissionGroups input[type="checkbox"]{
+      width: 14px;
+      height: 14px;
+      margin: 0;
     }
 
     .control{
@@ -648,23 +705,11 @@
         <span>Not signed in</span>
       </div>
       <button id="viewAsBtn" class="btn" type="button" style="margin: 10px 0; display:none;">👁 View As</button>
-      <div class="field" style="margin-bottom:14px;">
-        <h3>Quick login</h3>
-        <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-          <select id="adminLoginUser" class="control">
-            <option value="">Select user...</option>
-          </select>
-          <input id="adminLoginPin" class="control" placeholder="PIN (4 digits)" inputmode="numeric" maxlength="4" />
-          <button id="adminLoginBtn" class="btn primary" type="button">Sign in</button>
-          <div id="adminLoginMsg" class="page-subtitle"></div>
-        </div>
-      </div>
 
       <nav class="nav">
         <a class="is-active" data-panel="overview" href="#overview">Status</a>
-        <a href="preview.html">📊 Preview Generator</a>
-        <a data-panel="users" href="#users">Users</a>
-        <a data-panel="non-staff" href="#non-staff">Non-Staff</a>
+        <a data-panel="users" href="#users">User Management</a>
+        <a data-panel="leave-management" href="#leave-management">Annual Leave</a>
         <a data-panel="bank-holidays" href="#bank-holidays">Bank Holidays</a>
         <a data-panel="permissions" href="#permissions">Permissions</a>
         <a data-panel="patterns" href="#patterns">Patterns</a>
@@ -674,9 +719,8 @@
         <a data-panel="shift-catalogue" href="#shift-catalogue">Shift Catalogue</a>
         <a data-panel="staffing" href="#staffing">Staffing Defaults</a>
         <a data-panel="available-shifts" href="#available-shifts">Available Shifts</a>
-        <a data-panel="reports" href="#reports">Reports</a>
         <a data-panel="audit" href="#audit">Audit</a>
-        <a data-panel="system" href="#system">System Settings</a>
+        <a href="preview.html">📊 Preview Generator</a>
       </nav>
     </aside>
 
@@ -926,6 +970,63 @@
           </div>
         </section>
 
+        <section id="leave-management" class="section panel" style="display:none;">
+          <h2>Annual Leave</h2>
+          <p>Assign and manage leave days for staff members during rota periods.</p>
+
+          <!-- Tabs -->
+          <div style="display:flex; gap:8px; margin-top:16px; border-bottom:2px solid #e5e7eb;">
+            <button id="leaveTabIndividual" class="tab-button active" style="padding:12px 20px; border:none; background:none; cursor:pointer; font-weight:500; color:#3b82f6; border-bottom:2px solid #3b82f6; margin-bottom:-2px;">
+              Individual Leave
+            </button>
+            <button id="leaveTabAnnual" class="tab-button" style="padding:12px 20px; border:none; background:none; cursor:pointer; font-weight:500; color:#6b7280; margin-bottom:-2px;">
+              Annual View
+            </button>
+          </div>
+
+          <!-- Individual Leave Tab -->
+          <div id="leaveTabIndividualContent" style="display:block; margin-top:16px;">
+            <div class="field">
+              <label style="font-size:12px; color:var(--muted); font-weight:500;">Select User</label>
+              <select id="leaveUserSelect" class="control" style="max-width:300px; margin-top:4px;">
+                <option value="">-- Select a user --</option>
+              </select>
+            </div>
+
+            <div id="leaveUserDetails" style="display:none; margin-top:24px;">
+              <div class="card" style="padding:16px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
+                <h3 style="margin:0 0 12px 0; font-size:16px; color:#1f2937;">
+                  <span id="leaveUserName">User Name</span> - Leave Summary
+                </h3>
+                
+                <div style="display:grid; grid-template-columns: 1fr; gap:12px; margin-bottom:16px;">
+                  <div style="padding:12px; background:white; border-radius:6px; border:1px solid #d1d5db;">
+                    <div style="font-size:12px; color:#6b7280; margin-bottom:4px;">Total Leave Days Assigned</div>
+                    <div style="font-size:24px; font-weight:700; color:#3b82f6;" id="leaveTotalDays">0</div>
+                  </div>
+                </div>
+
+                <div style="margin-top:20px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <h4 style="margin:0; font-size:14px; color:#374151;">Assigned Leave Entries</h4>
+                    <button id="leaveAddBtn" class="btn primary" type="button" style="padding:8px 16px; font-size:14px;">+ Add Leave</button>
+                  </div>
+                  
+                  <div id="leaveEntriesList" style="max-height:400px; overflow-y:auto;">
+                    <p style="text-align:center; color:#9ca3af; padding:40px 0;">No leave entries assigned yet.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Annual View Tab -->
+          <div id="leaveTabAnnualContent" style="display:none; margin-top:16px;">
+            <div id="leaveAnnualView" style="overflow-x:auto; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:20px; background:white;">
+            </div>
+          </div>
+        </section>
+
         <section id="bank-holidays" class="section panel" style="display:none;">
           <h2>Bank Holidays</h2>
           <p>Manage bank holidays displayed on the rota (by year).</p>
@@ -1010,108 +1111,231 @@
           </div>
 
           <div id="usersPageEdit" class="users-page" style="display:none;">
-            <div class="accordion-sub">Update user details, PINs, patterns, and groups.</div>
-            <details class="accordion" open>
-              <summary class="accordion-title">Select user</summary>
-              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-                <input id="adminEditUserSearch" class="control" placeholder="Search user..." style="flex:1; min-width:180px;" />
-                <select id="adminEditUserSelect" class="control" style="min-width:200px;">
-                  <option value="">Select user...</option>
-                </select>
+            
+            <!-- User Header with Role Badge -->
+            <div style="margin-bottom:24px; padding-bottom:16px; border-bottom:2px solid #e5e7eb;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <h2 id="editUserPageTitle" style="margin:0; font-size:28px; font-weight:700; color:#1f2937;">User Name</h2>
+                <span id="editUserRoleBadge" style="display:inline-block; padding:6px 14px; background:#3b82f6; color:white; border-radius:20px; font-size:12px; font-weight:600;">Charge Nurse</span>
               </div>
+            </div>
+
+            <!-- Identity & PIN Card -->
+            <div style="border:1px solid #e5e7eb; border-radius:10px; background:#ffffff; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:14px;">
+              <div style="font-size:14px; font-weight:600; padding:14px; background:#f9fafb; border-bottom:1px solid #e5e7eb;">
+                🪪 Identity & PIN
+              </div>
+              <div style="padding:16px;">
+                <div style="display:flex; gap:12px; flex-direction:column;">
+                  <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:6px;">Name</label>
+                    <input id="adminEditUserName" class="control" placeholder="Name" style="width:100%; font-size:13px; padding:9px 12px; border:1px solid #d1d5db; border-radius:7px;" />
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:6px;">Role</label>
+                    <select id="adminEditUserRole" class="control" style="width:100%; font-size:13px; padding:9px 12px; border:1px solid #d1d5db; border-radius:7px;">
+                      <option value="1">Charge Nurse</option>
+                      <option value="2">Staff Nurse</option>
+                      <option value="3">Nursing Assistant</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:6px;">New PIN (4 digits)</label>
+                    <input id="adminEditUserPin" class="control" placeholder="Leave blank to keep" inputmode="numeric" maxlength="4" style="width:100%; font-size:13px; padding:9px 12px; border:1px solid #d1d5db; border-radius:7px;" />
+                    <div style="font-size:11px; color:#6b7280; margin-top:5px;" id="adminUserEditHelp"></div>
+                  </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:14px;">
+                  <button id="adminCancelUserEditBtn" class="btn" type="button" style="flex:1; font-size:12px; padding:9px 12px;">Cancel</button>
+                  <button id="adminSaveUserPinBtn" class="btn primary" type="button" style="flex:1; font-size:12px; padding:9px 12px;">💾 Save PIN</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Secondary Row: Pattern & Permission Groups (Compact - Open by default) -->
+            <div class="edit-user-two-col">
+              
+              <!-- Pattern Card -->
+              <details class="accordion edit-user-card" open>
+                <summary class="accordion-title" style="font-size:13px; font-weight:600; padding:12px; background:#f9fafb; border-bottom:1px solid #e5e7eb; cursor:pointer; user-select:none; list-style:none;">
+                  📅 Pattern
+                </summary>
+                <div class="edit-user-card-body">
+                  <div style="margin-bottom:10px;">
+                    <label style="display:block; font-size:11px; font-weight:600; color:#374151; margin-bottom:5px;">Pattern Type</label>
+                    <select id="adminUserPattern" class="control" style="width:100%; font-size:12px; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px;">
+                      <option value="">No fixed pattern</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11px; font-weight:600; color:#374151; margin-bottom:5px;">Anchor Date (Sunday)</label>
+                    <input id="adminUserAnchorDate" class="control" type="date" style="width:100%; font-size:12px; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px;" />
+                  </div>
+                </div>
+              </details>
+
+              <!-- Permission Groups Card -->
+              <details class="accordion edit-user-card" open>
+                <summary class="accordion-title" style="font-size:13px; font-weight:600; padding:12px; background:#f9fafb; border-bottom:1px solid #e5e7eb; cursor:pointer; user-select:none; list-style:none;">
+                  👥 Permission Groups
+                </summary>
+                <div class="edit-user-card-body">
+                  <div id="adminUserPermissionGroups"></div>
+                </div>
+              </details>
+            </div>
+
+            <!-- Annual Leave (Full Width - Open by default) -->
+            <details class="accordion" open style="border:1px solid #e5e7eb; border-radius:10px; background:#ffffff; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:14px;">
+              <summary class="accordion-title" style="font-size:14px; font-weight:600; padding:14px; background:#f9fafb; border-bottom:1px solid #e5e7eb; cursor:pointer; user-select:none; list-style:none;">
+                🏖️ Annual Leave
+              </summary>
+            <div style="padding:16px;">
+              
+              <!-- Leave Balance Cards (RN/SN only) -->
+              <div id="editUserLeaveBalanceSection" style="display:none;">
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:16px; margin-bottom:20px;">
+                  <h4 style="margin:0 0 14px 0; font-size:14px; font-weight:700; color:#1e293b;">
+                    📊 Annual Leave Entitlement (<span id="balanceYear">2026</span>)
+                  </h4>
+                  
+                  <div id="editUserLeaveBalanceCards" style="margin-bottom:16px;">
+                    <!-- Cards populated by JS -->
+                  </div>
+
+                  <!-- Base Entitlement Editor -->
+                  <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:16px;">
+                    <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:10px;">Base Entitlement Settings</div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr auto; gap:10px; align-items:end;">
+                      <div>
+                        <label style="display:block; font-size:11px; font-weight:600; color:#64748b; margin-bottom:5px;">
+                          Annual Days
+                        </label>
+                        <input type="number" id="editUserLeaveEntitlementDays" min="0" max="50" step="0.5" 
+                          style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+                      </div>
+                      
+                      <div>
+                        <label style="display:block; font-size:11px; font-weight:600; color:#64748b; margin-bottom:5px;">
+                          Year
+                        </label>
+                        <input type="number" id="editUserLeaveYear" min="2020" max="2100" 
+                          style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" />
+                      </div>
+
+                      <button id="editUserSaveLeaveEntitlementBtn" class="btn" type="button" style="padding:7px 14px; font-size:12px; height:34px;">
+                        💾 Save
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Adjustments Section -->
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                      <div style="font-size:12px; font-weight:600; color:#64748b;">📝 Adjustments History</div>
+                      <button id="addLeaveAdjustmentBtn" class="btn" type="button" style="padding:5px 10px; font-size:11px;">
+                        + Add
+                      </button>
+                    </div>
+                    <div id="leaveAdjustmentsList" style="min-height:40px;">
+                      <!-- Populated by JS -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Leave Entries Summary (All staff) -->
+              <div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:10px; padding:16px;">
+                <h4 style="margin:0 0 12px 0; font-size:14px; font-weight:700; color:#1e293b;">
+                  Leave Taken (<span id="leaveSummaryYear">Current Year</span>)
+                </h4>
+
+                <div style="display:grid; grid-template-columns: 1fr; gap:10px; margin-bottom:14px;">
+                  <div style="padding:12px; background:#ecfdf5; border:1px solid #6ee7b7; border-radius:8px;">
+                    <div style="font-size:11px; color:#065f46; margin-bottom:4px; font-weight:600;">Total Days</div>
+                    <div style="font-size:22px; font-weight:700; color:#059669;" id="editUserTotalLeaveDays">--</div>
+                  </div>
+                </div>
+                
+                <div id="editUserLeaveEntriesList" style="max-height:240px; overflow-y:auto; margin-bottom:12px; padding:2px;">
+                  <p style="text-align:center; color:#9ca3af; padding:20px 0; font-size:13px;">No leave entries.</p>
+                </div>
+                
+                <button id="editUserManageLeaveBtn" class="btn" type="button" style="width:100%; font-size:13px;">
+                  Open Leave Management Panel →
+                </button>
+              </div>
+            </div>
             </details>
 
-            <details class="accordion" open>
-              <summary class="accordion-title">Identity & PIN</summary>
-              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-                <input id="adminEditUserName" class="control" placeholder="Name" style="flex:1; min-width:180px;" />
-                <select id="adminEditUserRole" class="control" style="min-width:160px;">
-                  <option value="1">Charge Nurse</option>
-                  <option value="2">Staff Nurse</option>
-                  <option value="3">Nursing Assistant</option>
-                </select>
-              </div>
-              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-                <input id="adminEditUserPin" class="control" placeholder="New PIN (4 digits)" inputmode="numeric" maxlength="4" style="flex:1; min-width:180px;" />
-                <button id="adminSaveUserBtn" class="btn primary" type="button">Save</button>
-                <button id="adminCancelUserEditBtn" class="btn" type="button">Cancel</button>
-              </div>
-              <div id="adminUserEditHelp" class="page-subtitle" style="margin-top:8px;"></div>
-            </details>
+            <!-- Preferences & Capabilities Card (Collapsed by default) -->
+            <details class="accordion" style="border:1px solid #e5e7eb; border-radius:10px; background:#ffffff; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:14px;">
+              <summary class="accordion-title" style="font-size:14px; font-weight:600; padding:14px; background:#f9fafb; border-bottom:1px solid #e5e7eb; cursor:pointer; user-select:none; list-style:none;">
+                ⚙️ Preferences & Capabilities
+              </summary>
+              <div style="padding:16px;">
+                <div style="margin-bottom:14px;">
+                  <div style="font-size:11px; color:#6b7280; margin-bottom:12px; line-height:1.5;">1=avoid • 3=neutral • 5=keen</div>
+                  
+                  <div style="margin-bottom:10px;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; font-weight:600; color:#374151; margin-bottom:5px;">
+                      <span>Shift Clustering</span>
+                      <span id="adminPrefShiftClusteringValue" style="font-weight:700; color:#3b82f6;">3</span>
+                    </label>
+                    <input id="adminPrefShiftClustering" class="control" type="range" min="1" max="5" step="1" value="3" style="width:100%;" />
+                  </div>
 
-            <details class="accordion" open>
-              <summary class="accordion-title">Preferences & capabilities</summary>
-              <div class="accordion-sub">1 = avoid if possible, 3 = neutral, 5 = keen. Use capabilities to mark charge eligibility, second RN restrictions, and night eligibility.</div>
-              <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:10px;">
-                <div class="card" style="padding:10px;">
-                  <div style="font-weight:700; margin-bottom:6px;">Preferences (1–5)</div>
-                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Shift clustering <span id="adminPrefShiftClusteringValue" style="font-weight:700;">3</span></label>
-                  <input id="adminPrefShiftClustering" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Shift clustering" />
-                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Higher = prefers clustered runs, lower = prefers spacing.</div>
-                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Night appetite <span id="adminPrefNightAppetiteValue" style="font-weight:700;">3</span></label>
-                  <input id="adminPrefNightAppetite" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Night appetite" />
-                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Higher = more willing for nights.</div>
-                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Weekend appetite <span id="adminPrefWeekendAppetiteValue" style="font-weight:700;">3</span></label>
-                  <input id="adminPrefWeekendAppetite" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Weekend appetite" />
-                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Higher = more willing for weekends.</div>
-                  <label class="page-subtitle" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">Leave adjacency <span id="adminPrefLeaveAdjacencyValue" style="font-weight:700;">3</span></label>
-                  <input id="adminPrefLeaveAdjacency" class="control" type="range" min="1" max="5" step="1" value="3" aria-label="Leave adjacency" />
-                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 0;">Higher = prefers leave next to days off; lower = okay to separate.</div>
+                  <div style="margin-bottom:10px;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; font-weight:600; color:#374151; margin-bottom:5px;">
+                      <span>Night Appetite</span>
+                      <span id="adminPrefNightAppetiteValue" style="font-weight:700; color:#3b82f6;">3</span>
+                    </label>
+                    <input id="adminPrefNightAppetite" class="control" type="range" min="1" max="5" step="1" value="3" style="width:100%;" />
+                  </div>
+
+                  <div style="margin-bottom:10px;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; font-weight:600; color:#374151; margin-bottom:5px;">
+                      <span>Weekend Appetite</span>
+                      <span id="adminPrefWeekendAppetiteValue" style="font-weight:700; color:#3b82f6;">3</span>
+                    </label>
+                    <input id="adminPrefWeekendAppetite" class="control" type="range" min="1" max="5" step="1" value="3" style="width:100%;" />
+                  </div>
+
+                  <div style="margin-bottom:14px;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; font-weight:600; color:#374151; margin-bottom:5px;">
+                      <span>Leave Adjacency</span>
+                      <span id="adminPrefLeaveAdjacencyValue" style="font-weight:700; color:#3b82f6;">3</span>
+                    </label>
+                    <input id="adminPrefLeaveAdjacency" class="control" type="range" min="1" max="5" step="1" value="3" style="width:100%;" />
+                  </div>
                 </div>
 
-                <div class="card" style="padding:10px;">
-                  <div style="font-weight:700; margin-bottom:6px;">Capabilities</div>
-                  <div class="page-subtitle" style="font-size:12px; color:var(--muted); margin:4px 0 8px;">Used by scheduling rules to keep charge coverage and avoid unsafe pairings.</div>
-                  <label style="display:flex; align-items:center; gap:8px;">
+                <div style="padding:10px; background:#f3f4f6; border-radius:7px; margin-bottom:14px;">
+                  <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:8px;">Capabilities</div>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-bottom:6px;">
                     <input type="checkbox" id="adminCanBeInChargeDay" />
                     <span>Can be in charge (day)</span>
                   </label>
-                  <label style="display:flex; align-items:center; gap:8px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-bottom:6px;">
                     <input type="checkbox" id="adminCanBeInChargeNight" />
                     <span>Can be in charge (night)</span>
                   </label>
-                  <label style="display:flex; align-items:center; gap:8px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-bottom:6px;">
                     <input type="checkbox" id="adminCannotBeSecondDay" />
-                    <span>Cannot be 2nd RN (day)</span>
+                    <span>Not 2nd RN (day)</span>
                   </label>
-                  <label style="display:flex; align-items:center; gap:8px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:11px; margin-bottom:6px;">
                     <input type="checkbox" id="adminCannotBeSecondNight" />
-                    <span>Cannot be 2nd RN (night)</span>
+                    <span>Not 2nd RN (night)</span>
                   </label>
-                  <label style="display:flex; align-items:center; gap:8px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:11px;">
                     <input type="checkbox" id="adminCanWorkNights" checked />
                     <span>Can work nights</span>
                   </label>
                 </div>
-              </div>
-
-              <div class="btns" style="margin-top:12px; gap:8px;">
-                <button id="adminSavePrefsBtn" class="btn primary" type="button">Save preferences</button>
-              </div>
-              <div id="adminPrefsHelp" class="page-subtitle" style="margin-top:8px;"></div>
-            </details>
-
-            <details class="accordion">
-              <summary class="accordion-title">Pattern assignment</summary>
-              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-                <select id="adminUserPattern" class="control" style="min-width:200px;">
-                  <option value="">No fixed pattern</option>
-                </select>
-                <input id="adminUserAnchorDate" class="control" type="date" placeholder="Anchor date (Sunday)" style="min-width:160px;" />
-              </div>
-              <div class="page-subtitle" style="margin-top:8px;">
-                For anchored patterns (3/3/4, 2/2/3), set a Sunday date to align the cycle. Non-anchored patterns ignore this field.
+                <div id="adminPrefsHelp" class="page-subtitle" style="font-size:11px;"></div>
               </div>
             </details>
-
-          <details class="accordion">
-            <summary class="accordion-title">Permission groups</summary>
-            <div id="adminUserPermissionGroups" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;"></div>
-            <div class="page-subtitle" style="margin-top:8px;">
-                Permission groups are editable here once groups are loaded.
-            </div>
-          </details>
-          </div>
         </section>
 
         <section id="reorder" class="section panel" style="display:none;">
@@ -1671,6 +1895,7 @@
   <script src="js/view-as.js?v=8"></script>
   <script src="js/admin-status-dashboard.js"></script>
   <script src="js/admin.js"></script>
+  <script src="js/admin-leave-management.js"></script>
   <script src="js/audit-trail-enhanced.js"></script>
   <script src="js/admin-periods.js"></script>
   <script>

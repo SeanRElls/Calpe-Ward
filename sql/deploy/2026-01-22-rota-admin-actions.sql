@@ -188,13 +188,14 @@ BEGIN
 
     IF COALESCE(v_rota_published, false) AND v_old_shift_id IS DISTINCT FROM p_shift_id THEN
       -- Get shift codes and admin name for history
-      SELECT code INTO v_old_shift_code FROM public.shifts WHERE id = v_old_shift_id;
-      SELECT code INTO v_new_shift_code FROM public.shifts WHERE id = p_shift_id;
+      SELECT COALESCE(code, 'UNKNOWN') INTO v_old_shift_code FROM public.shifts WHERE id = v_old_shift_id;
+      SELECT COALESCE(code, 'UNKNOWN') INTO v_new_shift_code FROM public.shifts WHERE id = p_shift_id;
       -- users table uses "name" column, not display_name
       SELECT name INTO v_admin_name FROM public.users WHERE id = v_uid;
 
       -- Record the change in history
       INSERT INTO public.rota_assignment_history(
+        rota_assignment_id,
         user_id,
         period_non_staff_id,
         date,
@@ -207,6 +208,7 @@ BEGIN
         changed_by_name,
         changed_at
       ) VALUES (
+        v_id,
         p_user_id,
         p_period_non_staff_id,
         p_date,

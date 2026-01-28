@@ -35,12 +35,11 @@ async function loadPeriods() {
       const option = document.createElement('option');
       option.value = period.id;
       // Format dates nicely
-      const startDate = new Date(period.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const endDate = new Date(period.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const startDate = new Date(period.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      const endDate = new Date(period.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       
-      // Use normalizeText if available, otherwise use period.name directly
-      const safeName = typeof normalizeText === 'function' ? normalizeText(period.name) : period.name;
-      option.textContent = `${safeName} (${startDate} - ${endDate})`;
+      // Show formatted dates only (e.g., "25 Jan – 28 Feb")
+      option.textContent = `${startDate} – ${endDate}`;
       select.appendChild(option);
       
       // Update periodMap if it exists in global scope
