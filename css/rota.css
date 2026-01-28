@@ -420,87 +420,102 @@
 .shift-option.selected{ background: #eff6ff; border-color: #3b82f6; font-weight: 600; }
 /* Mobile responsive layout */
 @media (max-width: 768px) {
-  /* Hide page nav on mobile to save space */
+  /* Page nav compact */
   #pageNav {
-    display: none !important;
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+    gap: 8px !important;
+  }
+  
+  #pageNav a {
+    font-size: 12px !important;
   }
   
   /* Compact titlebar */
   .titlebar {
-    padding: 8px !important;
+    padding: 6px !important;
     flex-direction: column !important;
-    gap: 8px !important;
+    gap: 6px !important;
   }
   
   /* Logo smaller */
   .titlebar img {
-    height: 32px !important;
+    height: 28px !important;
   }
   
   /* Title smaller */
   .titlebar h1 {
-    font-size: 18px !important;
+    font-size: 16px !important;
     margin: 0 !important;
   }
   
   /* Controls in compact rows */
   .header-subrow {
     flex-wrap: wrap !important;
-    gap: 6px !important;
+    gap: 4px !important;
+    font-size: 11px !important;
+  }
+  
+  .header-subrow label {
+    font-size: 11px !important;
   }
   
   /* Period select smaller */
   #periodSelect {
-    font-size: 12px !important;
+    font-size: 11px !important;
     padding: 4px 6px !important;
-    max-width: 160px !important;
+    max-width: 140px !important;
   }
   
   /* All buttons smaller */
   .titlebar .btn {
-    font-size: 11px !important;
-    padding: 4px 8px !important;
+    font-size: 10px !important;
+    padding: 4px 6px !important;
     white-space: nowrap !important;
   }
   
   /* User navigation more compact */
   .rightbits {
     padding: 4px 8px !important;
-    gap: 4px !important;
-    justify-content: center !important;
+    gap: 6px !important;
+    justify-content: flex-start !important;
     width: 100% !important;
     border-radius: 12px !important;
   }
   
-  /* Hide username text on mobile, keep icon */
+  /* Show username text on mobile but smaller */
   .acc-txt {
-    display: none !important;
+    font-size: 12px !important;
   }
   
   /* All nav icons smaller */
   .rightbits .badge {
-    font-size: 16px !important;
-    padding: 4px !important;
+    font-size: 14px !important;
+    padding: 3px !important;
   }
   
-  /* Hide divider on mobile */
-  .rightbits > div[style*="width: 1px"] {
-    display: none !important;
+  .acc-ic {
+    font-size: 14px !important;
   }
   
   /* Period status more compact */
   .period-status {
-    padding: 8px 10px !important;
-    margin: 0 0 8px 0 !important;
-    font-size: 12px !important;
+    padding: 6px 8px !important;
+    margin: 0 0 6px 0 !important;
+    font-size: 11px !important;
+  }
+  
+  .status-badge {
+    font-size: 9px !important;
+    padding: 3px 8px !important;
   }
   
   /* Metadata display smaller */
   .metadata-display,
   #publishedEditBanner {
-    padding: 8px !important;
-    margin: 0 0 8px 0 !important;
-    font-size: 12px !important;
+    padding: 6px !important;
+    margin: 0 0 6px 0 !important;
+    font-size: 11px !important;
   }
   
   /* Pattern warnings smaller */
@@ -510,11 +525,11 @@
   }
   
   .pattern-warnings summary {
-    font-size: 10px !important;
+    font-size: 9px !important;
   }
   
   .warning-item {
-    font-size: 10px !important;
-    padding: 3px 4px !important;
+    font-size: 9px !important;
+    padding: 2px 4px !important;
   }
 }

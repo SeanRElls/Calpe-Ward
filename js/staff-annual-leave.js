@@ -418,62 +418,70 @@ const StaffAnnualLeaveModule = (() => {
             .leave-modal-sidebar {
               width: 100%;
               min-width: 100%;
-              max-height: 30vh;
-              padding: 8px;
+              max-height: 25vh;
+              padding: 6px;
               border-right: none;
               border-bottom: 1px solid #e5e7eb;
-              font-size: 11px;
+              font-size: 10px;
             }
             
             .leave-modal-sidebar h3 {
-              font-size: 13px !important;
-              margin: 8px 0 4px 0 !important;
+              font-size: 11px !important;
+              margin: 4px 0 2px 0 !important;
             }
             
             .leave-modal-sidebar p {
-              font-size: 11px !important;
-              margin: 3px 0 !important;
-              line-height: 1.3 !important;
+              font-size: 10px !important;
+              margin: 2px 0 !important;
+              line-height: 1.2 !important;
             }
             
             .leave-modal-content > div:first-of-type {
-              padding: 8px !important;
+              padding: 6px 8px !important;
             }
             
             .leave-modal-content h2 {
-              font-size: 14px !important;
-            }
-            
-            .leave-modal-calendar > div:first-child {
-              padding: 6px 8px !important;
-              gap: 4px !important;
-            }
-            
-            .leave-modal-calendar h3 {
               font-size: 13px !important;
-              min-width: 100px !important;
             }
             
-            .leave-modal-calendar button {
-              font-size: 16px !important;
+            .leave-modal-content button[onclick*="display"] {
+              font-size: 20px !important;
               padding: 4px 8px !important;
               min-width: 36px !important;
               min-height: 36px !important;
             }
             
+            .leave-modal-calendar > div:first-child {
+              padding: 4px 6px !important;
+              gap: 2px !important;
+            }
+            
+            .leave-modal-calendar h3 {
+              font-size: 12px !important;
+              min-width: 80px !important;
+            }
+            
+            .leave-modal-calendar button {
+              font-size: 14px !important;
+              padding: 4px 6px !important;
+              min-width: 32px !important;
+              min-height: 32px !important;
+            }
+            
             #viewFullYear {
-              font-size: 10px !important;
-              padding: 4px 8px !important;
+              font-size: 9px !important;
+              padding: 4px 6px !important;
+              min-height: 32px !important;
             }
             
             .leave-modal-calendar table th {
-              font-size: 10px !important;
-              padding: 6px 4px !important;
+              font-size: 9px !important;
+              padding: 4px 2px !important;
             }
             
             .leave-modal-calendar table td {
-              font-size: 10px !important;
-              padding: 6px 4px !important;
+              font-size: 9px !important;
+              padding: 4px 2px !important;
             }
             
             .leave-modal-calendar table th:first-child,
@@ -482,8 +490,8 @@ const StaffAnnualLeaveModule = (() => {
             }
             
             .btn-request {
-              font-size: 9px !important;
-              padding: 3px 6px !important;
+              font-size: 8px !important;
+              padding: 2px 4px !important;
             }
           }
         </style>
