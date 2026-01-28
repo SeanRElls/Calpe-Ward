@@ -365,28 +365,97 @@ const StaffAnnualLeaveModule = (() => {
       const canGoNext = month < 11 || year < 2026;
 
       const content = `
-        <div class="modal-content" style="max-width: 900px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+        <style>
+          .leave-modal-content {
+            max-width: 900px;
+            width: 95%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+          }
+          
+          .leave-modal-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            flex-direction: row;
+          }
+          
+          .leave-modal-sidebar {
+            width: 340px;
+            min-width: 280px;
+            padding: 16px;
+            border-right: 1px solid #e5e7eb;
+            overflow-y: auto;
+            background: #fafafa;
+            flex-shrink: 0;
+          }
+          
+          .leave-modal-calendar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          }
+          
+          @media (max-width: 768px) {
+            .leave-modal-content {
+              width: 100%;
+              max-width: 100%;
+              max-height: 100vh;
+              border-radius: 0;
+            }
+            
+            .leave-modal-body {
+              flex-direction: column;
+            }
+            
+            .leave-modal-sidebar {
+              width: 100%;
+              min-width: 100%;
+              max-height: 40vh;
+              border-right: none;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            
+            .leave-modal-calendar table th,
+            .leave-modal-calendar table td {
+              font-size: 11px !important;
+              padding: 8px 6px !important;
+            }
+            
+            .leave-modal-calendar table th:first-child,
+            .leave-modal-calendar table td:first-child {
+              display: none;
+            }
+          }
+        </style>
+        <div class="leave-modal-content">
           <!-- Header -->
           <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb;">
             <h2 style="margin: 0; font-size: 16px; font-weight: 700;">🏖️ Annual Leave</h2>
-            <button onclick="document.getElementById('${modalId}').style.display='none';" style="font-size: 20px; border: none; background: none; cursor: pointer; padding: 0 8px;">&times;</button>
+            <button onclick="document.getElementById('${modalId}').style.display='none';" style="font-size: 24px; border: none; background: none; cursor: pointer; padding: 4px 12px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;">&times;</button>
           </div>
 
           <!-- Content Area -->
-          <div style="display: flex; flex: 1; overflow: hidden;">
+          <div class="leave-modal-body">
             <!-- Left: Entitlement -->
-            <div style="width: 340px; padding: 16px; border-right: 1px solid #e5e7eb; overflow-y: auto; background: #fafafa;">
+            <div class="leave-modal-sidebar">
               ${entitlementHTML}
             </div>
 
             <!-- Right: Calendar -->
-            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="leave-modal-calendar">
               <!-- Month Navigation -->
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: white; border-bottom: 1px solid #e5e7eb;">
-                <button id="prevMonth" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; opacity: ${canGoPrev ? '1' : '0.3'}; ${canGoPrev ? '' : 'cursor: not-allowed;'}">&lt;</button>
-                <h3 style="margin: 0; font-size: 15px; font-weight: 600; flex: 1; text-align: center;">${monthName}</h3>
-                <button id="nextMonth" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; opacity: ${canGoNext ? '1' : '0.3'}; ${canGoNext ? '' : 'cursor: not-allowed;'}">&gt;</button>
-                <button id="viewFullYear" style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 6px 12px; font-size: 12px; cursor: pointer; margin-left: 12px; white-space: nowrap;">📅 View Year</button>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: white; border-bottom: 1px solid #e5e7eb; flex-wrap: wrap; gap: 8px;">
+                <button id="prevMonth" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 8px 12px; min-width: 44px; min-height: 44px; opacity: ${canGoPrev ? '1' : '0.3'}; ${canGoPrev ? '' : 'cursor: not-allowed;'}">&lt;</button>
+                <h3 style="margin: 0; font-size: 15px; font-weight: 600; flex: 1; text-align: center; min-width: 120px;">${monthName}</h3>
+                <button id="nextMonth" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 8px 12px; min-width: 44px; min-height: 44px; opacity: ${canGoNext ? '1' : '0.3'}; ${canGoNext ? '' : 'cursor: not-allowed;'}">&gt;</button>
+                <button id="viewFullYear" style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 12px; cursor: pointer; white-space: nowrap; min-height: 44px;">📅 View Year</button>
               </div>
 
               <!-- Table -->
