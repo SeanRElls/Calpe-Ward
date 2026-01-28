@@ -407,6 +407,7 @@ const StaffAnnualLeaveModule = (() => {
               width: 100%;
               max-width: 100%;
               max-height: 100vh;
+              height: 100vh;
               border-radius: 0;
             }
             
@@ -417,20 +418,72 @@ const StaffAnnualLeaveModule = (() => {
             .leave-modal-sidebar {
               width: 100%;
               min-width: 100%;
-              max-height: 40vh;
+              max-height: 30vh;
+              padding: 8px;
               border-right: none;
               border-bottom: 1px solid #e5e7eb;
+              font-size: 11px;
             }
             
-            .leave-modal-calendar table th,
-            .leave-modal-calendar table td {
+            .leave-modal-sidebar h3 {
+              font-size: 13px !important;
+              margin: 8px 0 4px 0 !important;
+            }
+            
+            .leave-modal-sidebar p {
               font-size: 11px !important;
-              padding: 8px 6px !important;
+              margin: 3px 0 !important;
+              line-height: 1.3 !important;
+            }
+            
+            .leave-modal-content > div:first-of-type {
+              padding: 8px !important;
+            }
+            
+            .leave-modal-content h2 {
+              font-size: 14px !important;
+            }
+            
+            .leave-modal-calendar > div:first-child {
+              padding: 6px 8px !important;
+              gap: 4px !important;
+            }
+            
+            .leave-modal-calendar h3 {
+              font-size: 13px !important;
+              min-width: 100px !important;
+            }
+            
+            .leave-modal-calendar button {
+              font-size: 16px !important;
+              padding: 4px 8px !important;
+              min-width: 36px !important;
+              min-height: 36px !important;
+            }
+            
+            #viewFullYear {
+              font-size: 10px !important;
+              padding: 4px 8px !important;
+            }
+            
+            .leave-modal-calendar table th {
+              font-size: 10px !important;
+              padding: 6px 4px !important;
+            }
+            
+            .leave-modal-calendar table td {
+              font-size: 10px !important;
+              padding: 6px 4px !important;
             }
             
             .leave-modal-calendar table th:first-child,
             .leave-modal-calendar table td:first-child {
               display: none;
+            }
+            
+            .btn-request {
+              font-size: 9px !important;
+              padding: 3px 6px !important;
             }
           }
         </style>
